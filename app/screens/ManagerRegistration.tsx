@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -13,6 +13,8 @@ import {
   HelperText,
 } from 'react-native-paper';
 import { API_URL } from '@/config/api.config';
+import { Facility, FacilityResponse } from '@/src/interfaces/Facility';
+import { FormErrors } from '@/src/interfaces/forms';
 
 const theme = {
   ...MD3LightTheme,
@@ -24,31 +26,9 @@ const theme = {
   },
 };
 
-const facilities = [
-  'Wi-Fi',
-  'Laundry',
-  'Meals',
-  'AC',
-  'Power Backup',
-  'Security',
-  'Parking',
-];
-
-interface FormErrors {
-  email: any;
-  fullName?: string;
-  phone?: string;
-  password?: string;
-  confirmPassword?: string;
-  pgName?: string;
-  pgAddress?: string;
-  pgCapacity?: string;
-  aadhaar?: string;
-  agreeToTerms?: string;
-}
-
 export default function ManagerRegistration() {
   const [isLoading, setIsLoading] = useState(false);
+  const [facilities, setFacilities] = useState<Facility[]>([]);
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -59,16 +39,33 @@ export default function ManagerRegistration() {
     pgAddress: '',
     pgCapacity: '',
     aadhaar: '',
-    selectedFacilities: [] as string[],
+    selectedFacilities: [] as number[],
     agreeToTerms: false,
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
 
-  const validateForm = () => {
-    const newErrors: FormErrors = {
-      email: undefined
+  useEffect(() => {
+    const fetchFacilities = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/facilities`);
+        const data: FacilityResponse = await response.json();
+        
+        if (data.success) {
+          setFacilities(data.facilities);
+        } else {
+          console.error('Failed to fetch facilities');
+        }
+      } catch (error) {
+        console.error('Error fetching facilities:', error);
+      }
     };
+
+    fetchFacilities();
+  }, []);
+
+  const validateForm = useCallback(() => {
+    const newErrors: FormErrors = {};
 
     // Required fields validation
     if (!formData.fullName.trim()) {
@@ -113,35 +110,39 @@ export default function ManagerRegistration() {
     }
 
     // Email validation (optional)
-    if (formData.email && !/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email address';
+    if (formData.email) {
+      // More flexible email validation pattern
+      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailPattern.test(formData.email)) {
+        newErrors.email = 'Please enter a valid email address';
+      }
     }
 
     if (!formData.agreeToTerms) {
       newErrors.agreeToTerms = 'You must agree to the Terms and Conditions';
     }
 
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
- debugger;
+    return newErrors;
+  }, [formData]);
+
   const handleSubmit = async () => {
-    if (validateForm()) {
+    const validationErrors = validateForm();
+    if (Object.keys(validationErrors).length === 0) {
       setIsLoading(true);
-      const requestBody = {
-        fullName: formData.fullName,
-        email: formData.email || null,
-        phone: formData.phone,
-        password: formData.password,
-        pgName: formData.pgName,
-        pgAddress: formData.pgAddress,
-        pgCapacity: parseInt(formData.pgCapacity),
-        aadhaar: formData.aadhaar || null,
-        agreeToTerms: formData.agreeToTerms,
-        facilities: formData.selectedFacilities
-      };
-debugger;
       try {
+        const requestBody = {
+          fullName: formData.fullName,
+          email: formData.email || null,
+          phone: formData.phone,
+          password: formData.password,
+          pgName: formData.pgName,
+          pgAddress: formData.pgAddress,
+          pgCapacity: parseInt(formData.pgCapacity),
+          aadhaar: formData.aadhaar || null,
+          agreeToTerms: formData.agreeToTerms,
+          facilities: formData.selectedFacilities
+        };
+
         const response = await fetch(`${API_URL}/api/managers/register`, {
           method: 'POST',
           headers: {
@@ -151,11 +152,12 @@ debugger;
         });
 
         const data = await response.json();
-
+debugger;
         if (data.success) {
           alert('Registration successful!');
           router.replace('/screens/LoginScreen');
         } else {
+          setErrors(validationErrors);
           alert(data.error || 'Registration failed');
         }
       } catch (error) {
@@ -164,26 +166,28 @@ debugger;
       } finally {
         setIsLoading(false);
       }
+    } else {
+      setErrors(validationErrors);
     }
   };
 
-  const updateFormData = (field: string, value: string | boolean | string[]) => {
+  const updateFormData = (field: string, value: string | boolean | number[]) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     // Clear error when user starts typing
     if (errors[field as keyof FormErrors]) {
-      setErrors(prev => ({ ...prev, [field]: undefined }));
+      setErrors((prev: FormErrors) => ({ ...prev, [field]: undefined }));
     }
   };
 
-  const toggleFacility = (facility: string) => {
-    const facilities = [...formData.selectedFacilities];
-    const index = facilities.indexOf(facility);
+  const toggleFacility = (facilityId: number) => {
+    const selectedIds = [...formData.selectedFacilities];
+    const index = selectedIds.indexOf(facilityId);
     if (index === -1) {
-      facilities.push(facility);
+      selectedIds.push(facilityId);
     } else {
-      facilities.splice(index, 1);
+      selectedIds.splice(index, 1);
     }
-    updateFormData('selectedFacilities', facilities);
+    updateFormData('selectedFacilities', selectedIds);
   };
 
   return (
@@ -316,11 +320,11 @@ debugger;
             </Text>
             <View style={styles.facilitiesContainer}>
               {facilities.map((facility) => (
-                <View key={facility} style={styles.facilityItem}>
+                <View key={facility.Id} style={styles.facilityItem}>
                   <Checkbox.Item
-                    label={facility}
-                    status={formData.selectedFacilities.includes(facility) ? 'checked' : 'unchecked'}
-                    onPress={() => toggleFacility(facility)}
+                    label={facility.Name}
+                    status={formData.selectedFacilities.includes(facility.Id) ? 'checked' : 'unchecked'}
+                    onPress={() => toggleFacility(facility.Id)}
                   />
                 </View>
               ))}
