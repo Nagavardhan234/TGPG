@@ -18,6 +18,7 @@ import {
 } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authService } from '@/src/services/auth.service';
+import { ENDPOINTS } from '@/app/constants/endpoints';
 
 const theme = {
   ...MD3LightTheme,
@@ -106,8 +107,17 @@ export default function LoginScreen() {
         // Store manager data
         await AsyncStorage.setItem('userData', JSON.stringify(response.manager));
         
-        // Navigate to dashboard
-        router.replace('/screens/DashboardScreen');
+        // Navigate based on user type
+        if (userType === 'manager') {
+          // Navigate to manager dashboard
+          router.replace(ENDPOINTS.DASHBOARD);
+        } else if (userType === 'member') {
+          // Navigate to member dashboard (when implemented)
+          router.replace('/screens/member-dashboard');
+        } else {
+          // Navigate to guest view
+          router.replace('/(tabs)');
+        }
       } else {
         setError(response.error || 'Login failed');
       }
