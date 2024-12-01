@@ -13,7 +13,11 @@ import {
   IconButton,
   SegmentedButtons,
   RadioButton,
+  Modal,
+  Portal,
 } from 'react-native-paper';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { authService } from '@/src/services/auth.service';
 
 const theme = {
   ...MD3LightTheme,
@@ -65,48 +69,51 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [userType, setUserType] = useState<UserType>('member');
   const [error, setError] = useState('');
+  const [modalConfig, setModalConfig] = useState({
+    visible: false,
+    message: '',
+    title: '',
+    showCancel: true,
+    confirmText: 'OK',
+    cancelText: 'Try Again',
+    onConfirm: () => {},
+    onCancel: () => {},
+  });
+
+  const showModal = (config: Partial<typeof modalConfig>) => {
+    setModalConfig(prev => ({
+      ...prev,
+      visible: true,
+      ...config,
+    }));
+  };
 
   const handleLogin = async () => {
     setError('');
-    
-    // Basic validation
-    if (!emailOrPhone || !password) {
-      setError('Please fill in all fields');
-      return;
-    }
-    
     setIsLoading(true);
     
     try {
-      const response = await fetch(`${API_URL}/api/managers/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: loginMethod === 'email' ? emailOrPhone : null,
-          phone: loginMethod === 'phone' ? emailOrPhone : null,
-          password,
-        }),
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        // Store user data in secure storage or context
-        // For now, we'll just navigate
-        if (userType === 'manager') {
-          router.replace('/(tabs)');
-        } else {
-          // Handle member login
-          alert('Member login not implemented yet');
-        }
+      const loginData = {
+        email: loginMethod === 'email' ? emailOrPhone : null,
+        phone: loginMethod === 'phone' ? emailOrPhone : null,
+        password,
+        userType: userType === 'guest' ? 'member' : userType,
+      };
+
+      const response = await authService.login(loginData);
+
+      if (response.success && response.manager) {
+        // Store manager data
+        await AsyncStorage.setItem('userData', JSON.stringify(response.manager));
+        
+        // Navigate to dashboard
+        router.replace('/screens/DashboardScreen');
       } else {
-        setError(data.error || 'Login failed');
+        setError(response.error || 'Login failed');
       }
-    } catch (error) {
-      console.error('Login error:', error);
-      setError('Network error. Please try again.');
+    } catch (err) {
+      console.error('Login error:', err);
+      setError(err.message || 'Error during login. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -248,6 +255,37 @@ export default function LoginScreen() {
             </View>
           </Surface>
         </ScrollView>
+
+        <Portal>
+          <Modal
+            visible={modalConfig.visible}
+            onDismiss={() => setModalConfig(prev => ({ ...prev, visible: false }))}
+            contentContainerStyle={styles.modalContainer}
+          >
+            <Surface style={styles.modalContent}>
+              <Text style={styles.modalTitle}>{modalConfig.title}</Text>
+              <Text style={styles.modalText}>{modalConfig.message}</Text>
+              <View style={styles.modalButtons}>
+                {modalConfig.showCancel && (
+                  <Button
+                    mode="text"
+                    onPress={() => modalConfig.onCancel()}
+                    style={styles.modalButton}
+                  >
+                    {modalConfig.cancelText}
+                  </Button>
+                )}
+                <Button
+                  mode="contained"
+                  onPress={() => modalConfig.onConfirm()}
+                  style={styles.modalButton}
+                >
+                  {modalConfig.confirmText}
+                </Button>
+              </View>
+            </Surface>
+          </Modal>
+        </Portal>
       </SafeAreaView>
     </PaperProvider>
   );
@@ -356,5 +394,34 @@ const styles = StyleSheet.create({
   },
   guestButton: {
     borderRadius: 8,
+  },
+  modalContainer: {
+    padding: 20,
+  },
+  modalContent: {
+    padding: 20,
+    borderRadius: 8,
+    backgroundColor: 'white',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    textAlign: 'center',
+    color: '#1a1a1a',
+  },
+  modalText: {
+    fontSize: 16,
+    marginBottom: 20,
+    textAlign: 'center',
+    color: '#666',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  modalButton: {
+    minWidth: 100,
   },
 }); 

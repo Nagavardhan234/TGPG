@@ -1,0 +1,1 @@
+export const API_URL = 'http://localhost:3000';  // Change from laptop-36rv9iob to localhost

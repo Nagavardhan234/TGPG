@@ -11,10 +11,13 @@ import {
   Surface,
   Checkbox,
   HelperText,
+  Modal,
+  Portal,
 } from 'react-native-paper';
 import { API_URL } from '@/config/api.config';
 import { Facility, FacilityResponse } from '@/src/interfaces/Facility';
 import { FormErrors } from '@/src/interfaces/forms';
+import { LoadingOverlay } from '@/src/components/ui/LoadingOverlay';
 
 const theme = {
   ...MD3LightTheme,
@@ -25,6 +28,11 @@ const theme = {
     background: '#FFFFFF',
   },
 };
+
+interface ApiErrorResponse {
+  success: boolean;
+  error: string;
+}
 
 export default function ManagerRegistration() {
   const [isLoading, setIsLoading] = useState(false);
@@ -44,6 +52,17 @@ export default function ManagerRegistration() {
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
+  const [modalConfig, setModalConfig] = useState({
+    visible: false,
+    message: '',
+    title: '',
+    showCancel: true,
+    confirmText: 'OK',
+    cancelText: 'Cancel',
+    onConfirm: () => {},
+    onCancel: () => {},
+  });
+  const [loadingMessage, setLoadingMessage] = useState('Please wait...');
 
   useEffect(() => {
     const fetchFacilities = async () => {
@@ -125,9 +144,18 @@ export default function ManagerRegistration() {
     return newErrors;
   }, [formData]);
 
+  const showModal = (config: Partial<typeof modalConfig>) => {
+    setModalConfig(prev => ({
+      ...prev,
+      visible: true,
+      ...config,
+    }));
+  };
+
   const handleSubmit = async () => {
     const validationErrors = validateForm();
     if (Object.keys(validationErrors).length === 0) {
+      setLoadingMessage('Registering your account...');
       setIsLoading(true);
       try {
         const requestBody = {
@@ -151,18 +179,43 @@ export default function ManagerRegistration() {
           body: JSON.stringify(requestBody)
         });
 
-        const data = await response.json();
-debugger;
+        const data = await response.json() as ApiErrorResponse;
+
         if (data.success) {
-          alert('Registration successful!');
-          router.replace('/screens/LoginScreen');
+          showModal({
+            title: 'Success',
+            message: 'Registration successful!',
+            showCancel: false,
+            confirmText: 'Go to Login',
+            onConfirm: () => router.replace('/screens/LoginScreen'),
+          });
         } else {
-          setErrors(validationErrors);
-          alert(data.error || 'Registration failed');
+          if (data.error?.toLowerCase().includes('phone number')) {
+            showModal({
+              title: 'Phone Number Already Registered',
+              message: 'This phone number is already registered. Would you like to login instead?',
+              confirmText: 'Go to Login',
+              cancelText: 'Try Again',
+              onConfirm: () => router.replace('/screens/LoginScreen'),
+              onCancel: () => setModalConfig(prev => ({ ...prev, visible: false })),
+            });
+          } else {
+            showModal({
+              title: 'Registration Failed',
+              message: data.error || 'Registration failed. Please try again.',
+              showCancel: false,
+              onConfirm: () => setModalConfig(prev => ({ ...prev, visible: false })),
+            });
+          }
         }
       } catch (error) {
         console.error('Error:', error);
-        alert('Registration failed. Please try again.');
+        showModal({
+          title: 'Error',
+          message: 'Registration failed. Please try again.',
+          showCancel: false,
+          onConfirm: () => setModalConfig(prev => ({ ...prev, visible: false })),
+        });
       } finally {
         setIsLoading(false);
       }
@@ -343,10 +396,9 @@ debugger;
               mode="contained"
               onPress={handleSubmit}
               style={styles.registerButton}
-              loading={isLoading}
               disabled={isLoading}
             >
-              {isLoading ? 'Registering...' : 'Register'}
+              Register
             </Button>
 
             <Button
@@ -358,6 +410,39 @@ debugger;
             </Button>
           </Surface>
         </ScrollView>
+
+        <LoadingOverlay visible={isLoading} message={loadingMessage} />
+
+        <Portal>
+          <Modal
+            visible={modalConfig.visible}
+            onDismiss={() => setModalConfig(prev => ({ ...prev, visible: false }))}
+            contentContainerStyle={styles.modalContainer}
+          >
+            <Surface style={styles.modalContent}>
+              <Text style={styles.modalTitle}>{modalConfig.title}</Text>
+              <Text style={styles.modalText}>{modalConfig.message}</Text>
+              <View style={styles.modalButtons}>
+                {modalConfig.showCancel && (
+                  <Button
+                    mode="text"
+                    onPress={() => modalConfig.onCancel()}
+                    style={styles.modalButton}
+                  >
+                    {modalConfig.cancelText}
+                  </Button>
+                )}
+                <Button
+                  mode="contained"
+                  onPress={() => modalConfig.onConfirm()}
+                  style={styles.modalButton}
+                >
+                  {modalConfig.confirmText}
+                </Button>
+              </View>
+            </Surface>
+          </Modal>
+        </Portal>
       </SafeAreaView>
     </PaperProvider>
   );
@@ -419,5 +504,34 @@ const styles = StyleSheet.create({
   },
   loginLink: {
     marginBottom: 16,
+  },
+  modalContainer: {
+    padding: 20,
+  },
+  modalContent: {
+    padding: 20,
+    borderRadius: 8,
+    backgroundColor: 'white',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    textAlign: 'center',
+    color: '#1a1a1a',
+  },
+  modalText: {
+    fontSize: 16,
+    marginBottom: 20,
+    textAlign: 'center',
+    color: '#666',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  modalButton: {
+    minWidth: 100,
   },
 });
