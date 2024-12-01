@@ -92,6 +92,9 @@ export const AnimatedPieChart = ({ data, size, title, total, onViewMore, viewMor
     });
   };
 
+  // Get available students (assuming it's the first item in data array)
+  const availableCount = data[0].value;
+
   return (
     <View style={styles.container}>
       <Text style={[styles.title, { color: theme.colors.text }]}>{title}</Text>
@@ -102,8 +105,8 @@ export const AnimatedPieChart = ({ data, size, title, total, onViewMore, viewMor
             cx={size/2}
             cy={size/2}
             r={size/2 - 1}
-            fill="#f8f9fa"
-            stroke="#e9ecef"
+            fill={theme.colors.background}
+            stroke={theme.colors.surfaceVariant}
             strokeWidth="2"
           />
           {/* Pie segments */}
@@ -113,21 +116,31 @@ export const AnimatedPieChart = ({ data, size, title, total, onViewMore, viewMor
             cx={size/2}
             cy={size/2}
             r={size/3}
-            fill="#fff"
-            stroke="#e9ecef"
+            fill={theme.colors.background}
+            stroke={theme.colors.surfaceVariant}
             strokeWidth="1"
           />
           {/* Center text */}
           <SvgText
             x={size/2}
-            y={size/2}
-            fontSize="16"
+            y={size/2 - 10}
+            fontSize="24"
             fontWeight="bold"
             textAnchor="middle"
             alignmentBaseline="middle"
-            fill="#333"
+            fill={theme.colors.text}
           >
-            {total}
+            {availableCount}
+          </SvgText>
+          <SvgText
+            x={size/2}
+            y={size/2 + 15}
+            fontSize="14"
+            textAnchor="middle"
+            alignmentBaseline="middle"
+            fill={theme.colors.textSecondary}
+          >
+            Available
           </SvgText>
         </Svg>
       </View>
@@ -135,7 +148,14 @@ export const AnimatedPieChart = ({ data, size, title, total, onViewMore, viewMor
       {/* Legend with animated numbers */}
       <View style={styles.legend}>
         {data.map((item, index) => (
-          <View key={index} style={styles.legendItem}>
+          <View key={index} style={[
+            styles.legendItem,
+            { 
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.surfaceVariant,
+              borderWidth: 1,
+            }
+          ]}>
             <View style={styles.legendLeft}>
               <View style={[styles.legendColor, { backgroundColor: item.color }]} />
               <Text style={[styles.legendText, { 
@@ -148,7 +168,8 @@ export const AnimatedPieChart = ({ data, size, title, total, onViewMore, viewMor
             </View>
             <Text style={[styles.legendValue, { 
               color: theme.colors.text,
-              fontWeight: 'bold' 
+              fontWeight: 'bold',
+              fontSize: 14,
             }]}>
               {Math.round((item.value/totalValue) * 100)}%
             </Text>
@@ -191,11 +212,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    backgroundColor: '#fff',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderRadius: 8,
-    elevation: 1,
+    elevation: 0,
   },
   legendLeft: {
     flexDirection: 'row',
