@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/app/context/ThemeContext';
 import { AnimatedPieChart } from '@/app/components/AnimatedPieChart';
 import { LineChart } from 'react-native-chart-kit';
+import { router } from 'expo-router';
 
 export default function DashboardHome() {
   const { theme, isDarkMode } = useTheme();
@@ -92,6 +93,32 @@ export default function DashboardHome() {
   console.log('StudentData:', studentData);
 
   if (!theme) return null;
+
+  const actionButtons = [
+    { 
+      icon: 'account-plus', 
+      label: 'Add Student',
+      onPress: () => router.push('/screens/dashboard/students?action=add')
+    },
+    { 
+      icon: 'home-plus', 
+      label: 'Add Room',
+      onPress: () => router.push('/screens/dashboard/rooms?action=add')
+    },
+    { 
+      icon: 'bell-ring', 
+      label: 'Send Reminder',
+      onPress: () => router.push('/screens/dashboard/messages?action=new')
+    },
+    { 
+      icon: 'file-export', 
+      label: 'Export Report',
+      onPress: () => {
+        // TODO: Implement export functionality
+        console.log('Export Report clicked');
+      }
+    }
+  ];
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -246,17 +273,12 @@ export default function DashboardHome() {
           </View>
         </Surface>
         <View style={styles.actionButtons}>
-          {[
-            { icon: 'account-plus', label: 'Add Student' },
-            { icon: 'home-plus', label: 'Add Room' },
-            { icon: 'bell-ring', label: 'Send Reminder' },
-            { icon: 'file-export', label: 'Export Report' }
-          ].map((button, index) => (
+          {actionButtons.map((button, index) => (
             <Button 
               key={index}
               mode="contained" 
               icon={button.icon}
-              onPress={() => {}}
+              onPress={button.onPress}
               style={[styles.actionButton, {
                 backgroundColor: theme.colors.primary,
                 borderRadius: 12,

@@ -1,11 +1,14 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Card, Title, Paragraph, Button, FAB, Chip } from 'react-native-paper';
+import { useTheme } from '@/app/context/ThemeContext';
 
 export default function RoomManagement() {
+  const { theme, isDarkMode } = useTheme();
+
   return (
-    <View style={styles.container}>
-      <Title style={styles.title}>Room Management</Title>
+    <View style={[styles.container, { backgroundColor: isDarkMode ? '#121212' : theme.colors.background }]}>
+      <Title style={[styles.title, { color: theme.colors.text }]}>Room Management</Title>
 
       <View style={styles.filterContainer}>
         <Chip selected onPress={() => {}}>All</Chip>
@@ -16,17 +19,18 @@ export default function RoomManagement() {
 
       <ScrollView style={styles.roomsContainer}>
         <View style={styles.roomsGrid}>
-          {/* Sample Room Card */}
-          <Card style={styles.roomCard}>
+          <Card style={[styles.roomCard, {
+            backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : theme.colors.surface
+          }]}>
             <Card.Content>
-              <Title>Room 101</Title>
-              <Paragraph>Capacity: 2</Paragraph>
-              <Paragraph>Status: Occupied</Paragraph>
-              <Paragraph>Current Occupants: 2/2</Paragraph>
+              <Title style={{ color: theme.colors.text }}>Room 101</Title>
+              <Paragraph style={{ color: theme.colors.text }}>Capacity: 2</Paragraph>
+              <Paragraph style={{ color: theme.colors.text }}>Status: Occupied</Paragraph>
+              <Paragraph style={{ color: theme.colors.text }}>Current Occupants: 2/2</Paragraph>
             </Card.Content>
             <Card.Actions>
-              <Button onPress={() => {}}>Details</Button>
-              <Button onPress={() => {}}>Edit</Button>
+              <Button textColor={theme.colors.primary}>Details</Button>
+              <Button textColor={theme.colors.primary}>Edit</Button>
             </Card.Actions>
           </Card>
         </View>
@@ -34,7 +38,7 @@ export default function RoomManagement() {
 
       <FAB
         icon="plus"
-        style={styles.fab}
+        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
         onPress={() => {}}
         label="Add Room"
       />

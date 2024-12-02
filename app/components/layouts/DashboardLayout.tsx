@@ -63,15 +63,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const currentRoute = menuItems.find(item => item.key === currentRouteKey) || menuItems[0];
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <Appbar.Header style={[styles.header, { backgroundColor: theme.colors.surface }]}>
+    <SafeAreaView style={[styles.container, { 
+      backgroundColor: isDarkMode ? '#121212' : theme.colors.background 
+    }]}>
+      <Appbar.Header style={[styles.header, { 
+        backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : theme.colors.surface 
+      }]}>
         <Appbar.Action 
           icon={isMenuVisible ? "close" : "menu"} 
-          onPress={() => setIsMenuVisible(!isMenuVisible)} 
+          onPress={() => setIsMenuVisible(!isMenuVisible)}
+          iconColor={isDarkMode ? '#FFFFFF' : undefined}
         />
-        <Appbar.Content title={currentRoute.title} />
+        <Appbar.Content 
+          title={currentRoute.title} 
+          titleStyle={{ color: isDarkMode ? '#FFFFFF' : undefined }}
+        />
         <ThemeToggle />
-        <Appbar.Action icon="bell" onPress={() => {}} />
+        <Appbar.Action 
+          icon="bell" 
+          onPress={() => {}}
+          iconColor={isDarkMode ? '#FFFFFF' : undefined}
+        />
         <Menu
           visible={isProfileMenuVisible}
           onDismiss={() => setIsProfileMenuVisible(false)}
@@ -79,21 +91,46 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <Appbar.Action
               icon="account-circle"
               onPress={() => setIsProfileMenuVisible(true)}
+              iconColor={isDarkMode ? '#FFFFFF' : undefined}
             />
           }
+          contentStyle={{
+            backgroundColor: isDarkMode ? '#1E1E1E' : theme.colors.surface
+          }}
         >
-          <Menu.Item onPress={() => {}} title="Profile" />
-          <Menu.Item onPress={() => {}} title="Settings" />
-          <Menu.Item onPress={handleLogout} title="Logout" />
+          <Menu.Item 
+            onPress={() => {}} 
+            title="Profile" 
+            titleStyle={{ color: isDarkMode ? '#FFFFFF' : undefined }}
+          />
+          <Menu.Item 
+            onPress={() => {}} 
+            title="Settings" 
+            titleStyle={{ color: isDarkMode ? '#FFFFFF' : undefined }}
+          />
+          <Menu.Item 
+            onPress={handleLogout} 
+            title="Logout" 
+            titleStyle={{ color: isDarkMode ? '#FFFFFF' : undefined }}
+          />
         </Menu>
       </Appbar.Header>
 
       <View style={styles.content}>
+        <View style={[styles.mainContent, {
+          backgroundColor: isDarkMode ? '#121212' : theme.colors.background
+        }]}>
+          {children}
+        </View>
+
         {isMenuVisible && (
-          <View style={[styles.drawer, { 
-            backgroundColor: theme.colors.surface,
-            borderRightColor: theme.colors.surfaceVariant 
-          }]}>
+          <View style={[
+            styles.drawer, 
+            { 
+              backgroundColor: isDarkMode ? 'rgba(30, 30, 30, 0.95)' : theme.colors.surface,
+              borderRightColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : theme.colors.surfaceVariant 
+            }
+          ]}>
             <Drawer.Section>
               {menuItems.map((item) => (
                 <Drawer.Item
@@ -105,18 +142,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     router.push(item.route);
                     setIsMenuVisible(false);
                   }}
+                  theme={{
+                    colors: {
+                      onSurfaceVariant: isDarkMode ? '#FFFFFF' : undefined,
+                      onSecondaryContainer: isDarkMode ? '#D0BCFF' : undefined,
+                      secondaryContainer: isDarkMode ? 'rgba(208, 188, 255, 0.1)' : undefined
+                    }
+                  }}
                 />
               ))}
             </Drawer.Section>
           </View>
         )}
-        <View style={[
-          styles.mainContent,
-          { backgroundColor: theme.colors.background },
-          isMenuVisible && styles.mainContentWithDrawer
-        ]}>
-          {children}
-        </View>
       </View>
     </SafeAreaView>
   );
@@ -132,24 +169,28 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    flexDirection: 'row',
+    position: 'relative',
+  },
+  mainContent: {
+    flex: 1,
+    width: '100%',
+    zIndex: 1,
   },
   drawer: {
-    width: 280,
-    borderRightWidth: 1,
     position: 'absolute',
     left: 0,
     top: 0,
     bottom: 0,
-    zIndex: 1,
-    elevation: 3,
-    backdropFilter: 'blur(10px)',
-  },
-  mainContent: {
-    flex: 1,
-    transition: 'margin-left 0.3s ease',
-  },
-  mainContentWithDrawer: {
-    marginLeft: 280,
+    width: 280,
+    zIndex: 2,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 2,
+      height: 0,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    borderRightWidth: 1,
   },
 }); 
