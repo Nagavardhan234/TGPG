@@ -1,437 +1,261 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Image, ScrollView, Animated } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
-import { API_URL } from '@/config/api.config';
-import {
-  TextInput,
-  Button,
-  Text,
-  Provider as PaperProvider,
-  MD3LightTheme,
-  Surface,
-  IconButton,
-  SegmentedButtons,
-  RadioButton,
-  Modal,
-  Portal,
-} from 'react-native-paper';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authService } from '@/src/services/auth.service';
-import { ENDPOINTS } from '@/app/constants/endpoints';
-
-const theme = {
-  ...MD3LightTheme,
-  colors: {
-    ...MD3LightTheme.colors,
-    primary: '#6750A4',
-    secondary: '#625B71',
-    background: '#FFFFFF',
-  },
-};
-
-type UserType = 'manager' | 'member' | 'guest';
-
-const AnimatedTitle = () => {
-  const [text, setText] = useState('');
-  const fullText = 'TGPG';
-  
-  useEffect(() => {
-    let currentIndex = 0;
-    const intervalId = setInterval(() => {
-      if (currentIndex <= fullText.length) {
-        setText(fullText.slice(0, currentIndex));
-        currentIndex++;
-      } else {
-        clearInterval(intervalId);
-      }
-    }, 200);
-
-    return () => clearInterval(intervalId);
-  }, []);
-
-  return (
-    <View style={styles.titleContainer}>
-      <Text variant="headlineMedium" style={styles.welcomeText}>
-        Welcome to{' '}
-      </Text>
-      <Text variant="headlineMedium" style={[styles.welcomeText, styles.typingText]}>
-        {text}
-      </Text>
-    </View>
-  );
-};
+import { View, StyleSheet, ScrollView, Animated } from 'react-native';
+import { Text, TextInput, Button, Surface, SegmentedButtons } from 'react-native-paper';
+import { useTheme } from '@/app/context/ThemeContext';
+import { useRouter } from 'expo-router';
+import { Video } from 'expo-av';
 
 export default function LoginScreen() {
-  const [isLoading, setIsLoading] = useState(false);
-  const [loginMethod, setLoginMethod] = useState('email');
-  const [emailOrPhone, setEmailOrPhone] = useState('');
+  const { theme } = useTheme();
+  const [userType, setUserType] = useState<'member' | 'manager'>('member');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [userType, setUserType] = useState<UserType>('member');
-  const [error, setError] = useState('');
-  const [modalConfig, setModalConfig] = useState({
-    visible: false,
-    message: '',
-    title: '',
-    showCancel: true,
-    confirmText: 'OK',
-    cancelText: 'Try Again',
-    onConfirm: () => {},
-    onCancel: () => {},
+  const [isFocused, setIsFocused] = useState({
+    phone: false,
+    password: false
   });
 
-  const showModal = (config: Partial<typeof modalConfig>) => {
-    setModalConfig(prev => ({
-      ...prev,
-      visible: true,
-      ...config,
-    }));
-  };
+  // Animation value for switching icons
+  const fadeAnim = new Animated.Value(1);
 
-  const handleLogin = async () => {
-    setError('');
-    setIsLoading(true);
-    
-    try {
-      const loginData = {
-        email: loginMethod === 'email' ? emailOrPhone : null,
-        phone: loginMethod === 'phone' ? emailOrPhone : null,
-        password,
-        userType: userType === 'guest' ? 'member' : userType,
-      };
+  // Clear autofill values on mount
+  useEffect(() => {
+    setPhone('');
+    setPassword('');
+  }, []);
 
-      const response = await authService.login(loginData);
+  // Animate icon change
+  useEffect(() => {
+    Animated.sequence([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [userType]);
 
-      if (response.success && response.manager) {
-        // Store manager data
-        await AsyncStorage.setItem('userData', JSON.stringify(response.manager));
-        
-        // Navigate based on user type
-        if (userType === 'manager') {
-          // Navigate to manager dashboard
-          router.replace(ENDPOINTS.DASHBOARD);
-        } else if (userType === 'member') {
-          // Navigate to member dashboard (when implemented)
-          router.replace('/screens/member-dashboard');
-        } else {
-          // Navigate to guest view
-          router.replace('/(tabs)');
-        }
-      } else {
-        setError(response.error || 'Login failed');
-      }
-    } catch (err) {
-      console.error('Login error:', err);
-      setError(err.message || 'Error during login. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleGuestLogin = () => {
-    router.replace('/(tabs)');
+  const handleNavigation = () => {
+    const path = userType === 'manager' 
+      ? '/screens/ManagerRegistration' 
+      : '/screens/MemberRegistration';
+    router.push(path);
   };
 
   return (
-    <PaperProvider theme={theme}>
-      <SafeAreaView style={styles.container}>
-        <ScrollView 
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          <Surface style={styles.card} elevation={2}>
-            <Image
-              source={require('../../assets/images/_63473394-ef87-4fcf-b0e6-95ac94b42b1b.jpg')}
-              style={styles.logo}
-              resizeMode="contain"
+    <ScrollView
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      contentContainerStyle={styles.content}
+    >
+      <Surface style={styles.card}>
+        {/* Animated Logo Section */}
+        <Animated.View style={[styles.animationContainer, { opacity: fadeAnim }]}>
+          <View style={styles.avatarContainer}>
+            <Video
+              source={userType === 'manager' 
+                ? require('@/assets/GIF/manager_Login.webm') 
+                : require('@/assets/GIF/Member_Login.webm')}
+              style={styles.animation}
+              shouldPlay
+              isLooping
+              resizeMode="cover"
+              isMuted={true}
             />
+          </View>
+          <Text style={[styles.welcomeText, { color: theme.colors.primary }]}>
+            Welcome Back!
+          </Text>
+          <Text style={styles.subtitleText}>
+            Login as {userType === 'manager' ? 'Manager' : 'Student'}
+          </Text>
+        </Animated.View>
 
-            <AnimatedTitle />
+        {/* User Type Selection */}
+        <SegmentedButtons
+          value={userType}
+          onValueChange={(value) => setUserType(value as 'member' | 'manager')}
+          buttons={[
+            {
+              value: 'member',
+              label: 'Student',
+              icon: 'school',
+              style: styles.segmentButton,
+              showSelectedCheck: true,
+            },
+            {
+              value: 'manager',
+              label: 'Manager',
+              icon: 'account-tie',
+              style: styles.segmentButton,
+              showSelectedCheck: true,
+            },
+          ]}
+          style={styles.segmentedButtons}
+        />
 
-            <Text variant="bodyLarge" style={styles.subtitle}>
-              Sign in to continue
-            </Text>
+        {/* Login Form */}
+        <View style={styles.formContainer}>
+          <TextInput
+            label="Phone Number"
+            value={phone}
+            onChangeText={setPhone}
+            onFocus={() => setIsFocused(prev => ({ ...prev, phone: true }))}
+            onBlur={() => setIsFocused(prev => ({ ...prev, phone: phone.length > 0 }))}
+            mode="outlined"
+            keyboardType="phone-pad"
+            left={<TextInput.Icon icon="phone" />}
+            style={[styles.input, { backgroundColor: theme.colors.background }]}
+            autoComplete="off"
+            theme={{ 
+              colors: { 
+                background: theme.colors.background,
+                placeholder: isFocused.phone ? theme.colors.primary : theme.colors.text 
+              },
+              roundness: 12 
+            }}
+          />
 
-            {/* Role Selection */}
-            <View style={styles.roleContainer}>
-              <Text variant="bodyLarge" style={styles.roleTitle}>
-                Login as:
-              </Text>
-              <RadioButton.Group
-                onValueChange={value => setUserType(value as UserType)}
-                value={userType}
-              >
-                <View style={styles.radioGroup}>
-                  <View style={styles.radioButton}>
-                    <RadioButton value="manager" />
-                    <Text>Manager</Text>
-                  </View>
-                  <View style={styles.radioButton}>
-                    <RadioButton value="member" />
-                    <Text>Member</Text>
-                  </View>
-                </View>
-              </RadioButton.Group>
-            </View>
+          <TextInput
+            label="Password"
+            value={password}
+            onChangeText={setPassword}
+            onFocus={() => setIsFocused(prev => ({ ...prev, password: true }))}
+            onBlur={() => setIsFocused(prev => ({ ...prev, password: password.length > 0 }))}
+            mode="outlined"
+            secureTextEntry={!showPassword}
+            left={<TextInput.Icon icon="lock" />}
+            right={
+              <TextInput.Icon
+                icon={showPassword ? "eye-off" : "eye"}
+                onPress={() => setShowPassword(!showPassword)}
+              />
+            }
+            style={[styles.input, { backgroundColor: theme.colors.background }]}
+            autoComplete="off"
+            theme={{ 
+              colors: { 
+                background: theme.colors.background,
+                placeholder: isFocused.password ? theme.colors.primary : theme.colors.text 
+              },
+              roundness: 12 
+            }}
+          />
 
-            <SegmentedButtons
-              value={loginMethod}
-              onValueChange={setLoginMethod}
-              buttons={[
-                { value: 'email', label: 'Email' },
-                { value: 'phone', label: 'Phone' },
-              ]}
-              style={styles.segmentedButtons}
-            />
-
-            <TextInput
-              mode="outlined"
-              label={loginMethod === 'email' ? 'Email' : 'Phone Number'}
-              value={emailOrPhone}
-              onChangeText={setEmailOrPhone}
-              style={styles.input}
-              keyboardType={loginMethod === 'email' ? 'email-address' : 'phone-pad'}
-              autoCapitalize="none"
-              left={<TextInput.Icon icon={loginMethod === 'email' ? 'email' : 'phone'} />}
-            />
-
-            <TextInput
-              mode="outlined"
-              label="Password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              style={styles.input}
-              right={
-                <TextInput.Icon
-                  icon={showPassword ? 'eye-off' : 'eye'}
-                  onPress={() => setShowPassword(!showPassword)}
-                />
-              }
-              left={<TextInput.Icon icon="lock" />}
-            />
-
-            <Button
-              mode="contained"
-              onPress={handleLogin}
-              style={styles.loginButton}
-              contentStyle={styles.loginButtonContent}
-              loading={isLoading}
-              disabled={isLoading}
-            >
-              {isLoading ? 'Logging in...' : `Login as ${userType === 'manager' ? 'Manager' : 'Member'}`}
-            </Button>
-
-            {error ? (
-              <Text style={styles.errorText} variant="bodySmall">
-                {error}
-              </Text>
-            ) : null}
-
-            <View style={styles.links}>
-              <Button
-                mode="text"
-                onPress={() => {}}
-                style={styles.linkButton}
-              >
-                Forgot Password?
-              </Button>
-              {userType === 'manager' && (
-                <Button
-                  mode="text"
-                  onPress={() => router.push('/screens/ManagerRegistration')}
-                  style={styles.linkButton}
-                >
-                  Register as Manager
-                </Button>
-              )}
-            </View>
-
-            <View style={styles.guestSection}>
-              <View style={styles.divider}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>OR</Text>
-                <View style={styles.dividerLine} />
-              </View>
-              <Button
-                mode="outlined"
-                onPress={handleGuestLogin}
-                style={styles.guestButton}
-                icon="account-arrow-right"
-              >
-                Continue as Guest
-              </Button>
-            </View>
-          </Surface>
-        </ScrollView>
-
-        <Portal>
-          <Modal
-            visible={modalConfig.visible}
-            onDismiss={() => setModalConfig(prev => ({ ...prev, visible: false }))}
-            contentContainerStyle={styles.modalContainer}
+          <Button
+            mode="contained"
+            onPress={() => {}}
+            loading={isLoading}
+            style={styles.loginButton}
+            contentStyle={styles.loginButtonContent}
           >
-            <Surface style={styles.modalContent}>
-              <Text style={styles.modalTitle}>{modalConfig.title}</Text>
-              <Text style={styles.modalText}>{modalConfig.message}</Text>
-              <View style={styles.modalButtons}>
-                {modalConfig.showCancel && (
-                  <Button
-                    mode="text"
-                    onPress={() => modalConfig.onCancel()}
-                    style={styles.modalButton}
-                  >
-                    {modalConfig.cancelText}
-                  </Button>
-                )}
-                <Button
-                  mode="contained"
-                  onPress={() => modalConfig.onConfirm()}
-                  style={styles.modalButton}
-                >
-                  {modalConfig.confirmText}
-                </Button>
-              </View>
-            </Surface>
-          </Modal>
-        </Portal>
-      </SafeAreaView>
-    </PaperProvider>
+            Login
+          </Button>
+        </View>
+
+        {/* Registration Link */}
+        <View style={styles.registerContainer}>
+          <Text style={[styles.registerText, { color: theme.colors.text }]}>
+            New to our platform?
+          </Text>
+          <Button
+            mode="outlined"
+            onPress={handleNavigation}
+            style={styles.registerButton}
+            contentStyle={styles.registerButtonContent}
+          >
+            Create Account
+          </Button>
+        </View>
+      </Surface>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
+  content: {
     padding: 20,
+    minHeight: '100%',
+    justifyContent: 'space-around',
   },
   card: {
-    padding: 20,
-    borderRadius: 20,
-    backgroundColor: '#fff',
+    padding: 24,
+    borderRadius: 24,
+    elevation: 4,
   },
-  logo: {
+  animationContainer: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  avatarContainer: {
     width: 120,
     height: 120,
-    alignSelf: 'center',
-    marginBottom: 20,
+    borderRadius: 60,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    elevation: 4,
+    marginBottom: 16,
+    alignSelf: 'fcenter',
+    marginLeft: -20,
   },
-  titleContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    marginBottom: 8,
+  animation: {
+    width: '100%',
+    height: '100%',
   },
   welcomeText: {
-    textAlign: 'center',
+    fontSize: 28,
     fontWeight: 'bold',
-  },
-  typingText: {
-    color: theme.colors.primary,
-  },
-  subtitle: {
     textAlign: 'center',
+    marginBottom: 4,
+  },
+  subtitleText: {
+    fontSize: 16,
     color: '#666',
-    marginBottom: 24,
-  },
-  roleContainer: {
-    marginBottom: 20,
-  },
-  roleTitle: {
-    marginBottom: 8,
     textAlign: 'center',
-    fontWeight: '500',
-  },
-  radioGroup: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 32,
-  },
-  radioButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   segmentedButtons: {
-    marginBottom: 16,
+    marginBottom: 24,
+  },
+  segmentButton: {
+    borderRadius: 8,
+  },
+  formContainer: {
+    gap: 16,
   },
   input: {
-    marginBottom: 16,
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
+    borderColor: '#000',
   },
   loginButton: {
-    marginBottom: 16,
-    borderRadius: 8,
+    marginTop: 8,
+    borderRadius: 12,
+    elevation: 2,
   },
   loginButtonContent: {
     paddingVertical: 8,
   },
-  links: {
+  registerContainer: {
+    marginTop: 24,
     alignItems: 'center',
-    marginBottom: 24,
+    gap: 12,
   },
-  linkButton: {
-    marginVertical: 4,
+  registerText: {
+    fontSize: 14,
   },
-  guestSection: {
-    marginTop: 16,
+  registerButton: {
+    borderRadius: 12,
+    width: '100%',
   },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 16,
+  registerButtonContent: {
+    paddingVertical: 8,
   },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#e0e0e0',
-  },
-  dividerText: {
-    marginHorizontal: 16,
-    color: '#666',
-  },
-  errorText: {
-    color: '#B00020',
-    textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  guestButton: {
-    borderRadius: 8,
-  },
-  modalContainer: {
-    padding: 20,
-  },
-  modalContent: {
-    padding: 20,
-    borderRadius: 8,
-    backgroundColor: 'white',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 12,
-    textAlign: 'center',
-    color: '#1a1a1a',
-  },
-  modalText: {
-    fontSize: 16,
-    marginBottom: 20,
-    textAlign: 'center',
-    color: '#666',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-  },
-  modalButton: {
-    minWidth: 100,
-  },
-}); 
+});
