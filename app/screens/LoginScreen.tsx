@@ -1,9 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Animated } from 'react-native';
+import { 
+  View, 
+  StyleSheet, 
+  ScrollView, 
+  Animated, 
+  ViewStyle, 
+  TextStyle 
+} from 'react-native';
 import { Text, TextInput, Button, Surface, SegmentedButtons } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
-import { useRouter } from 'expo-router';
-import { Video } from 'expo-av';
+import { router } from 'expo-router';
+import { Video, ResizeMode } from 'expo-av';
+import axios from 'axios';
+import { ENDPOINTS } from '../constants/endpoints';
 
 export default function LoginScreen() {
   const { theme } = useTheme();
@@ -51,12 +60,16 @@ export default function LoginScreen() {
 
   return (
     <ScrollView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      style={{ ...styles.container, backgroundColor: theme.colors.background }}
       contentContainerStyle={styles.content}
     >
       <Surface style={styles.card}>
-        {/* Animated Logo Section */}
-        <Animated.View style={[styles.animationContainer, { opacity: fadeAnim }]}>
+        <Animated.View 
+          style={[
+            styles.animationContainer, 
+            { opacity: fadeAnim } as Animated.AnimatedProps<ViewStyle>
+          ]}
+        >
           <View style={styles.avatarContainer}>
             <Video
               source={userType === 'manager' 
@@ -65,19 +78,18 @@ export default function LoginScreen() {
               style={styles.animation}
               shouldPlay
               isLooping
-              resizeMode="cover"
+              resizeMode={ResizeMode.COVER}
               isMuted={true}
             />
           </View>
-          <Text style={[styles.welcomeText, { color: theme.colors.primary }]}>
+          <Text style={[styles.welcomeText as TextStyle, { color: theme.colors.primary }]}>
             Welcome Back!
           </Text>
-          <Text style={styles.subtitleText}>
+          <Text style={styles.subtitleText as TextStyle}>
             Login as {userType === 'manager' ? 'Manager' : 'Student'}
           </Text>
         </Animated.View>
 
-        {/* User Type Selection */}
         <SegmentedButtons
           value={userType}
           onValueChange={(value) => setUserType(value as 'member' | 'manager')}
@@ -86,21 +98,20 @@ export default function LoginScreen() {
               value: 'member',
               label: 'Student',
               icon: 'school',
-              style: styles.segmentButton,
+              style: styles.segmentButton as ViewStyle,
               showSelectedCheck: true,
             },
             {
               value: 'manager',
               label: 'Manager',
               icon: 'account-tie',
-              style: styles.segmentButton,
+              style: styles.segmentButton as ViewStyle,
               showSelectedCheck: true,
             },
           ]}
           style={styles.segmentedButtons}
         />
 
-        {/* Login Form */}
         <View style={styles.formContainer}>
           <TextInput
             label="Phone Number"
@@ -159,9 +170,8 @@ export default function LoginScreen() {
           </Button>
         </View>
 
-        {/* Registration Link */}
         <View style={styles.registerContainer}>
-          <Text style={[styles.registerText, { color: theme.colors.text }]}>
+          <Text style={[styles.registerText as TextStyle, { color: theme.colors.text }]}>
             New to our platform?
           </Text>
           <Button
@@ -178,7 +188,28 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+interface Styles {
+  container: ViewStyle;
+  content: ViewStyle;
+  card: ViewStyle;
+  animationContainer: ViewStyle;
+  avatarContainer: ViewStyle;
+  animation: ViewStyle;
+  welcomeText: TextStyle;
+  subtitleText: TextStyle;
+  segmentedButtons: ViewStyle;
+  segmentButton: ViewStyle;
+  formContainer: ViewStyle;
+  input: ViewStyle;
+  loginButton: ViewStyle;
+  loginButtonContent: ViewStyle;
+  registerContainer: ViewStyle;
+  registerText: TextStyle;
+  registerButton: ViewStyle;
+  registerButtonContent: ViewStyle;
+}
+
+const styles = StyleSheet.create<Styles>({
   container: {
     flex: 1,
   },
@@ -204,7 +235,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.05)',
     elevation: 4,
     marginBottom: 16,
-    alignSelf: 'fcenter',
+    alignSelf: 'center',
     marginLeft: -20,
   },
   animation: {
@@ -233,7 +264,6 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: 'transparent',
-    borderColor: '#000',
   },
   loginButton: {
     marginTop: 8,

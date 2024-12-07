@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Image, TouchableOpacity, Switch, Modal } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, Image, TouchableOpacity, Switch, Modal, ActivityIndicator } from 'react-native';
+import {PortalProvider} from 'react-native-portal'
 import { 
   Text, 
   TextInput, 
@@ -16,6 +17,11 @@ import {
 import { useTheme } from '@/app/context/ThemeContext';
 import * as ImagePicker from 'expo-image-picker';
 import { FontAwesome } from '@expo/vector-icons';
+import { registerManager, uploadImage } from '../services/manager.service';
+import { showMessage } from 'react-native-flash-message';
+import { router } from 'expo-router';
+import { getAmenities, Amenity } from '../services/amenity.service';
+
 type Step = {
   title: string;
   subtitle: string;
@@ -55,15 +61,22 @@ interface RoomType {
 interface PGDetails {
   name: string;
   address: string;
+  city: string;
+  state: string;
+  pincode: string;
   type: 'Boys' | 'Girls' | 'Co-ed';
   contactNumber: string;
-  amenities: string[];
+  amenities: number[];
+  selectedAmenityNames: string[];
   otherAmenities: string;
   totalRooms: string;
   costPerBed: string;
-  totalCapacity: string;
+  totalTenants: string;
   images: string[];
   description: string;
+  seasonalPrice?: string;
+  rating?: number;
+  occupancyRate?: number;
 }
 
 interface PaymentDetails {
@@ -88,17 +101,30 @@ interface PaymentDetails {
 
 // Add this component for amenities
 const AmenityCard = ({ 
-  label, 
-  icon, 
+  amenity,
   selected, 
   onPress 
 }: { 
-  label: string; 
-  icon: string; 
+  amenity: Amenity;
   selected: boolean; 
   onPress: () => void; 
 }) => {
   const { theme, isDarkMode } = useTheme();
+  
+  // Map amenity names to icons (you can expand this mapping)
+  const getAmenityIcon = (name: string) => {
+    const iconMap: { [key: string]: string } = {
+      'WiFi': 'wifi',
+      'Air Conditioning': 'air-conditioner',
+      'Parking': 'car',
+      'Laundry': 'washing-machine',
+      'Food Service': 'food',
+      'Housekeeping': 'broom',
+      'Gym': 'dumbbell',
+      'CCTV': 'cctv'
+    };
+    return iconMap[name] || 'star'; // Default icon
+  };
   
   return (
     <TouchableOpacity onPress={onPress}>
@@ -111,12 +137,12 @@ const AmenityCard = ({
         ]}
       >
         <IconButton
-          icon={icon}
+          icon={getAmenityIcon(amenity.AmenityName)}
           size={24}
           iconColor={selected ? '#fff' : theme.colors.text}
         />
         <Text style={[styles.amenityLabel, { color: selected ? '#fff' : theme.colors.text }]}>
-          {label}
+          {amenity.AmenityName}
         </Text>
       </Surface>
     </TouchableOpacity>
@@ -217,6 +243,12 @@ const PaymentInfoModal = ({ visible, onDismiss }: { visible: boolean; onDismiss:
 const [showOTP, setShowOTP] = useState(false);
 const [otp, setOTP] = useState('');
 
+// Add validation types
+interface ValidationError {
+  field: string;
+  message: string;
+}
+
 export default function ManagerRegistration() {
   const { theme, isDarkMode } = useTheme();
   const [currentStep, setCurrentStep] = useState(0);
@@ -238,15 +270,22 @@ export default function ManagerRegistration() {
   const [pgDetails, setPgDetails] = useState<PGDetails>({
     name: '',
     address: '',
+    city: '',
+    state: '',
+    pincode: '',
     type: 'Boys',
     contactNumber: '',
     amenities: [],
+    selectedAmenityNames: [],
     otherAmenities: '',
     totalRooms: '',
     costPerBed: '',
-    totalCapacity: '',
+    totalTenants: '',
     images: [],
-    description: ''
+    description: '',
+    seasonalPrice: '',
+    rating: undefined,
+    occupancyRate: undefined
   });
 
   // Add state for payment details
@@ -273,6 +312,31 @@ export default function ManagerRegistration() {
   // Add termsAccepted state
   const [termsAccepted, setTermsAccepted] = useState(false);
 
+  // Add state for amenities
+  const [availableAmenities, setAvailableAmenities] = useState<Amenity[]>([]);
+  const [isLoadingAmenities, setIsLoadingAmenities] = useState(false);
+
+  // Add useEffect to fetch amenities
+  useEffect(() => {
+    const fetchAmenities = async () => {
+      setIsLoadingAmenities(true);
+      try {
+        const amenitiesData = await getAmenities();
+        setAvailableAmenities(amenitiesData);
+      } catch (error) {
+        showMessage({
+          message: 'Error',
+          description: 'Failed to load amenities',
+          type: 'danger',
+        });
+      } finally {
+        setIsLoadingAmenities(false);
+      }
+    };
+
+    fetchAmenities();
+  }, []);
+
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -285,17 +349,6 @@ export default function ManagerRegistration() {
       setProfileImage(result.assets[0].uri);
     }
   };
-
-  const AMENITIES = [
-    { label: 'Wi-Fi', icon: 'wifi' },
-    { label: 'Air Conditioning', icon: 'air-conditioner' },
-    { label: 'Parking', icon: 'car' },
-    { label: 'Laundry', icon: 'washing-machine' },
-    { label: 'Food Service', icon: 'food' },
-    { label: 'Housekeeping', icon: 'broom' },
-    { label: 'Gym', icon: 'dumbbell' },
-    { label: 'CCTV Surveillance', icon: 'cctv' }
-  ];
 
   const pickPGImages = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -405,10 +458,16 @@ export default function ManagerRegistration() {
       <TextInput
         label="Full Name"
         value={managerDetails.fullName}
-        onChangeText={text => setManagerDetails({ ...managerDetails, fullName: text })}
+        onChangeText={(text) => setManagerDetails({ ...managerDetails, fullName: text })}
         mode="outlined"
         style={styles.input}
-            left={<TextInput.Icon icon="account" />}
+        theme={{
+          colors: {
+            primary: theme.colors.primary,
+            background: 'transparent',
+          },
+        }}
+        left={<TextInput.Icon icon="account" />}
       />
         </View>
 
@@ -546,6 +605,32 @@ export default function ManagerRegistration() {
         style={styles.input}
       />
 
+      <View style={styles.inputRow}>
+        <TextInput
+          label="City"
+          value={pgDetails.city}
+          onChangeText={text => setPgDetails(prev => ({ ...prev, city: text }))}
+          mode="outlined"
+          style={[styles.input, { flex: 1 }]}
+        />
+        <TextInput
+          label="State"
+          value={pgDetails.state}
+          onChangeText={text => setPgDetails(prev => ({ ...prev, state: text }))}
+          mode="outlined"
+          style={[styles.input, { flex: 1 }]}
+        />
+      </View>
+
+      <TextInput
+        label="Pincode"
+        value={pgDetails.pincode}
+        onChangeText={text => setPgDetails(prev => ({ ...prev, pincode: text }))}
+        mode="outlined"
+        keyboardType="numeric"
+        style={styles.input}
+      />
+
       <SegmentedButtons
         value={pgDetails.type}
         onValueChange={value => setPgDetails(prev => ({ 
@@ -569,24 +654,33 @@ export default function ManagerRegistration() {
       />
 
       <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Amenities</Text>
-      <View style={styles.amenitiesGrid}>
-        {AMENITIES.map((amenity, index) => (
-          <AmenityCard
-            key={index}
-            label={amenity.label}
-            icon={amenity.icon}
-            selected={pgDetails.amenities.includes(amenity.label)}
-            onPress={() => {
-              setPgDetails(prev => ({
-                ...prev,
-                amenities: prev.amenities.includes(amenity.label)
-                  ? prev.amenities.filter(a => a !== amenity.label)
-                  : [...prev.amenities, amenity.label]
-              }));
-            }}
-          />
-        ))}
-      </View>
+      {isLoadingAmenities ? (
+        <ActivityIndicator size="small" color={theme.colors.primary} />
+      ) : (
+        <View style={styles.amenitiesGrid}>
+          {availableAmenities.map((amenity) => (
+            <AmenityCard
+              key={amenity.AmenityID}
+              amenity={amenity}
+              selected={pgDetails.amenities.includes(amenity.AmenityID)}
+              onPress={() => {
+                setPgDetails(prev => {
+                  const isSelected = prev.amenities.includes(amenity.AmenityID);
+                  return {
+                    ...prev,
+                    amenities: isSelected 
+                      ? prev.amenities.filter(id => id !== amenity.AmenityID)
+                      : [...prev.amenities, amenity.AmenityID],
+                    selectedAmenityNames: isSelected
+                      ? prev.selectedAmenityNames.filter(name => name !== amenity.AmenityName)
+                      : [...prev.selectedAmenityNames, amenity.AmenityName]
+                  };
+                });
+              }}
+            />
+          ))}
+        </View>
+      )}
 
       <TextInput
         label="Other Amenities"
@@ -607,6 +701,15 @@ export default function ManagerRegistration() {
             keyboardType="numeric"
             style={styles.input}
             left={<TextInput.Icon icon="door" />}
+          />
+          <TextInput
+            label="Total Number of Tenants"
+            value={pgDetails.totalTenants}
+            onChangeText={text => setPgDetails(prev => ({ ...prev, totalTenants: text }))}
+            mode="outlined"
+            keyboardType="numeric"
+            style={styles.input}
+            left={<TextInput.Icon icon="account-group" />}
           />
           <TextInput
             label="Cost per Bed"
@@ -774,6 +877,142 @@ export default function ManagerRegistration() {
     </View>
   );
 
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async () => {
+    try {
+      setIsLoading(true);
+
+      // Upload profile image if exists
+      let profileImageUrl = '';
+      if (profileImage) {
+        profileImageUrl = await uploadImage(profileImage);
+      }
+
+      // Upload PG images if exists
+      let pgImageUrls: string[] = [];
+      if (pgDetails.images.length > 0) {
+        pgImageUrls = await Promise.all(
+          pgDetails.images.map(image => uploadImage(image))
+        );
+      }
+
+      // Prepare form data with all fields
+      const formData = {
+        // Personal Details
+        fullName: managerDetails.fullName,
+        email: managerDetails.email,
+        phone: managerDetails.phone,
+        password: managerDetails.password,
+        profileImage: profileImageUrl,
+        address: managerDetails.address,
+        alternatePhone: managerDetails.alternatePhone,
+
+        // PG Details
+        pgName: pgDetails.name,
+        pgAddress: pgDetails.address,
+        city: pgDetails.city,
+        state: pgDetails.state,
+        pincode: pgDetails.pincode,
+        pgType: pgDetails.type,
+        pgContactNumber: pgDetails.contactNumber,
+        totalRooms: parseInt(pgDetails.totalRooms),
+        costPerBed: parseInt(pgDetails.costPerBed),
+        totalTenants: parseInt(pgDetails.totalTenants),
+        amenities: pgDetails.amenities,
+        otherAmenities: pgDetails.otherAmenities,
+        pgImages: pgImageUrls,
+        description: pgDetails.description,
+        seasonalPrice: pgDetails.seasonalPrice || null,
+        rating: null,
+        occupancyRate: null,
+
+        // Payment Details
+        paymentMethod: paymentDetails.paymentMethod,
+        upiId: paymentDetails.paymentMethod === 'upi' ? paymentDetails.upiId : null,
+        bankDetails: paymentDetails.paymentMethod === 'bank' ? {
+          bankName: paymentDetails.bankDetails.bankName,
+          accountNumber: paymentDetails.bankDetails.accountNumber,
+          ifscCode: paymentDetails.bankDetails.ifscCode
+        } : null,
+
+        // Extra Charges
+        extraCharges: {
+          food: {
+            available: paymentDetails.extraCharges.food,
+            price: parseInt(paymentDetails.extraCharges.foodPrice) || 0
+          },
+          laundry: {
+            available: paymentDetails.extraCharges.laundry,
+            price: parseInt(paymentDetails.extraCharges.laundryPrice) || 0
+          },
+          electricity: {
+            available: paymentDetails.extraCharges.electricity,
+            price: parseInt(paymentDetails.extraCharges.electricityPrice) || 0
+          }
+        },
+
+        // Tax Settings
+        taxSettings: {
+          includeGST: paymentDetails.includeGST,
+          includeServiceCharge: paymentDetails.includeServiceCharge
+        },
+
+        // Status and Verification
+        status: 'pending',
+        emailVerified: false,
+        phoneVerified: false,
+        documentsVerified: false,
+        
+        // Timestamps
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      // Validate form data
+      if (!formData.fullName || !formData.email || !formData.phone || !formData.password) {
+        throw new Error('Please fill in all personal details');
+      }
+
+      if (!formData.pgName || !formData.pgAddress || !formData.totalRooms || !formData.costPerBed) {
+        throw new Error('Please fill in all PG details');
+      }
+
+      if (formData.paymentMethod === 'upi' && !formData.upiId) {
+        throw new Error('Please enter UPI ID');
+      }
+
+      if (formData.paymentMethod === 'bank' && 
+          (!formData.bankDetails?.bankName || 
+           !formData.bankDetails?.accountNumber || 
+           !formData.bankDetails?.ifscCode)) {
+        throw new Error('Please fill in all bank details');
+      }
+
+      // Submit form data
+      const response = await registerManager(formData);
+
+      showMessage({
+        message: 'Registration Successful',
+        description: 'Your account has been created successfully. Please wait for verification.',
+        type: 'success',
+      });
+
+      // Navigate to login
+      router.replace('/screens/LoginScreen');
+
+    } catch (error: any) {
+      showMessage({
+        message: 'Registration Failed',
+        description: error.message || 'Something went wrong',
+        type: 'danger',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const renderSummary = () => (
     <View style={styles.formContainer}>
       {/* Personal Details Card */}
@@ -858,44 +1097,213 @@ export default function ManagerRegistration() {
           onPress={() => setTermsAccepted(!termsAccepted)}
         />
       </View>
+
+      <Button
+        mode="contained"
+        onPress={handleSubmit}
+        loading={isLoading}
+        disabled={!termsAccepted || isLoading}
+        style={styles.submitButton}
+      >
+        Complete Registration
+      </Button>
     </View>
   );
 
-  return (
-    <ScrollView 
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-      contentContainerStyle={styles.content}
-    >
-      {renderStepIndicator()}
-      {currentStep === 0 && renderPersonalDetails()}
-      {currentStep === 1 && renderPGDetails()}
-      {currentStep === 2 && renderPaymentSetup()}
-      {currentStep === 3 && renderSummary()}
-      
-      <View style={styles.buttonContainer}>
-        {currentStep > 0 && (
-          <Button 
-            mode="outlined"
-            onPress={() => setCurrentStep(prev => prev - 1)}
-            style={styles.button}
-          >
-            Back
-          </Button>
-        )}
-        <Button 
-          mode="contained"
-          onPress={() => setCurrentStep(prev => prev + 1)}
-          style={[styles.button, styles.nextButton]}
-        >
-          {currentStep === STEPS.length - 1 ? 'Submit' : 'Next'}
-        </Button>
-      </View>
+  // Add to your component's state
+  const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
+  const [showValidationModal, setShowValidationModal] = useState(false);
 
-      <PaymentInfoModal 
-        visible={showInfoModal}
-        onDismiss={() => setShowInfoModal(false)}
-      />
-    </ScrollView>
+  // Add validation function
+  const validateForm = () => {
+    const errors: ValidationError[] = [];
+    
+    switch(currentStep) {
+      case 0: // Personal Details
+    if (!managerDetails.fullName.trim()) {
+          errors.push({ field: 'fullName', message: 'Full name is required' });
+        } else if (managerDetails.fullName.length < 3) {
+          errors.push({ field: 'fullName', message: 'Name must be at least 3 characters' });
+    }
+    
+    if (!managerDetails.email.trim()) {
+      errors.push({ field: 'email', message: 'Email is required' });
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(managerDetails.email)) {
+      errors.push({ field: 'email', message: 'Invalid email format' });
+    }
+    
+    if (!managerDetails.phone.trim()) {
+      errors.push({ field: 'phone', message: 'Phone number is required' });
+    } else if (!/^\d{10}$/.test(managerDetails.phone)) {
+      errors.push({ field: 'phone', message: 'Phone number must be 10 digits' });
+    }
+    
+    if (!managerDetails.password) {
+      errors.push({ field: 'password', message: 'Password is required' });
+    } else if (managerDetails.password.length < 8) {
+      errors.push({ field: 'password', message: 'Password must be at least 8 characters' });
+        } else if (!/(?=.*[A-Z])(?=.*[0-9])/.test(managerDetails.password)) {
+          errors.push({ field: 'password', message: 'Password must contain at least one uppercase letter and one number' });
+    }
+    
+    if (managerDetails.password !== managerDetails.confirmPassword) {
+      errors.push({ field: 'confirmPassword', message: 'Passwords do not match' });
+    }
+        break;
+
+      case 1: // PG Details
+      if (!pgDetails.name.trim()) {
+          errors.push({ field: 'pgName', message: 'PG name is required' });
+      }
+
+      if (!pgDetails.address.trim()) {
+          errors.push({ field: 'pgAddress', message: 'PG address is required' });
+        }
+
+        if (!pgDetails.contactNumber.trim()) {
+          errors.push({ field: 'contactNumber', message: 'Contact number is required' });
+        } else if (!/^\d{10}$/.test(pgDetails.contactNumber)) {
+          errors.push({ field: 'contactNumber', message: 'Invalid contact number' });
+        }
+
+      if (!pgDetails.totalRooms) {
+          errors.push({ field: 'totalRooms', message: 'Total rooms is required' });
+        } else if (parseInt(pgDetails.totalRooms) <= 0) {
+          errors.push({ field: 'totalRooms', message: 'Total rooms must be greater than 0' });
+      }
+
+      if (!pgDetails.costPerBed) {
+        errors.push({ field: 'costPerBed', message: 'Cost per bed is required' });
+        } else if (parseInt(pgDetails.costPerBed) <= 0) {
+          errors.push({ field: 'costPerBed', message: 'Cost per bed must be greater than 0' });
+        }
+        break;
+
+      case 2: // Payment Details
+        if (paymentDetails.paymentMethod === 'upi') {
+          if (!paymentDetails.upiId) {
+        errors.push({ field: 'upiId', message: 'UPI ID is required' });
+          } else if (!/^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/.test(paymentDetails.upiId)) {
+            errors.push({ field: 'upiId', message: 'Invalid UPI ID format' });
+      }
+        } else {
+        if (!paymentDetails.bankDetails.bankName) {
+            errors.push({ field: 'bankName', message: 'Bank name is required' });
+        }
+        if (!paymentDetails.bankDetails.accountNumber) {
+            errors.push({ field: 'accountNumber', message: 'Account number is required' });
+        }
+        if (!paymentDetails.bankDetails.ifscCode) {
+            errors.push({ field: 'ifscCode', message: 'IFSC code is required' });
+          } else if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(paymentDetails.bankDetails.ifscCode)) {
+            errors.push({ field: 'ifscCode', message: 'Invalid IFSC code format' });
+        }
+      }
+        break;
+    }
+
+    return errors;
+  };
+
+  // Update handleNext function
+  const handleNext = () => {
+    const errors = validateForm();
+    if (errors.length > 0) {
+      setValidationErrors(errors);
+      setShowValidationModal(true);
+      return;
+    }
+    setCurrentStep(prev => prev + 1);
+  };
+
+  // Add Validation Modal Component
+  const ValidationModal = () => (
+    <Modal
+      visible={showValidationModal}
+      onDismiss={() => setShowValidationModal(false)}
+      style={styles.modalWrapper}
+    >
+      <Surface style={styles.modalContent}>
+        <IconButton
+          icon="alert-circle"
+          size={40}
+          iconColor={theme.colors.error}
+          style={styles.modalIcon}
+        />
+        <Text style={[styles.modalTitle, { color: theme.colors.error }]}>
+          Validation Failed
+        </Text>
+        <View style={styles.errorList}>
+          {validationErrors.map((error, index) => (
+            <View key={index} style={styles.errorItem}>
+              <IconButton
+                icon="alert"
+                size={20}
+                iconColor={theme.colors.error}
+              />
+              <Text style={[styles.errorText, { color: theme.colors.error }]}>
+                {error.message}
+              </Text>
+            </View>
+          ))}
+        </View>
+        <Button
+          mode="contained"
+          onPress={() => setShowValidationModal(false)}
+          style={[styles.modalButton, { backgroundColor: theme.colors.error }]}
+        >
+          Got it
+        </Button>
+      </Surface>
+    </Modal>
+  );
+
+  return (
+    <>
+      <ScrollView 
+        style={[styles.container, { backgroundColor: theme.colors.background }]}
+        contentContainerStyle={styles.content}
+      >
+        {renderStepIndicator()}
+        {currentStep === 0 && renderPersonalDetails()}
+        {currentStep === 1 && renderPGDetails()}
+        {currentStep === 2 && renderPaymentSetup()}
+        {currentStep === 3 && renderSummary()}
+        
+        <View style={styles.buttonContainer}>
+          {currentStep > 0 && (
+            <Button 
+              mode="outlined"
+              onPress={() => setCurrentStep(prev => prev - 1)}
+              style={styles.button}
+            >
+              Back
+            </Button>
+          )}
+          <Button 
+            mode="contained"
+            onPress={handleNext}
+            style={[styles.button, styles.nextButton]}
+          >
+            {currentStep === STEPS.length - 1 ? 'Submit' : 'Next'}
+          </Button>
+        </View>
+
+        <PaymentInfoModal 
+          visible={showInfoModal}
+          onDismiss={() => setShowInfoModal(false)}
+        />
+
+        {isLoading && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={styles.loadingText}>Creating your account...</Text>
+          </View>
+        )}
+
+        <ValidationModal />
+      </ScrollView>
+    </>
   );
 }
 
@@ -960,6 +1368,7 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: 'transparent',
+    marginBottom: 12,
   },
   buttonContainer: {
     flexDirection: 'row',
@@ -1261,5 +1670,77 @@ const styles = StyleSheet.create({
   infoButton: {
     margin: 0,
     padding: 0,
-  }
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  loadingText: {
+    color: 'white',
+    marginTop: 12,
+    fontSize: 16,
+  },
+  submitButton: {
+    marginTop: 24,
+    paddingVertical: 8,
+  },
+  errorText: {
+    color: 'red',
+    marginBottom: 4,
+  },
+  modalWrapper: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    padding: 24,
+    borderRadius: 16,
+    width: '90%',
+    maxWidth: 400,
+    alignItems: 'center',
+  },
+  modalIcon: {
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  errorList: {
+    width: '100%',
+    marginBottom: 24,
+  },
+  errorItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 16,
+  },
+  modalButton: {
+    width: '100%',
+    marginTop: 8,
+  },
+  validationModalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  validationErrorText: {
+    flex: 1,
+    fontSize: 16,
+  },
 });

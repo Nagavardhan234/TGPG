@@ -1,6 +1,8 @@
 export const ENDPOINTS = {
-  FACILITIES: '/api/facilities',
   MANAGER_REGISTER: '/api/managers/register',
   MANAGER_LOGIN: '/api/managers/login',
-  DASHBOARD: '/screens/dashboard'
-}; 
+  UPLOAD_IMAGE: '/api/upload/image'
+};
+
+export const BASE_URL = 'http://localhost:3000';
+ 
