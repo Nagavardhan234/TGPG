@@ -3,7 +3,7 @@ import { View, StyleSheet, Dimensions, ScrollView, Animated } from 'react-native
 import { Surface, Text, IconButton, Button } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/app/context/ThemeContext';
-import { AnimatedPieChart } from '@/app/components/AnimatedPieChart';
+import { ModernPieChart } from '@/app/components/ModernPieChart';
 import { LineChart } from 'react-native-chart-kit';
 import { router } from 'expo-router';
 
@@ -181,57 +181,47 @@ export default function DashboardHome() {
       </View>
 
       {/* Charts */}
-      <View style={styles.chartsContainer}>
+      <View style={styles.chartsRow}>
         <Surface style={[styles.chartCard, {
-          backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#fff',
+          backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : '#fff',
           borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : '#e0e0e0',
+          flex: 1,
+          padding: 16,
         }]}>
-          <Text style={[styles.chartTitle, { 
-            color: theme.colors.text,
-            fontSize: 18,
-            fontWeight: 'bold',
-            marginBottom: 16,
-          }]}>
+          <Text style={[styles.chartTitle, { color: theme.colors.text }]}>
             Students Overview
           </Text>
-          <View style={styles.chartLegend}>
-            {studentData.map((item, index) => (
-              <View key={index} style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-                <Text style={[styles.legendText, { 
-                  color: isDarkMode ? '#fff' : '#000',
-                  fontSize: 14,
-                  marginLeft: 8,
-                }]}>
-                  {item.label}
-                </Text>
-              </View>
-            ))}
-          </View>
-          <AnimatedPieChart 
-            data={studentData}
-            size={screenWidth - 120}
-            title="Students Overview"
-            total="120 Students"
-            onViewMore={() => {}}
-            viewMoreText="View All Students"
-            theme={theme}
+          <ModernPieChart
+            data={{
+              value: 84,
+              total: 120,
+              label: 'Available Students'
+            }}
+            size={Math.min(screenWidth * 0.42, 220)}
           />
         </Surface>
+
         <Surface style={[styles.chartCard, {
-          backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#fff',
+          backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : '#fff',
           borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : '#e0e0e0',
+          flex: 1,
+          padding: 16,
         }]}>
-          <AnimatedPieChart 
-            data={roomData}
-            size={screenWidth - 120}
-            title="Room Status"
-            total="35 Rooms"
-            onViewMore={() => router.push('/screens/dashboard/rooms')}
-            viewMoreText="Manage Rooms"
-            theme={theme}
+          <Text style={[styles.chartTitle, { color: theme.colors.text,marginBottom: 35 }]}>
+            Room Status
+          </Text>
+          <ModernPieChart
+            data={{
+              value: 28,
+              total: 35,
+              label: 'Occupied Rooms'
+            }}
+            size={Math.min(screenWidth * 0.42, 220)}
           />
         </Surface>
+      </View>
+
+      <View style={[styles.chartsContainer, { padding: 12 }]}>
         <Surface style={[styles.chartCard, styles.fullWidth, {
           backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#fff',
           borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : '#e0e0e0',
@@ -376,16 +366,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   chartCard: {
-    padding: 20,  // Increased padding
+    padding: 20,
     borderRadius: 16,
-    marginBottom: 16,
     borderWidth: 1,
     elevation: 0,
+    alignItems: 'center',
+    minHeight: 300,
   },
   chartTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 16,
+    marginBottom: 20,
     textAlign: 'center',
   },
   lineChart: {
@@ -449,5 +440,11 @@ const styles = StyleSheet.create({
     // For iOS glass effect
     shadowColor: 'transparent',
     backdropFilter: 'blur(10px)',
+  },
+  chartsRow: {
+    flexDirection: 'row',
+    gap: 16,
+    paddingHorizontal: 16,
+    marginBottom: 16,
   },
 }); 
