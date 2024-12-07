@@ -65,7 +65,7 @@ export const testDatabaseConnection = async () => {
   }
 };
 
-export interface LoginResponse {
+interface LoginResponse {
   success: boolean;
   message: string;
   data: {
@@ -79,33 +79,29 @@ export interface LoginResponse {
       PGID: number;
       PGName: string;
       Status: string;
+      Capacity: number;
+      OccupiedCount: number;
     } | null;
     token: string;
   };
 }
 
-export const loginManager = async (credentials: { 
-  phone: string; 
-  password: string; 
-}): Promise<LoginResponse> => {
+export const loginManager = async (credentials: { phone: string; password: string }) => {
   try {
-    console.log('Attempting to login at:', BASE_URL + ENDPOINTS.MANAGER_LOGIN);
-    console.log('Login credentials:', { phone: credentials.phone });
-    
-    const response = await api.post(ENDPOINTS.MANAGER_LOGIN, credentials);
-    console.log('Login response:', response.data);
+    const response = await api.post<LoginResponse>(ENDPOINTS.MANAGER_LOGIN, credentials);
     return response.data;
-  } catch (error: any) {
-    console.error('Login error details:', {
-      message: error.message,
-      response: error.response?.data,
-      status: error.response?.status
-    });
-
-    if (error.code === 'ERR_NETWORK') {
-      throw new Error('Unable to connect to server. Please check your internet connection.');
+  } catch (error) {
+    // Instead of wrapping the error with a generic message,
+    // pass through the original error from the backend
+    if (error.response?.data) {
+      throw error.response.data;
     }
-
-    throw error.response?.data || { error: 'Login failed' };
+    
+    // For network or other errors, create a consistent error structure
+    throw {
+      success: false,
+      error: error.code || 'UNKNOWN_ERROR',
+      message: error.message || 'An unexpected error occurred'
+    };
   }
 }; 

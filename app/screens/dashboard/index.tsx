@@ -1,42 +1,49 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, Dimensions, ScrollView, Animated } from 'react-native';
-import { Surface, Text, IconButton, Button } from 'react-native-paper';
+import { Surface, Text, IconButton, Button, ActivityIndicator } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/app/context/ThemeContext';
 import { ModernPieChart } from '@/app/components/ModernPieChart';
 import { LineChart } from 'react-native-chart-kit';
 import { router } from 'expo-router';
+import { getDashboardStats, DashboardStats } from '@/app/services/dashboard.service';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function DashboardHome() {
   const { theme, isDarkMode } = useTheme();
   const screenWidth = Dimensions.get('window').width;
-  const [showCharts, setShowCharts] = useState(true);
-  const fadeAnim = new Animated.Value(1);
   
-  // Animated values for pie chart
-  const availableStudentsAnim = useRef(new Animated.Value(0)).current;
-  const unavailableStudentsAnim = useRef(new Animated.Value(0)).current;
+  // All hooks should be at the top level
+  const [showCharts, setShowCharts] = useState(true);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [managerName, setManagerName] = useState<string>('');
+  const [pgName, setPgName] = useState<string>('');
   const [animatedPieData, setAnimatedPieData] = useState([
     { name: "Available", population: 0, color: "#4CAF50", legendFontColor: "#7F7F7F", legendFontSize: 12 },
     { name: "Unavailable", population: 0, color: "#F44336", legendFontColor: "#7F7F7F", legendFontSize: 12 }
   ]);
 
-  const statsData = [
-    { icon: "account-group", value: "120", label: "Students" },
-    { icon: "home", value: "35", label: "Rooms" },
-    { icon: "currency-inr", value: "₹12.5K", label: "Revenue" }
-  ];
+  // Refs should also be at the top
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const availableStudentsAnim = useRef(new Animated.Value(0)).current;
+  const unavailableStudentsAnim = useRef(new Animated.Value(0)).current;
 
+  // useEffects should come after all state and ref declarations
   useEffect(() => {
-    setShowCharts(true);
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 1000,
-      useNativeDriver: true,
-    }).start();
+    const checkStoredData = async () => {
+      const manager = await AsyncStorage.getItem('manager');
+      const pg = await AsyncStorage.getItem('pg');
+      console.log('Stored Manager Data:', manager);
+      console.log('Stored PG Data:', pg);
+    };
+    
+    checkStoredData();
+    loadDashboardData();
+    loadManagerData();
   }, []);
 
-  // Update pie data when animated values change
   useEffect(() => {
     const availableListener = availableStudentsAnim.addListener(({ value }) => {
       setAnimatedPieData(prev => [
@@ -57,6 +64,99 @@ export default function DashboardHome() {
       unavailableStudentsAnim.removeListener(unavailableListener);
     };
   }, []);
+
+  // Move all the helper functions after hooks
+  const loadManagerData = async () => {
+    try {
+      const managerData = await AsyncStorage.getItem('manager');
+      const pgData = await AsyncStorage.getItem('pg');
+      
+      if (managerData) {
+        const manager = JSON.parse(managerData);
+        setManagerName(manager.fullName || 'Manager');
+      }
+
+      if (!pgData) {
+        console.warn('No PG data found in storage');
+        setPgName('Your PG');
+        return;
+      }
+
+      try {
+        const pg = JSON.parse(pgData);
+        setPgName(pg.PGName || 'Your PG');
+      } catch (parseError) {
+        console.error('Error parsing PG data:', parseError);
+        setPgName('Your PG');
+      }
+    } catch (error) {
+      console.error('Error loading manager/PG data:', error);
+      setManagerName('Manager');
+      setPgName('Your PG');
+    }
+  };
+
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const managerData = await AsyncStorage.getItem('manager');
+      if (!managerData) {
+        setError('Manager data not found');
+        return;
+      }
+
+      const { id } = JSON.parse(managerData);
+      const dashboardStats = await getDashboardStats(id);
+      setStats(dashboardStats);
+
+    } catch (error: any) {
+      console.error('Error loading dashboard data:', error);
+      setError(error?.response?.data?.message || 'Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Render loading state
+  if (!theme) return null;
+  
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={[styles.errorText, { color: theme.colors.error }]}>{error}</Text>
+        <Button mode="contained" onPress={loadDashboardData}>Retry</Button>
+      </View>
+    );
+  }
+
+  // Move data preparation here
+  const statsData = [
+    { 
+      icon: "account-group", 
+      value: stats?.students?.total?.toString() || "0", 
+      label: "Students" 
+    },
+    { 
+      icon: "home", 
+      value: stats?.rooms?.total?.toString() || "0", 
+      label: "Rooms" 
+    },
+    { 
+      icon: "currency-inr", 
+      value: `₹${((stats?.revenue?.monthly || 0)/1000).toFixed(1)}K`, 
+      label: "Revenue" 
+    }
+  ];
 
   const chartConfig = {
     backgroundGradientFrom: "#fff",
@@ -132,13 +232,15 @@ export default function DashboardHome() {
         <View style={styles.headerContent}>
           <View style={styles.headerLeft}>
             <Text style={styles.greeting}>👋 Hello,</Text>
-            <Text style={styles.managerName}>John Doe</Text>
+            <Text style={styles.managerName}>{managerName}</Text>
             <Text style={styles.role}>Hostel Manager</Text>
           </View>
           <View style={styles.headerRight}>
-            <Text style={styles.hostelName}>Green Valley Hostel</Text>
+            <Text style={styles.hostelName}>{pgName}</Text>
             <View style={styles.membersBadge}>
-              <Text style={styles.totalMembers}>🏠 Total Members: 120</Text>
+              <Text style={styles.totalMembers}>
+                🏠 Total Members: {stats?.students?.total || 0}
+              </Text>
             </View>
           </View>
         </View>
@@ -193,8 +295,8 @@ export default function DashboardHome() {
           </Text>
           <ModernPieChart
             data={{
-              value: 84,
-              total: 120,
+              value: stats?.students?.available || 0,
+              total: stats?.students?.total || 1,
               label: 'Available Students'
             }}
             size={Math.min(screenWidth * 0.42, 220)}
@@ -212,8 +314,8 @@ export default function DashboardHome() {
           </Text>
           <ModernPieChart
             data={{
-              value: 28,
-              total: 35,
+              value: stats?.rooms?.occupied || 0,
+              total: stats?.rooms?.total || 1,
               label: 'Occupied Rooms'
             }}
             size={Math.min(screenWidth * 0.42, 220)}
@@ -230,29 +332,27 @@ export default function DashboardHome() {
             Monthly Payment Collection
           </Text>
           <LineChart
-            data={lineData}
+            data={{
+              labels: stats?.monthlyPayments?.map(p => p.month) || [],
+              datasets: [{
+                data: stats?.monthlyPayments?.map(p => p.amount) || [0]
+              }]
+            }}
             width={screenWidth - 64}
             height={220}
-            chartConfig={{
-              ...chartConfig,
-              backgroundColor: 'transparent',
-              backgroundGradientFrom: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#fff',
-              backgroundGradientTo: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#fff',
-              color: (opacity = 1) => isDarkMode ? 
-                `rgba(255, 255, 255, ${opacity})` : 
-                `rgba(103, 80, 164, ${opacity})`,
-              labelColor: (opacity = 1) => isDarkMode ? 
-                `rgba(255, 255, 255, ${opacity})` : 
-                `rgba(0, 0, 0, ${opacity})`,
-            }}
+            chartConfig={chartConfig}
             bezier
             style={styles.lineChart}
           />
           <View style={[styles.paymentSummary, {
             borderTopColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#e0e0e0'
           }]}>
-            <Text style={{ color: theme.colors.text }}>Total Collected: ₹10,000</Text>
-            <Text style={{ color: theme.colors.text }}>Pending: ₹2,500</Text>
+            <Text style={{ color: theme.colors.text }}>
+              Total Collected: ₹{(stats?.revenue?.total || 0).toLocaleString()}
+            </Text>
+            <Text style={{ color: theme.colors.text }}>
+              Pending: ₹{(stats?.revenue?.pending || 0).toLocaleString()}
+            </Text>
             <Button 
               mode="text" 
               onPress={() => router.push('/screens/dashboard/payments')}
@@ -446,5 +546,21 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingHorizontal: 16,
     marginBottom: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    marginBottom: 20,
+    textAlign: 'center',
   },
 }); 

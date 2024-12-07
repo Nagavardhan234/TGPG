@@ -64,6 +64,20 @@ export default function LoginScreen() {
     ]).start();
   }, [userType]);
 
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+        const manager = await AsyncStorage.getItem('manager');
+        console.log('Stored Token:', token ? 'exists' : 'none');
+        console.log('Stored Manager:', manager);
+      } catch (error) {
+        console.error('Auth check error:', error);
+      }
+    };
+    checkAuth();
+  }, []);
+
   const validatePhone = (phone: string) => {
     return /^\d{10}$/.test(phone);
   };
@@ -71,7 +85,7 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     try {
       setIsLoading(true);
-      setError(null); // Clear previous errors
+      setError(null);
       
       // Validate phone number format
       if (!identifier) {
@@ -109,21 +123,35 @@ export default function LoginScreen() {
             password
           });
 
-          await AsyncStorage.setItem('token', response.data.token);
-          await AsyncStorage.setItem('manager', JSON.stringify(response.data.manager));
-          await AsyncStorage.setItem('userType', 'manager');
+          console.log('Login attempt:', { identifier, userType });
 
-          showMessage({
-            message: 'Welcome back!',
-            description: `Logged in as ${response.data.manager.fullName}`,
-            type: 'success',
-            duration: 3000,
-          });
+          if (response.success) {
+            await AsyncStorage.setItem('token', response.data.token);
+            await AsyncStorage.setItem('manager', JSON.stringify(response.data.manager));
+            
+            if (response.data.pg) {
+              await AsyncStorage.setItem('pg', JSON.stringify(response.data.pg));
+            }
 
-          router.replace('/screens/dashboard');
+            showMessage({
+              message: 'Welcome back!',
+              description: `Logged in as ${response.data.manager.fullName}`,
+              type: 'success',
+              duration: 3000,
+            });
+
+            router.replace('screens/dashboard');
+          } else {
+            setError({
+              message: response.message || 'Login failed',
+              type: 'error'
+            });
+          }
+
+          console.log('Login response:', response);
         } catch (error: any) {
-          // Handle specific API error responses
-          if (error?.error) {
+          // Handle specific error cases
+          if (error.error) {
             switch (error.error) {
               case 'PHONE_NOT_FOUND':
                 setError({
@@ -158,14 +186,9 @@ export default function LoginScreen() {
                   type: 'error'
                 });
             }
-          } else if (error.code === 'ERR_NETWORK') {
-            setError({
-              message: 'Network error. Please check your internet connection and try again.',
-              type: 'error'
-            });
           } else {
             setError({
-              message: 'An unexpected error occurred. Please try again later.',
+              message: error.message || 'An unexpected error occurred',
               type: 'error'
             });
           }
