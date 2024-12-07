@@ -63,4 +63,49 @@ export const testDatabaseConnection = async () => {
     console.error('Database test error:', error);
     throw error;
   }
+};
+
+export interface LoginResponse {
+  success: boolean;
+  message: string;
+  data: {
+    manager: {
+      id: number;
+      fullName: string;
+      email: string;
+      phone: string;
+    };
+    pg: {
+      PGID: number;
+      PGName: string;
+      Status: string;
+    } | null;
+    token: string;
+  };
+}
+
+export const loginManager = async (credentials: { 
+  phone: string; 
+  password: string; 
+}): Promise<LoginResponse> => {
+  try {
+    console.log('Attempting to login at:', BASE_URL + ENDPOINTS.MANAGER_LOGIN);
+    console.log('Login credentials:', { phone: credentials.phone });
+    
+    const response = await api.post(ENDPOINTS.MANAGER_LOGIN, credentials);
+    console.log('Login response:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('Login error details:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
+
+    if (error.code === 'ERR_NETWORK') {
+      throw new Error('Unable to connect to server. Please check your internet connection.');
+    }
+
+    throw error.response?.data || { error: 'Login failed' };
+  }
 }; 

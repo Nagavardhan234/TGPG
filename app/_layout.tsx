@@ -33,3 +33,14 @@ export default function Layout() {
     </ThemeProvider>
   );
 }
+
+export const unstable_settings = {
+  initialRouteName: 'index',
+};
+
+export const routeMap = {
+  '/screens/LoginScreen': 'login',
+  '/screens/ManagerRegistration': 'manager-registration',
+  '/screens/dashboard': 'dashboard',
+  // ... other routes
+};

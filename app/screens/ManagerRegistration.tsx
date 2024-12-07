@@ -21,6 +21,7 @@ import { registerManager, uploadImage } from '../services/manager.service';
 import { showMessage } from 'react-native-flash-message';
 import { router } from 'expo-router';
 import { getAmenities, Amenity } from '../services/amenity.service';
+import ValidationModal from '../components/ValidationModal';
 
 type Step = {
   title: string;
@@ -880,9 +881,75 @@ export default function ManagerRegistration() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Add state for validation modal
+  const [validationErrors, setValidationErrors] = useState<Array<{ field: string; message: string }>>([]);
+  const [showValidationModal, setShowValidationModal] = useState(false);
+
   const handleSubmit = async () => {
     try {
       setIsLoading(true);
+
+      // Validate form data
+      const errors = [];
+      
+      // Personal Details validation
+      if (!managerDetails.fullName) {
+        errors.push({ field: 'fullName', message: 'Full name is required' });
+      }
+      if (!managerDetails.email) {
+        errors.push({ field: 'email', message: 'Email is required' });
+      } else if (!validateEmail(managerDetails.email)) {
+        errors.push({ field: 'email', message: 'Please enter a valid email address' });
+      }
+      if (!managerDetails.phone) {
+        errors.push({ field: 'phone', message: 'Phone number is required' });
+      } else if (!validatePhone(managerDetails.phone)) {
+        errors.push({ field: 'phone', message: 'Please enter a valid 10-digit phone number' });
+      }
+      if (!managerDetails.password) {
+        errors.push({ field: 'password', message: 'Password is required' });
+      } else if (managerDetails.password.length < 8) {
+        errors.push({ field: 'password', message: 'Password must be at least 8 characters' });
+      }
+      if (managerDetails.password !== managerDetails.confirmPassword) {
+        errors.push({ field: 'confirmPassword', message: 'Passwords do not match' });
+      }
+
+      // PG Details validation
+      if (!pgDetails.name) {
+        errors.push({ field: 'pgName', message: 'PG name is required' });
+      }
+      if (!pgDetails.address) {
+        errors.push({ field: 'pgAddress', message: 'PG address is required' });
+      }
+      if (!pgDetails.totalRooms) {
+        errors.push({ field: 'totalRooms', message: 'Total rooms is required' });
+      }
+      if (!pgDetails.costPerBed) {
+        errors.push({ field: 'costPerBed', message: 'Cost per bed is required' });
+      }
+
+      // Payment validation
+      if (paymentDetails.paymentMethod === 'upi' && !paymentDetails.upiId) {
+        errors.push({ field: 'upiId', message: 'UPI ID is required' });
+      }
+      if (paymentDetails.paymentMethod === 'bank') {
+        if (!paymentDetails.bankDetails.bankName) {
+          errors.push({ field: 'bankName', message: 'Bank name is required' });
+        }
+        if (!paymentDetails.bankDetails.accountNumber) {
+          errors.push({ field: 'accountNumber', message: 'Account number is required' });
+        }
+        if (!paymentDetails.bankDetails.ifscCode) {
+          errors.push({ field: 'ifscCode', message: 'IFSC code is required' });
+        }
+      }
+
+      if (errors.length > 0) {
+        setValidationErrors(errors);
+        setShowValidationModal(true);
+        return;
+      }
 
       // Upload profile image if exists
       let profileImageUrl = '';
@@ -1003,11 +1070,11 @@ export default function ManagerRegistration() {
       router.replace('/screens/LoginScreen');
 
     } catch (error: any) {
-      showMessage({
-        message: 'Registration Failed',
-        description: error.message || 'Something went wrong',
-        type: 'danger',
-      });
+      setValidationErrors([{
+        field: 'api',
+        message: error.response?.data?.error || 'Registration failed'
+      }]);
+      setShowValidationModal(true);
     } finally {
       setIsLoading(false);
     }
@@ -1110,154 +1177,6 @@ export default function ManagerRegistration() {
     </View>
   );
 
-  // Add to your component's state
-  const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
-  const [showValidationModal, setShowValidationModal] = useState(false);
-
-  // Add validation function
-  const validateForm = () => {
-    const errors: ValidationError[] = [];
-    
-    switch(currentStep) {
-      case 0: // Personal Details
-    if (!managerDetails.fullName.trim()) {
-          errors.push({ field: 'fullName', message: 'Full name is required' });
-        } else if (managerDetails.fullName.length < 3) {
-          errors.push({ field: 'fullName', message: 'Name must be at least 3 characters' });
-    }
-    
-    if (!managerDetails.email.trim()) {
-      errors.push({ field: 'email', message: 'Email is required' });
-        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(managerDetails.email)) {
-      errors.push({ field: 'email', message: 'Invalid email format' });
-    }
-    
-    if (!managerDetails.phone.trim()) {
-      errors.push({ field: 'phone', message: 'Phone number is required' });
-    } else if (!/^\d{10}$/.test(managerDetails.phone)) {
-      errors.push({ field: 'phone', message: 'Phone number must be 10 digits' });
-    }
-    
-    if (!managerDetails.password) {
-      errors.push({ field: 'password', message: 'Password is required' });
-    } else if (managerDetails.password.length < 8) {
-      errors.push({ field: 'password', message: 'Password must be at least 8 characters' });
-        } else if (!/(?=.*[A-Z])(?=.*[0-9])/.test(managerDetails.password)) {
-          errors.push({ field: 'password', message: 'Password must contain at least one uppercase letter and one number' });
-    }
-    
-    if (managerDetails.password !== managerDetails.confirmPassword) {
-      errors.push({ field: 'confirmPassword', message: 'Passwords do not match' });
-    }
-        break;
-
-      case 1: // PG Details
-      if (!pgDetails.name.trim()) {
-          errors.push({ field: 'pgName', message: 'PG name is required' });
-      }
-
-      if (!pgDetails.address.trim()) {
-          errors.push({ field: 'pgAddress', message: 'PG address is required' });
-        }
-
-        if (!pgDetails.contactNumber.trim()) {
-          errors.push({ field: 'contactNumber', message: 'Contact number is required' });
-        } else if (!/^\d{10}$/.test(pgDetails.contactNumber)) {
-          errors.push({ field: 'contactNumber', message: 'Invalid contact number' });
-        }
-
-      if (!pgDetails.totalRooms) {
-          errors.push({ field: 'totalRooms', message: 'Total rooms is required' });
-        } else if (parseInt(pgDetails.totalRooms) <= 0) {
-          errors.push({ field: 'totalRooms', message: 'Total rooms must be greater than 0' });
-      }
-
-      if (!pgDetails.costPerBed) {
-        errors.push({ field: 'costPerBed', message: 'Cost per bed is required' });
-        } else if (parseInt(pgDetails.costPerBed) <= 0) {
-          errors.push({ field: 'costPerBed', message: 'Cost per bed must be greater than 0' });
-        }
-        break;
-
-      case 2: // Payment Details
-        if (paymentDetails.paymentMethod === 'upi') {
-          if (!paymentDetails.upiId) {
-        errors.push({ field: 'upiId', message: 'UPI ID is required' });
-          } else if (!/^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/.test(paymentDetails.upiId)) {
-            errors.push({ field: 'upiId', message: 'Invalid UPI ID format' });
-      }
-        } else {
-        if (!paymentDetails.bankDetails.bankName) {
-            errors.push({ field: 'bankName', message: 'Bank name is required' });
-        }
-        if (!paymentDetails.bankDetails.accountNumber) {
-            errors.push({ field: 'accountNumber', message: 'Account number is required' });
-        }
-        if (!paymentDetails.bankDetails.ifscCode) {
-            errors.push({ field: 'ifscCode', message: 'IFSC code is required' });
-          } else if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(paymentDetails.bankDetails.ifscCode)) {
-            errors.push({ field: 'ifscCode', message: 'Invalid IFSC code format' });
-        }
-      }
-        break;
-    }
-
-    return errors;
-  };
-
-  // Update handleNext function
-  const handleNext = () => {
-    const errors = validateForm();
-    if (errors.length > 0) {
-      setValidationErrors(errors);
-      setShowValidationModal(true);
-      return;
-    }
-    setCurrentStep(prev => prev + 1);
-  };
-
-  // Add Validation Modal Component
-  const ValidationModal = () => (
-    <Modal
-      visible={showValidationModal}
-      onDismiss={() => setShowValidationModal(false)}
-      style={styles.modalWrapper}
-    >
-      <Surface style={styles.modalContent}>
-        <IconButton
-          icon="alert-circle"
-          size={40}
-          iconColor={theme.colors.error}
-          style={styles.modalIcon}
-        />
-        <Text style={[styles.modalTitle, { color: theme.colors.error }]}>
-          Validation Failed
-        </Text>
-        <View style={styles.errorList}>
-          {validationErrors.map((error, index) => (
-            <View key={index} style={styles.errorItem}>
-              <IconButton
-                icon="alert"
-                size={20}
-                iconColor={theme.colors.error}
-              />
-              <Text style={[styles.errorText, { color: theme.colors.error }]}>
-                {error.message}
-              </Text>
-            </View>
-          ))}
-        </View>
-        <Button
-          mode="contained"
-          onPress={() => setShowValidationModal(false)}
-          style={[styles.modalButton, { backgroundColor: theme.colors.error }]}
-        >
-          Got it
-        </Button>
-      </Surface>
-    </Modal>
-  );
-
   return (
     <>
       <ScrollView 
@@ -1301,7 +1220,12 @@ export default function ManagerRegistration() {
           </View>
         )}
 
-        <ValidationModal />
+        <ValidationModal
+          visible={showValidationModal}
+          onDismiss={() => setShowValidationModal(false)}
+          errors={validationErrors}
+          title="Registration Failed"
+        />
       </ScrollView>
     </>
   );
