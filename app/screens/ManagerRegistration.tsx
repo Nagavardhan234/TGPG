@@ -545,6 +545,46 @@ const PasswordRequirements = () => {
   );
 };
 
+// First, add this new component at the top level of the file, after the imports
+const ValidationPopup = ({ 
+  errors,
+  onDismiss
+}: { 
+  errors: ValidationError[];
+  onDismiss: () => void;
+}) => {
+  const { theme } = useTheme();
+
+  if (errors.length === 0) return null;
+
+  return (
+    <View style={styles.errorContainer}>
+      <Surface style={[
+        styles.errorContent,
+        {
+          backgroundColor: theme.colors.errorContainer,
+          borderLeftColor: theme.colors.error,
+        }
+      ]}>
+        <IconButton
+          icon="alert-circle"
+          iconColor={theme.colors.error}
+          size={24}
+        />
+        <Text style={[styles.errorMessage, { color: theme.colors.error }]}>
+          {errors[0].message}
+        </Text>
+        <IconButton
+          icon="close"
+          iconColor={theme.colors.error}
+          size={20}
+          onPress={onDismiss}
+        />
+      </Surface>
+    </View>
+  );
+};
+
 export default function ManagerRegistration() {
   const { theme, isDarkMode } = useTheme();
   
@@ -557,7 +597,6 @@ export default function ManagerRegistration() {
   const [otp, setOTP] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Array<{ field: string; message: string }>>([]);
-  const [showValidationModal, setShowValidationModal] = useState(false);
   const [isLoadingAmenities, setIsLoadingAmenities] = useState(false);
   const [availableAmenities, setAvailableAmenities] = useState<Amenity[]>([]);
   const [showDuplicateManagerModal, setShowDuplicateManagerModal] = useState(false);
@@ -641,8 +680,6 @@ export default function ManagerRegistration() {
 
     if (isValid) {
       setCurrentStep(prev => prev + 1);
-    } else {
-      setShowValidationModal(true);
     }
   };
 
@@ -1567,12 +1604,23 @@ export default function ManagerRegistration() {
   );
 
   return (
-    <>
+    <View style={styles.rootContainer}>
+      <View style={styles.stickyHeader}>
+        <ValidationPopup 
+          errors={validationErrors} 
+          onDismiss={() => setValidationErrors([])} 
+        />
+      </View>
+      
       <ScrollView 
-        style={[styles.container, { backgroundColor: theme.colors.background }]}
+        style={[styles.scrollView, { backgroundColor: theme.colors.background }]}
         contentContainerStyle={styles.content}
+        stickyHeaderIndices={[0]}
       >
-        {renderStepIndicator()}
+        <View style={[styles.stepIndicatorContainer, { backgroundColor: theme.colors.background }]}>
+          {renderStepIndicator()}
+        </View>
+
         {currentStep === 0 && renderPersonalDetails()}
         {currentStep === 1 && renderPGDetails()}
         {currentStep === 2 && renderPaymentSetup()}
@@ -1596,40 +1644,34 @@ export default function ManagerRegistration() {
             {currentStep === STEPS.length - 1 ? 'Submit' : 'Next'}
           </Button>
         </View>
-
-        <PaymentInfoModal 
-          visible={showInfoModal}
-          onDismiss={() => setShowInfoModal(false)}
-        />
-
-        <SuccessModal 
-          visible={showSuccessModal} 
-          onDismiss={() => {
-            setShowSuccessModal(false);
-            router.replace('/screens/LoginScreen');
-          }} 
-        />
-
-        <DuplicateManagerModal 
-          visible={showDuplicateManagerModal}
-          onDismiss={() => setShowDuplicateManagerModal(false)}
-        />
-
-        {isLoading && (
-          <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-            <Text style={styles.loadingText}>Creating your account...</Text>
-          </View>
-        )}
-
-        <ValidationModal
-          visible={showValidationModal}
-          onDismiss={() => setShowValidationModal(false)}
-          errors={validationErrors}
-          title="Please Fix the Following Errors"
-        />
       </ScrollView>
-    </>
+
+      {/* Keep all modals outside ScrollView */}
+      <PaymentInfoModal 
+        visible={showInfoModal}
+        onDismiss={() => setShowInfoModal(false)}
+      />
+
+      <SuccessModal 
+        visible={showSuccessModal} 
+        onDismiss={() => {
+          setShowSuccessModal(false);
+          router.replace('/screens/LoginScreen');
+        }} 
+      />
+
+      <DuplicateManagerModal 
+        visible={showDuplicateManagerModal}
+        onDismiss={() => setShowDuplicateManagerModal(false)}
+      />
+
+      {isLoading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={styles.loadingText}>Creating your account...</Text>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -2087,11 +2129,23 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   errorContainer: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    right: 20,
+    zIndex: 1000,
+  },
+  errorContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
-    paddingHorizontal: 8,
-    flexWrap: 'wrap',
+    padding: 16,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+  },
+  errorMessage: {
+    flex: 1,
+    marginHorizontal: 8,
+    fontSize: 14,
   },
   errorIcon: {
     margin: 0,
@@ -2102,29 +2156,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     flex: 1,
     flexWrap: 'wrap',
-  },
-  alertContainer: {
-    marginBottom: 16,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  alertContent: {
-    flexDirection: 'row',
-    padding: 12,
-    alignItems: 'flex-start',
-  },
-  alertTextContainer: {
-    flex: 1,
-    marginLeft: 8,
-  },
-  alertTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  alertMessage: {
-    fontSize: 14,
-    marginBottom: 2,
   },
   inputError: {
     borderColor: 'rgba(255, 59, 48, 0.5)',
@@ -2142,6 +2173,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     flex: 1,
     marginLeft: 4,
+  },
+  validationErrorText: {
+    fontSize: 14,
+    color: 'red',
+    marginLeft: 8,
   },
   duplicateModalContainer: {
     position: 'absolute',
@@ -2188,22 +2224,6 @@ const styles = StyleSheet.create({
   },
   duplicateModalButton: {
     minWidth: 120,
-  },
-  passwordRequirements: {
-    marginTop: 8,
-    marginBottom: 16,
-    paddingLeft: 16,
-  },
-  requirementTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    color: '#666',
-  },
-  requirementText: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 4,
   },
   successModalContainer: {
     position: 'absolute',
@@ -2255,5 +2275,96 @@ const styles = StyleSheet.create({
   successModalButton: {
     minWidth: 200,
     borderRadius: 8,
+  },
+  alertContainer: {
+    margin: 16,
+    padding: 16,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  alertContent: {
+    flexDirection: 'row',
+    padding: 12,
+    alignItems: 'flex-start',
+  },
+  alertTextContainer: {
+    flex: 1,
+    marginLeft: 8,
+  },
+  alertTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  alertMessage: {
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  // Password requirement styles
+  passwordRequirements: {
+    marginTop: 8,
+    marginBottom: 16,
+    paddingLeft: 16,
+  },
+  requirementTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    color: '#666',
+  },
+  requirementText: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  rootContainer: {
+    flex: 1,
+    position: 'relative',
+  },
+  stickyHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1000,
+    elevation: 1000,
+  },
+  stepIndicatorContainer: {
+    paddingTop: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    marginBottom: 16,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    paddingBottom: 40,
+  },
+  errorContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 8,
+  },
+  errorContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  errorMessage: {
+    flex: 1,
+    marginHorizontal: 8,
+    fontSize: 14,
+    lineHeight: 20,
   },
 });
