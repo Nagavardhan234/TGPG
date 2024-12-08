@@ -114,16 +114,25 @@ export default function StudentManagement() {
         return;
       }
 
-      const { PGID } = JSON.parse(pgData);
-      const defaultRent = await getDefaultRent(PGID);
-      
-      if (defaultRent) {
+      const pgDetails = JSON.parse(pgData);
+      if (pgDetails.Rent) {
         setFormData(prev => ({
           ...prev,
-          monthlyRent: defaultRent.toString()
+          monthlyRent: pgDetails.Rent.toString()
         }));
       } else {
-        console.warn('No default rent found');
+        // Fallback to getting rent from API if not in AsyncStorage
+        const { PGID } = pgDetails;
+        const defaultRent = await getDefaultRent(PGID);
+        
+        if (defaultRent) {
+          setFormData(prev => ({
+            ...prev,
+            monthlyRent: defaultRent.toString()
+          }));
+        } else {
+          console.warn('No default rent found');
+        }
       }
     } catch (error) {
       console.error('Error loading default rent:', error);
