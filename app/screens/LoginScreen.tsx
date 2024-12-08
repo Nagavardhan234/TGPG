@@ -100,7 +100,16 @@ export default function LoginScreen() {
         await AsyncStorage.setItem('manager', JSON.stringify(response.data.manager));
         
         if (response.data.pg) {
-          await AsyncStorage.setItem('pg', JSON.stringify(response.data.pg));
+          // Store PG details with rent information
+          const pgDetails = {
+            PGID: response.data.pg.PGID,
+            PGName: response.data.pg.PGName,
+            Status: response.data.pg.Status,
+            Capacity: response.data.pg.Capacity,
+            OccupiedCount: response.data.pg.OccupiedCount,
+            Rent: response.data.pg.Rent || 0  // Add rent field with fallback to 0
+          };
+          await AsyncStorage.setItem('pg', JSON.stringify(pgDetails));
         }
 
         showMessage({

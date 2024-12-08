@@ -81,8 +81,10 @@ interface LoginResponse {
       Status: string;
       Capacity: number;
       OccupiedCount: number;
+      Rent:number;
     } | null;
     token: string;
+    
   };
 }
 
