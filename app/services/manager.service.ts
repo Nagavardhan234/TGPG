@@ -104,4 +104,13 @@ export const loginManager = async (credentials: { phone: string; password: strin
       message: error.message || 'An unexpected error occurred'
     };
   }
+};
+
+export const checkExistingCredentials = async (email: string, phone: string) => {
+  try {
+    const response = await api.post('/managers/check-credentials', { email, phone });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
 }; 

@@ -3,7 +3,9 @@ export const ENDPOINTS = {
   MANAGER_LOGIN: '/api/managers/login',
   UPLOAD_IMAGE: '/api/upload',
   TEST: '/api/managers/test',
-  DASHBOARD_STATS: '/api/dashboard/stats'
+  DASHBOARD_STATS: '/api/dashboard/stats',
+  STUDENTS: '/api/students',
+  PGS: '/api/pgs'
 };
 
 export const BASE_URL = 'http://localhost:3000';

@@ -14,18 +14,14 @@ import {
   useTheme
 } from 'react-native-paper';
 import { useTheme as useCustomTheme } from '@/app/context/ThemeContext';
-import { useLocalSearchParams, router } from 'expo-router';
+import { router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getStudents, addStudent, getDefaultRent, Student, StudentForm } from '@/app/services/student.service';
+import { showMessage } from 'react-native-flash-message';
 
-interface StudentForm {
-  name: string;
-  phone: string;
-  roomNumber: string;
+interface FormData extends StudentForm {
+  roomNo: number;
   monthlyRent: string;
-  aadhaar: string;
-  email: string;
-  guardianName: string;
-  guardianPhone: string;
-  address: string;
 }
 
 export default function StudentManagement() {
@@ -33,67 +29,152 @@ export default function StudentManagement() {
   const [modalVisible, setModalVisible] = useState(false);
   const paperTheme = useTheme();
   const { theme, isDarkMode } = useCustomTheme();
-  const { action } = useLocalSearchParams();
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const [formData, setFormData] = useState<StudentForm>({
+  const [students, setStudents] = useState<Student[]>([]);
+  const [formData, setFormData] = useState<FormData>({
     name: '',
     phone: '',
-    roomNumber: '',
-    monthlyRent: '',
-    aadhaar: '',
     email: '',
+    moveInDate: new Date().toISOString().split('T')[0],
+    monthlyRent: '',
     guardianName: '',
     guardianPhone: '',
-    address: '',
+    password: '',
+    roomNo: 0
   });
 
-  const [isLoading, setIsLoading] = useState(false);
-  const [isTableLoading, setIsTableLoading] = useState(true);
-
   useEffect(() => {
-    if (action === 'add') {
-      setModalVisible(true);
-    }
-  }, [action]);
-
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
-        // TODO: Load actual data
-      } catch (error) {
-        console.error('Error loading data:', error);
-      } finally {
-        setIsTableLoading(false);
-      }
-    };
-
-    loadData();
+    loadStudents();
+    loadDefaultRent();
   }, []);
 
-  const handleSubmit = async () => {
-    setIsLoading(true);
+  const validateForm = () => {
+    if (!formData.name || !formData.phone || !formData.password || !formData.roomNo) {
+      showMessage({
+        message: 'Error',
+        description: 'Please fill all required fields',
+        type: 'danger',
+      });
+      return false;
+    }
+    if (formData.phone.length !== 10) {
+      showMessage({
+        message: 'Error',
+        description: 'Phone number must be 10 digits',
+        type: 'danger',
+      });
+      return false;
+    }
+    if (formData.password.length < 6) {
+      showMessage({
+        message: 'Error',
+        description: 'Password must be at least 6 characters',
+        type: 'danger',
+      });
+      return false;
+    }
+    return true;
+  };
+
+  const loadStudents = async () => {
     try {
-      // TODO: Implement API call to add student
-      console.log('Form Data:', formData);
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
+      setIsLoading(true);
+      const pgData = await AsyncStorage.getItem('pg');
+      if (!pgData) {
+        showMessage({
+          message: 'Error',
+          description: 'PG data not found',
+          type: 'danger',
+        });
+        return;
+      }
+
+      const { PGID } = JSON.parse(pgData);
+      const studentsData = await getStudents(PGID);
+      setStudents(studentsData);
+    } catch (error) {
+      console.error('Error loading students:', error);
+      showMessage({
+        message: 'Error',
+        description: 'Failed to load students',
+        type: 'danger',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadDefaultRent = async () => {
+    try {
+      const pgData = await AsyncStorage.getItem('pg');
+      if (!pgData) {
+        console.warn('No PG data found');
+        return;
+      }
+
+      const { PGID } = JSON.parse(pgData);
+      const defaultRent = await getDefaultRent(PGID);
+      
+      if (defaultRent) {
+        setFormData(prev => ({
+          ...prev,
+          monthlyRent: defaultRent.toString()
+        }));
+      } else {
+        console.warn('No default rent found');
+      }
+    } catch (error) {
+      console.error('Error loading default rent:', error);
+      showMessage({
+        message: 'Warning',
+        description: 'Failed to load default rent',
+        type: 'warning'
+      });
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!validateForm()) return;
+
+    try {
+      setIsSubmitting(true);
+      const pgData = await AsyncStorage.getItem('pg');
+      if (!pgData) throw new Error('PG data not found');
+
+      const { PGID } = JSON.parse(pgData);
+      await addStudent(PGID, formData);
+      
+      showMessage({
+        message: 'Success',
+        description: 'Student added successfully',
+        type: 'success',
+      });
+      
       setModalVisible(false);
-      // Reset form
+      loadStudents();
+      
       setFormData({
         name: '',
         phone: '',
-        roomNumber: '',
-        monthlyRent: '',
-        aadhaar: '',
         email: '',
+        moveInDate: new Date().toISOString().split('T')[0],
+        monthlyRent: '',
         guardianName: '',
         guardianPhone: '',
-        address: '',
+        password: '',
+        roomNo: 0
       });
     } catch (error) {
       console.error('Error adding student:', error);
+      showMessage({
+        message: 'Error',
+        description: 'Failed to add student',
+        type: 'danger',
+      });
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -116,17 +197,27 @@ export default function StudentManagement() {
           <DataTable.Title textStyle={{ color: theme.colors.text }}>Status</DataTable.Title>
         </DataTable.Header>
 
-        {isTableLoading ? (
+        {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.colors.primary} />
           </View>
         ) : (
-          <DataTable.Row>
-            <DataTable.Cell textStyle={{ color: theme.colors.text }}>John Doe</DataTable.Cell>
-            <DataTable.Cell textStyle={{ color: theme.colors.text }}>101</DataTable.Cell>
-            <DataTable.Cell textStyle={{ color: theme.colors.text }}>1234567890</DataTable.Cell>
-            <DataTable.Cell textStyle={{ color: theme.colors.text }}>Active</DataTable.Cell>
-          </DataTable.Row>
+          students.map(student => (
+            <DataTable.Row key={student.TenantID}>
+              <DataTable.Cell textStyle={{ color: theme.colors.text }}>
+                {student.FullName}
+              </DataTable.Cell>
+              <DataTable.Cell textStyle={{ color: theme.colors.text }}>
+                {student.Room_No || '-'}
+              </DataTable.Cell>
+              <DataTable.Cell textStyle={{ color: theme.colors.text }}>
+                {student.Phone}
+              </DataTable.Cell>
+              <DataTable.Cell textStyle={{ color: theme.colors.text }}>
+                {student.Status}
+              </DataTable.Cell>
+            </DataTable.Row>
+          ))
         )}
       </DataTable>
 
@@ -158,7 +249,7 @@ export default function StudentManagement() {
 
               {/* Form Fields */}
               <TextInput
-                label="Full Name"
+                label="Full Name *"
                 value={formData.name}
                 onChangeText={(text) => setFormData({ ...formData, name: text })}
                 mode="outlined"
@@ -166,7 +257,7 @@ export default function StudentManagement() {
               />
               
               <TextInput
-                label="Phone Number"
+                label="Phone Number *"
                 value={formData.phone}
                 onChangeText={(text) => setFormData({ ...formData, phone: text })}
                 mode="outlined"
@@ -175,27 +266,20 @@ export default function StudentManagement() {
               />
 
               <TextInput
-                label="Room Number"
-                value={formData.roomNumber}
-                onChangeText={(text) => setFormData({ ...formData, roomNumber: text })}
-                mode="outlined"
-                style={styles.input}
-              />
-
-              <TextInput
-                label="Monthly Rent (Optional)"
-                value={formData.monthlyRent}
-                onChangeText={(text) => setFormData({ ...formData, monthlyRent: text })}
+                label="Room Number *"
+                value={formData.roomNo.toString()}
+                onChangeText={(text) => setFormData({ ...formData, roomNo: parseInt(text) || 0 })}
                 mode="outlined"
                 keyboardType="numeric"
                 style={styles.input}
               />
 
               <TextInput
-                label="Aadhaar Number"
-                value={formData.aadhaar}
-                onChangeText={(text) => setFormData({ ...formData, aadhaar: text })}
+                label="Monthly Rent"
+                value={formData.monthlyRent}
+                onChangeText={(text) => setFormData({ ...formData, monthlyRent: text })}
                 mode="outlined"
+                keyboardType="numeric"
                 style={styles.input}
               />
 
@@ -226,12 +310,11 @@ export default function StudentManagement() {
               />
 
               <TextInput
-                label="Address"
-                value={formData.address}
-                onChangeText={(text) => setFormData({ ...formData, address: text })}
+                label="Password *"
+                value={formData.password}
+                onChangeText={(text) => setFormData({ ...formData, password: text })}
                 mode="outlined"
-                multiline
-                numberOfLines={3}
+                secureTextEntry
                 style={styles.input}
               />
 
@@ -247,10 +330,10 @@ export default function StudentManagement() {
                   mode="contained" 
                   onPress={handleSubmit}
                   style={styles.button}
-                  loading={isLoading}
-                  disabled={isLoading}
+                  loading={isSubmitting}
+                  disabled={isSubmitting}
                 >
-                  {isLoading ? 'Adding...' : 'Add Student'}
+                  {isSubmitting ? 'Adding...' : 'Add Student'}
                 </Button>
               </View>
             </View>
@@ -261,14 +344,11 @@ export default function StudentManagement() {
       <FAB
         icon="plus"
         label="Add Student"
-        style={[styles.fab, { 
-          backgroundColor: isDarkMode ? '#D0BCFF' : theme.colors.primary // Lighter color in dark mode
-        }]}
-        onPress={() => setModalVisible(true)}
-        labelStyle={[
-          styles.fabLabel,
-          { color: isDarkMode ? '#000000' : '#FFFFFF' } // Black text on light background in dark mode
+        style={[
+          styles.fab, 
+          { backgroundColor: isDarkMode ? '#D0BCFF' : theme.colors.primary }
         ]}
+        onPress={() => setModalVisible(true)}
       />
     </View>
   );
@@ -285,12 +365,9 @@ const styles = StyleSheet.create({
   searchBar: {
     marginBottom: 16,
   },
-  fab: {
-    position: 'absolute',
-    margin: 16,
-    right: 0,
-    bottom: 0,
-    elevation: 6,
+  loadingContainer: {
+    padding: 20,
+    alignItems: 'center',
   },
   modalContainer: {
     margin: 20,
@@ -299,6 +376,9 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     padding: 20,
+  },
+  modalOverlay: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   avatarContainer: {
     alignItems: 'center',
@@ -324,16 +404,16 @@ const styles = StyleSheet.create({
   button: {
     minWidth: 100,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+  fab: {
+    position: 'absolute',
+    margin: 16,
+    right: 0,
+    bottom: 0,
+    borderRadius: 28,
+    height: 56,
   },
   fabLabel: {
     fontSize: 14,
     fontWeight: 'bold',
-  },
-  modalOverlay: {
-    backgroundColor: 'rgba(0, 0, 0, 0.9)', // Even darker overlay
   },
 }); 

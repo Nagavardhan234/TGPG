@@ -86,123 +86,81 @@ export default function LoginScreen() {
     try {
       setIsLoading(true);
       setError(null);
-      
-      // Validate phone number format
-      if (!identifier) {
-        setError({
-          message: 'Please enter your phone number',
-          type: 'warning',
-          field: 'identifier'
-        });
-        return;
-      }
 
-      if (!identifier.match(/^\d{10}$/)) {
-        setError({
-          message: 'Please enter a valid 10-digit phone number',
-          type: 'warning',
-          field: 'identifier'
-        });
-        return;
-      }
+      if (!validateForm()) return;
 
-      // Validate password presence
-      if (!password) {
-        setError({
-          message: 'Please enter your password',
-          type: 'warning',
-          field: 'password'
-        });
-        return;
-      }
+      const response = await loginManager({
+        phone: identifier,
+        password
+      });
 
-      if (userType === 'manager') {
-        try {
-          const response = await loginManager({
-            phone: identifier,
-            password
-          });
-
-          console.log('Login attempt:', { identifier, userType });
-
-          if (response.success) {
-            await AsyncStorage.setItem('token', response.data.token);
-            await AsyncStorage.setItem('manager', JSON.stringify(response.data.manager));
-            
-            if (response.data.pg) {
-              await AsyncStorage.setItem('pg', JSON.stringify(response.data.pg));
-            }
-
-            showMessage({
-              message: 'Welcome back!',
-              description: `Logged in as ${response.data.manager.fullName}`,
-              type: 'success',
-              duration: 3000,
-            });
-
-            router.replace('screens/dashboard');
-          } else {
-            setError({
-              message: response.message || 'Login failed',
-              type: 'error'
-            });
-          }
-
-          console.log('Login response:', response);
-        } catch (error: any) {
-          // Handle specific error cases
-          if (error.error) {
-            switch (error.error) {
-              case 'PHONE_NOT_FOUND':
-                setError({
-                  message: 'The phone number entered is not registered. Please check and try again or sign up for an account.',
-                  type: 'warning',
-                  field: 'identifier'
-                });
-                break;
-              case 'INVALID_PHONE_FORMAT':
-                setError({
-                  message: 'Please enter a valid phone number',
-                  type: 'warning',
-                  field: 'identifier'
-                });
-                break;
-              case 'INVALID_PASSWORD':
-                setError({
-                  message: 'The password you entered is incorrect. Please try again.',
-                  type: 'error',
-                  field: 'password'
-                });
-                break;
-              case 'DB_CONNECTION_ERROR':
-                setError({
-                  message: 'Unable to connect to the server. Please try again later.',
-                  type: 'error'
-                });
-                break;
-              default:
-                setError({
-                  message: error.response.data.message || 'Unable to process your request at the moment. Please try again later.',
-                  type: 'error'
-                });
-            }
-          } else {
-            setError({
-              message: error.message || 'An unexpected error occurred',
-              type: 'error'
-            });
-          }
+      if (response.success) {
+        // Store auth data
+        await AsyncStorage.setItem('token', response.data.token);
+        await AsyncStorage.setItem('manager', JSON.stringify(response.data.manager));
+        
+        if (response.data.pg) {
+          await AsyncStorage.setItem('pg', JSON.stringify(response.data.pg));
         }
+
+        showMessage({
+          message: 'Welcome back!',
+          description: `Logged in as ${response.data.manager.fullName}`,
+          type: 'success',
+          duration: 3000,
+        });
+
+        router.replace('screens/dashboard');
       }
     } catch (error: any) {
-      console.error('Login error:', error);
+      handleLoginError(error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLoginError = (error: any) => {
+    console.error('Login error:', error);
+    
+    if (error.response?.data?.error) {
+      switch (error.response.data.error) {
+        case 'PHONE_NOT_FOUND':
+        case 'INVALID_PHONE_FORMAT':
+          setError({
+            message: error.response.data.message,
+            type: 'warning',
+            field: 'identifier'
+          });
+          break;
+        case 'INVALID_PASSWORD':
+          setError({
+            message: error.response.data.message,
+            type: 'error',
+            field: 'password'
+          });
+          break;
+        default:
+          setError({
+            message: error.response.data.message || 'Login failed',
+            type: 'error'
+          });
+      }
+    } else if (error.code === 'ERR_NETWORK') {
+      setError({
+        message: 'Network error. Please check your internet connection.',
+        type: 'error'
+      });
+    } else {
       setError({
         message: 'An unexpected error occurred. Please try again later.',
         type: 'error'
       });
-    } finally {
-      setIsLoading(false);
     }
+  };
+
+  const validateForm = () => {
+    // Implement your form validation logic here
+    return true;
   };
 
   return (

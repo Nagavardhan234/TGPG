@@ -1,56 +1,63 @@
 import React, { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Drawer, Appbar, Avatar, Menu } from 'react-native-paper';
+import { View, StyleSheet, Pressable } from 'react-native';
+import { Drawer, Appbar, Menu, Avatar, Divider, Text, IconButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, usePathname } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ThemeToggle } from '@/app/components/ThemeToggle';
 import { useTheme } from '@/app/context/ThemeContext';
+import { useAuth } from '@/app/context/AuthContext';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const menuItems = [
   {
     key: 'index',
     title: 'Dashboard',
-    icon: 'view-dashboard',
+    icon: 'view-dashboard-outline',
     route: '/screens/dashboard'
   },
   {
     key: 'students',
     title: 'Student Management',
-    icon: 'account-group',
+    icon: 'account-group-outline',
     route: '/screens/dashboard/students'
   },
   {
     key: 'rooms',
     title: 'Room Management',
-    icon: 'home',
+    icon: 'home-outline',
     route: '/screens/dashboard/rooms'
   },
   {
     key: 'payments',
     title: 'Payments Overview',
-    icon: 'credit-card',
+    icon: 'credit-card-outline',
     route: '/screens/dashboard/payments'
   },
   {
     key: 'messages',
     title: 'Messages',
-    icon: 'message',
+    icon: 'message-outline',
     route: '/screens/dashboard/messages'
   }
 ];
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { theme, isDarkMode } = useTheme();
-  const [isMenuVisible, setIsMenuVisible] = useState(false);
-  const [isProfileMenuVisible, setIsProfileMenuVisible] = useState(false);
+interface DashboardLayoutProps {
+  children: React.ReactNode;
+}
+
+export default function DashboardLayout({ children }: DashboardLayoutProps) {
+  const { theme, isDarkMode, toggleTheme } = useTheme();
+  const { logout, manager } = useAuth();
+  const [isDrawerVisible, setIsDrawerVisible] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
   const pathname = usePathname();
 
-  if (!theme) return null;
-
   const handleLogout = async () => {
-    await AsyncStorage.removeItem('userData');
-    router.replace('/screens/LoginScreen');
+    try {
+      await logout();
+      router.replace('/');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
   const getCurrentRouteKey = (path: string) => {
@@ -63,96 +70,171 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const currentRoute = menuItems.find(item => item.key === currentRouteKey) || menuItems[0];
 
   return (
-    <SafeAreaView style={[styles.container, { 
-      backgroundColor: isDarkMode ? '#121212' : theme.colors.background 
-    }]}>
-      <Appbar.Header style={[styles.header, { 
-        backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : theme.colors.surface 
-      }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <LinearGradient
+        colors={isDarkMode 
+          ? ['#333333', '#4A4A4A']
+          : ['#FFFFFF', '#FAFAFA']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.header}
+      >
         <Appbar.Action 
-          icon={isMenuVisible ? "close" : "menu"} 
-          onPress={() => setIsMenuVisible(!isMenuVisible)}
-          iconColor={isDarkMode ? '#FFFFFF' : undefined}
+          icon={isDrawerVisible ? "close" : "menu"} 
+          onPress={() => setIsDrawerVisible(!isDrawerVisible)}
+          color={isDarkMode ? "#fff" : theme.colors.primary}
+          style={styles.menuButton}
         />
         <Appbar.Content 
           title={currentRoute.title} 
-          titleStyle={{ color: isDarkMode ? '#FFFFFF' : undefined }}
+          color={isDarkMode ? "#fff" : theme.colors.primary}
+          style={styles.headerTitle}
         />
-        <ThemeToggle />
-        <Appbar.Action 
-          icon="bell" 
-          onPress={() => {}}
-          iconColor={isDarkMode ? '#FFFFFF' : undefined}
-        />
-        <Menu
-          visible={isProfileMenuVisible}
-          onDismiss={() => setIsProfileMenuVisible(false)}
-          anchor={
-            <Appbar.Action
-              icon="account-circle"
-              onPress={() => setIsProfileMenuVisible(true)}
-              iconColor={isDarkMode ? '#FFFFFF' : undefined}
+        <View style={styles.headerRight}>
+          <Appbar.Action 
+            icon={isDarkMode ? "weather-night" : "weather-sunny"} 
+            onPress={toggleTheme}
+            color={isDarkMode ? "#fff" : theme.colors.primary}
+          />
+          <Appbar.Action 
+            icon="bell-outline" 
+            onPress={() => router.push('/screens/dashboard/notifications')}
+            color={isDarkMode ? "#fff" : theme.colors.primary}
+          />
+          <Menu
+            visible={menuVisible}
+            onDismiss={() => setMenuVisible(false)}
+            anchor={
+              <Appbar.Action
+                icon="account-circle"
+                color={isDarkMode ? "#fff" : theme.colors.primary}
+                onPress={() => setMenuVisible(true)}
+                style={styles.profileButton}
+              />
+            }
+            contentStyle={[
+              styles.menuContent,
+              { 
+                backgroundColor: isDarkMode ? '#2D2D2D' : '#FFFFFF',
+              }
+            ]}
+          >
+            <View style={styles.menuHeader}>
+              <IconButton
+                icon="account-circle"
+                size={50}
+                iconColor={theme.colors.primary}
+              />
+              <View style={styles.menuHeaderText}>
+                <Text style={[
+                  styles.menuName,
+                  { color: theme.colors.text }
+                ]}>
+                  {manager?.fullName || 'Manager'}
+                </Text>
+                <Text style={[
+                  styles.menuEmail,
+                  { color: isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)' }
+                ]}>
+                  {manager?.email || 'manager@example.com'}
+                </Text>
+              </View>
+            </View>
+            
+            <Divider style={styles.menuDivider} />
+            
+            <Menu.Item 
+              leadingIcon="account-outline"
+              onPress={() => {
+                setMenuVisible(false);
+                router.push('/screens/dashboard/profile');
+              }}
+              title="Profile"
+              theme={{ colors: { onSurface: theme.colors.text } }}
             />
-          }
-          contentStyle={{
-            backgroundColor: isDarkMode ? '#1E1E1E' : theme.colors.surface
-          }}
-        >
-          <Menu.Item 
-            onPress={() => {}} 
-            title="Profile" 
-            titleStyle={{ color: isDarkMode ? '#FFFFFF' : undefined }}
-          />
-          <Menu.Item 
-            onPress={() => {}} 
-            title="Settings" 
-            titleStyle={{ color: isDarkMode ? '#FFFFFF' : undefined }}
-          />
-          <Menu.Item 
-            onPress={handleLogout} 
-            title="Logout" 
-            titleStyle={{ color: isDarkMode ? '#FFFFFF' : undefined }}
-          />
-        </Menu>
-      </Appbar.Header>
+            <Menu.Item 
+              leadingIcon="cog-outline"
+              onPress={() => {
+                setMenuVisible(false);
+                router.push('/screens/dashboard/settings');
+              }}
+              title="Settings"
+              theme={{ colors: { onSurface: theme.colors.text } }}
+            />
+            <Divider />
+            <Menu.Item 
+              leadingIcon="logout"
+              onPress={() => {
+                setMenuVisible(false);
+                handleLogout();
+              }}
+              title="Logout"
+              theme={{ colors: { onSurface: theme.colors.error } }}
+            />
+          </Menu>
+        </View>
+      </LinearGradient>
 
       <View style={styles.content}>
-        <View style={[styles.mainContent, {
-          backgroundColor: isDarkMode ? '#121212' : theme.colors.background
-        }]}>
-          {children}
-        </View>
+        {children}
 
-        {isMenuVisible && (
-          <View style={[
-            styles.drawer, 
-            { 
-              backgroundColor: isDarkMode ? 'rgba(30, 30, 30, 0.95)' : theme.colors.surface,
-              borderRightColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : theme.colors.surfaceVariant 
-            }
-          ]}>
-            <Drawer.Section>
-              {menuItems.map((item) => (
-                <Drawer.Item
-                  key={item.key}
-                  icon={item.icon}
-                  label={item.title}
-                  active={currentRouteKey === item.key}
-                  onPress={() => {
-                    router.push(item.route);
-                    setIsMenuVisible(false);
-                  }}
-                  theme={{
-                    colors: {
-                      onSurfaceVariant: isDarkMode ? '#FFFFFF' : undefined,
-                      onSecondaryContainer: isDarkMode ? '#D0BCFF' : undefined,
-                      secondaryContainer: isDarkMode ? 'rgba(208, 188, 255, 0.1)' : undefined
-                    }
-                  }}
-                />
-              ))}
-            </Drawer.Section>
-          </View>
+        {isDrawerVisible && (
+          <>
+            <Pressable 
+              style={[
+                styles.overlay,
+                { backgroundColor: isDarkMode ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)' }
+              ]}
+              onPress={() => setIsDrawerVisible(false)}
+            />
+            
+            <View style={[
+              styles.drawer, 
+              { 
+                backgroundColor: isDarkMode ? '#1A1A1A' : '#fff',
+              }
+            ]}>
+              <View style={styles.drawerHeader}>
+                <LinearGradient
+                  colors={isDarkMode 
+                    ? ['#4A4A4A', '#333333']
+                    : ['#4568DC', '#B06AB3']}
+                  style={styles.drawerGradient}
+                >
+                  <IconButton
+                    icon="account-circle"
+                    size={60}
+                    iconColor="#fff"
+                    style={styles.drawerAvatar}
+                  />
+                  <Text style={styles.drawerName}>{manager?.fullName || 'Manager'}</Text>
+                  <Text style={styles.drawerEmail}>{manager?.email || 'manager@example.com'}</Text>
+                </LinearGradient>
+              </View>
+              <Drawer.Section>
+                {menuItems.map((item) => (
+                  <Drawer.Item
+                    key={item.key}
+                    icon={item.icon}
+                    label={item.title}
+                    active={currentRouteKey === item.key}
+                    onPress={() => {
+                      router.push(item.route);
+                      setIsDrawerVisible(false);
+                    }}
+                    theme={{
+                      colors: {
+                        onSurfaceVariant: isDarkMode ? '#fff' : '#000',
+                        onSecondaryContainer: theme.colors.primary,
+                        secondaryContainer: isDarkMode ? 'rgba(208, 188, 255, 0.1)' : theme.colors.primaryContainer,
+                      }
+                    }}
+                    style={styles.drawerItem}
+                  />
+                ))}
+              </Drawer.Section>
+            </View>
+          </>
         )}
       </View>
     </SafeAreaView>
@@ -164,17 +246,32 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    elevation: 0,
-    borderBottomWidth: 0,
+    height: 60,
+    flexDirection: 'row',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    flex: 1,
+  },
+  menuButton: {
+    marginLeft: 8,
+  },
+  avatar: {
+    marginRight: 8,
+    marginLeft: 4,
   },
   content: {
     flex: 1,
     position: 'relative',
-  },
-  mainContent: {
-    flex: 1,
-    width: '100%',
-    zIndex: 1,
   },
   drawer: {
     position: 'absolute',
@@ -183,14 +280,77 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: 280,
     zIndex: 2,
+    borderTopRightRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: 'hidden',
     elevation: 8,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 2,
-      height: 0,
-    },
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+  },
+  drawerHeader: {
+    height: 170,
+    overflow: 'hidden',
+  },
+  drawerGradient: {
+    height: '100%',
+    padding: 16,
+    justifyContent: 'flex-end',
+  },
+  drawerAvatar: {
+    marginBottom: 12,
+    alignSelf: 'flex-start',
+  },
+  drawerName: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  drawerEmail: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 14,
+  },
+  drawerItem: {
+    borderRadius: 0,
+    marginHorizontal: 8,
+    marginVertical: 2,
+  },
+  menuContent: {
+    marginTop: 44,
+    minWidth: 200,
+    borderRadius: 8,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
-    borderRightWidth: 1,
+  },
+  menuHeader: {
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  menuHeaderText: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  menuName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  menuEmail: {
+    fontSize: 12,
+  },
+  menuDivider: {
+    marginVertical: 8,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
+  },
+  profileButton: {
+    marginRight: 8,
   },
 }); 

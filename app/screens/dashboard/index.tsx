@@ -159,9 +159,11 @@ export default function DashboardHome() {
   ];
 
   const chartConfig = {
-    backgroundGradientFrom: "#fff",
-    backgroundGradientTo: "#fff",
-    color: (opacity = 1) => `rgba(103, 80, 164, ${opacity})`,
+    backgroundGradientFrom: isDarkMode ? "#333333" : "#fff",
+    backgroundGradientTo: isDarkMode ? "#4A4A4A" : "#fff",
+    color: (opacity = 1) => isDarkMode 
+      ? `rgba(255, 255, 255, ${opacity})`
+      : `rgba(103, 80, 164, ${opacity})`,
     strokeWidth: 2,
     barPercentage: 0.5,
     useShadowColorFromDataset: false
@@ -198,17 +200,17 @@ export default function DashboardHome() {
     { 
       icon: 'account-plus', 
       label: 'Add Student',
-      onPress: () => router.push('/screens/dashboard/students?action=add')
+      onPress: () => router.push('/screens/dashboard/students')
     },
     { 
       icon: 'home-plus', 
       label: 'Add Room',
-      onPress: () => router.push('/screens/dashboard/rooms?action=add')
+      onPress: () => router.push('/screens/dashboard/rooms')
     },
     { 
       icon: 'bell-ring', 
       label: 'Send Reminder',
-      onPress: () => router.push('/screens/dashboard/messages?action=new')
+      onPress: () => router.push('/screens/dashboard/messages')
     },
     { 
       icon: 'file-export', 
@@ -220,24 +222,40 @@ export default function DashboardHome() {
     }
   ];
 
+  // Update stat card colors
+  const statCardGradient = isDarkMode 
+    ? ['#2D2D2D', '#383838'] as const
+    : ['#FFFFFF', '#F8F8F8'] as const;
+
+  // Update chart card colors
+  const chartCardGradient = isDarkMode 
+    ? ['#2D2D2D', '#383838'] as const
+    : ['#FFFFFF', '#F8F8F8'] as const;
+
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* Header Card */}
       <LinearGradient
-        colors={['#4568DC', '#B06AB3']}
+        colors={isDarkMode 
+          ? ['#333333', '#4A4A4A']
+          : ['#6750A4', '#9C27B0']} // Updated to match theme primary colors
         style={styles.headerCard}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       >
         <View style={styles.headerContent}>
           <View style={styles.headerLeft}>
-            <Text style={styles.greeting}>👋 Hello,</Text>
+            <Text style={[styles.greeting, { opacity: isDarkMode ? 0.7 : 0.9 }]}>👋 Hello,</Text>
             <Text style={styles.managerName}>{managerName}</Text>
-            <Text style={styles.role}>Hostel Manager</Text>
+            <Text style={[styles.role, { opacity: isDarkMode ? 0.7 : 0.9 }]}>Hostel Manager</Text>
           </View>
           <View style={styles.headerRight}>
             <Text style={styles.hostelName}>{pgName}</Text>
-            <View style={styles.membersBadge}>
+            <View style={[styles.membersBadge, {
+              backgroundColor: isDarkMode 
+                ? 'rgba(255,255,255,0.1)' 
+                : 'rgba(255,255,255,0.2)'
+            }]}>
               <Text style={styles.totalMembers}>
                 🏠 Total Members: {stats?.students?.total || 0}
               </Text>
@@ -249,13 +267,15 @@ export default function DashboardHome() {
       {/* Stats Cards */}
       <View style={styles.statsContainer}>
         {statsData.map((stat, index) => (
-          <Surface 
-            key={index} 
+          <LinearGradient
+            key={index}
+            colors={statCardGradient}
             style={[
               styles.statCard,
               {
-                backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#fff',
-                borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : '#e0e0e0',
+                borderColor: isDarkMode 
+                  ? 'rgba(255, 255, 255, 0.1)' 
+                  : 'rgba(0, 0, 0, 0.05)',
               }
             ]}
           >
@@ -266,30 +286,34 @@ export default function DashboardHome() {
             />
             <Text style={[styles.statNumber, { 
               color: theme.colors.text,
-              fontSize: 24,  // Increased font size
+              fontSize: 24,
               fontWeight: 'bold',
-              marginVertical: 8,  // Added spacing
+              marginVertical: 8,
             }]}>
               {stat.value}
             </Text>
             <Text style={[styles.statLabel, { 
               color: theme.colors.textSecondary,
-              fontSize: 14,  // Increased font size
+              fontSize: 14,
             }]}>
               {stat.label}
             </Text>
-          </Surface>
+          </LinearGradient>
         ))}
       </View>
 
       {/* Charts */}
       <View style={styles.chartsRow}>
-        <Surface style={[styles.chartCard, {
-          backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : '#fff',
-          borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : '#e0e0e0',
-          flex: 1,
-          padding: 16,
-        }]}>
+        <LinearGradient
+          colors={chartCardGradient}
+          style={[styles.chartCard, {
+            flex: 1,
+            padding: 16,
+            borderColor: isDarkMode 
+              ? 'rgba(255, 255, 255, 0.1)' 
+              : 'rgba(0, 0, 0, 0.05)',
+          }]}
+        >
           <Text style={[styles.chartTitle, { color: theme.colors.text }]}>
             Students Overview
           </Text>
@@ -301,14 +325,18 @@ export default function DashboardHome() {
             }}
             size={Math.min(screenWidth * 0.42, 220)}
           />
-        </Surface>
+        </LinearGradient>
 
-        <Surface style={[styles.chartCard, {
-          backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : '#fff',
-          borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : '#e0e0e0',
-          flex: 1,
-          padding: 16,
-        }]}>
+        <LinearGradient
+          colors={chartCardGradient}
+          style={[styles.chartCard, {
+            flex: 1,
+            padding: 16,
+            borderColor: isDarkMode 
+              ? 'rgba(255, 255, 255, 0.1)' 
+              : 'rgba(0, 0, 0, 0.05)',
+          }]}
+        >
           <Text style={[styles.chartTitle, { color: theme.colors.text,marginBottom: 35 }]}>
             Room Status
           </Text>
@@ -320,14 +348,18 @@ export default function DashboardHome() {
             }}
             size={Math.min(screenWidth * 0.42, 220)}
           />
-        </Surface>
+        </LinearGradient>
       </View>
 
       <View style={[styles.chartsContainer, { padding: 12 }]}>
-        <Surface style={[styles.chartCard, styles.fullWidth, {
-          backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#fff',
-          borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : '#e0e0e0',
-        }]}>
+        <LinearGradient
+          colors={chartCardGradient}
+          style={[styles.chartCard, styles.fullWidth, {
+            borderColor: isDarkMode 
+              ? 'rgba(255, 255, 255, 0.1)' 
+              : 'rgba(0, 0, 0, 0.05)',
+          }]}
+        >
           <Text style={[styles.chartTitle, { color: theme.colors.text }]}>
             Monthly Payment Collection
           </Text>
@@ -361,24 +393,30 @@ export default function DashboardHome() {
               View Payment Details →
             </Button>
           </View>
-        </Surface>
+        </LinearGradient>
         <View style={styles.actionButtons}>
           {actionButtons.map((button, index) => (
-            <Button 
+            <LinearGradient
               key={index}
-              mode="contained" 
-              icon={button.icon}
-              onPress={button.onPress}
+              colors={isDarkMode 
+                ? ['#6750A4', '#9C27B0']
+                : ['#6750A4', '#9C27B0']}
               style={[styles.actionButton, {
-                backgroundColor: theme.colors.primary,
                 borderRadius: 12,
               }]}
-              labelStyle={{
-                color: isDarkMode ? '#000' : '#fff',
-              }}
             >
-              {button.label}
-            </Button>
+              <Button 
+                mode="contained" 
+                icon={button.icon}
+                onPress={button.onPress}
+                style={{ backgroundColor: 'transparent' }}
+                labelStyle={{
+                  color: '#FFFFFF',
+                }}
+              >
+                {button.label}
+              </Button>
+            </LinearGradient>
           ))}
         </View>
       </View>
@@ -453,7 +491,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     elevation: 0,
-    minHeight: 120,  // Added minimum height
+    minHeight: 120,
+    overflow: 'hidden',
   },
   statNumber: {
     textAlign: 'center',
@@ -472,6 +511,7 @@ const styles = StyleSheet.create({
     elevation: 0,
     alignItems: 'center',
     minHeight: 300,
+    overflow: 'hidden',
   },
   chartTitle: {
     fontSize: 18,
@@ -494,6 +534,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: '48%',
     marginBottom: 8,
+    overflow: 'hidden',
   },
   actionButtonContent: {
     paddingVertical: 8,

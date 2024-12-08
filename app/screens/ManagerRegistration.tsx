@@ -17,7 +17,7 @@ import {
 import { useTheme } from '@/app/context/ThemeContext';
 import * as ImagePicker from 'expo-image-picker';
 import { FontAwesome } from '@expo/vector-icons';
-import { registerManager, uploadImage } from '../services/manager.service';
+import { registerManager, uploadImage, checkExistingCredentials } from '../services/manager.service';
 import { showMessage } from 'react-native-flash-message';
 import { router } from 'expo-router';
 import { getAmenities, Amenity } from '../services/amenity.service';
@@ -250,13 +250,318 @@ interface ValidationError {
   message: string;
 }
 
+// Add these validation functions at the top of the file, before the component
+const validateEmail = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
+const validatePhone = (phone: string): boolean => {
+  const phoneRegex = /^[0-9]{10}$/;
+  return phoneRegex.test(phone);
+};
+
+// Add password validation function
+const validatePassword = (password: string): { isValid: boolean; message: string } => {
+  const minLength = 8;
+  const hasUpperCase = /[A-Z]/.test(password);
+  const hasLowerCase = /[a-z]/.test(password);
+  const hasNumbers = /\d/.test(password);
+  const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+
+  if (password.length < minLength) {
+    return { isValid: false, message: 'Password must be at least 8 characters long' };
+  }
+  if (!hasUpperCase) {
+    return { isValid: false, message: 'Password must contain at least one uppercase letter' };
+  }
+  if (!hasLowerCase) {
+    return { isValid: false, message: 'Password must contain at least one lowercase letter' };
+  }
+  if (!hasNumbers) {
+    return { isValid: false, message: 'Password must contain at least one number' };
+  }
+  if (!hasSpecialChar) {
+    return { isValid: false, message: 'Password must contain at least one special character' };
+  }
+
+  return { isValid: true, message: '' };
+};
+
+// Add this component for modern field validation
+const ValidationInput = ({ 
+  label, 
+  value, 
+  onChangeText, 
+  error, 
+  icon,
+  keyboardType = 'default',
+  secureTextEntry = false,
+  multiline = false,
+  numberOfLines = 1,
+  style = {},
+  right,
+}: { 
+  label: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  error?: string;
+  icon?: string;
+  keyboardType?: 'default' | 'email-address' | 'numeric' | 'phone-pad';
+  secureTextEntry?: boolean;
+  multiline?: boolean;
+  numberOfLines?: number;
+  style?: any;
+  right?: React.ReactNode;
+}) => {
+  const { theme } = useTheme();
+  const [isFocused, setIsFocused] = useState(false);
+
+  // Map common icons to Material Community Icons
+  const getIconName = (iconName: string): string => {
+    const iconMap: { [key: string]: string } = {
+      'account': 'account',
+      'email': 'email',
+      'phone': 'phone',
+      'lock': 'lock',
+      'home': 'home',
+      'map-marker': 'map-marker',
+      'city': 'city',
+      'state': 'map',
+      'postal-code': 'pound',
+      'currency': 'currency-inr',
+      'description': 'text',
+      'bank': 'bank',
+      'at': 'at',
+    };
+    return iconMap[iconName] || iconName;
+  };
+
+  return (
+    <View style={styles.inputContainer}>
+      <TextInput
+        label={label}
+        value={value}
+        onChangeText={onChangeText}
+        mode="outlined"
+        error={!!error}
+        keyboardType={keyboardType}
+        secureTextEntry={secureTextEntry}
+        multiline={multiline}
+        numberOfLines={numberOfLines}
+        style={[
+          styles.input, 
+          style,
+          error && styles.inputError
+        ]}
+        left={icon ? <TextInput.Icon icon={getIconName(icon)} /> : undefined}
+        right={right}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        outlineStyle={{
+          borderColor: error 
+            ? theme.colors.error 
+            : isFocused 
+              ? theme.colors.primary 
+              : theme.colors.outline,
+        }}
+      />
+      {error && (
+        <View style={styles.fieldErrorContainer}>
+          <IconButton
+            icon="alert-circle"
+            size={16}
+            iconColor={theme.colors.error}
+          />
+          <Text style={[styles.fieldErrorText, { color: theme.colors.error }]}>
+            {error}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
+// Add this component near other component definitions
+const ValidationAlert = ({ errors }: { errors: ValidationError[] }) => {
+  const { theme, isDarkMode } = useTheme();
+  
+  if (errors.length === 0) return null;
+  
+  return (
+    <Surface 
+      style={[
+        styles.alertContainer, 
+        { 
+          backgroundColor: isDarkMode 
+            ? 'rgba(255, 59, 48, 0.1)' 
+            : 'rgba(255, 59, 48, 0.08)',
+          borderColor: theme.colors.error,
+          borderWidth: 1,
+          backdropFilter: 'blur(10px)',
+        }
+      ]}
+    >
+      <View style={styles.alertContent}>
+        <IconButton
+          icon="alert-circle"
+          size={24}
+          iconColor={theme.colors.error}
+        />
+        <View style={styles.alertTextContainer}>
+          <Text style={[styles.alertTitle, { color: theme.colors.error }]}>
+            Validation Error
+          </Text>
+          {errors.map((error, index) => (
+            <Text 
+              key={index} 
+              style={[styles.alertMessage, { color: theme.colors.error }]}
+            >
+              • {error.message}
+            </Text>
+          ))}
+        </View>
+      </View>
+    </Surface>
+  );
+};
+
+// Add this component near other component definitions
+const SuccessModal = ({ visible, onDismiss }: { visible: boolean; onDismiss: () => void }) => {
+  const { theme, isDarkMode } = useTheme();
+  
+  if (!visible) return null;
+
+  return (
+    <View style={styles.successModalContainer}>
+      <Surface 
+        style={[
+          styles.successModalContent,
+          {
+            backgroundColor: isDarkMode 
+              ? 'rgba(30, 30, 30, 0.95)' 
+              : 'rgba(255, 255, 255, 0.95)',
+            borderColor: theme.colors.primary,
+            borderWidth: 1,
+          }
+        ]}
+      >
+        <View style={[styles.successModalIcon, { backgroundColor: `${theme.colors.primary}20` }]}>
+          <IconButton
+            icon="check-circle"
+            size={32}
+            iconColor={theme.colors.primary}
+          />
+        </View>
+        <Text style={[styles.successModalTitle, { color: theme.colors.primary }]}>
+          Registration Successful!
+        </Text>
+        <Text style={[styles.successModalMessage, { color: theme.colors.text }]}>
+          Your PG manager account has been created. Please login to continue.
+        </Text>
+        <Button 
+          mode="contained" 
+          onPress={onDismiss}
+          style={styles.successModalButton}
+          buttonColor={theme.colors.primary}
+        >
+          Login as Manager
+        </Button>
+      </Surface>
+    </View>
+  );
+};
+
+// Add this modal component
+const DuplicateManagerModal = ({ visible, onDismiss }: { visible: boolean; onDismiss: () => void }) => {
+  const { theme, isDarkMode } = useTheme();
+  
+  if (!visible) return null;
+
+  return (
+    <View style={styles.duplicateModalContainer}>
+      <Surface 
+        style={[
+          styles.duplicateModalContent,
+          {
+            backgroundColor: isDarkMode 
+              ? 'rgba(30, 30, 30, 0.95)' 
+              : 'rgba(255, 255, 255, 0.95)',
+            borderColor: theme.colors.error,
+          }
+        ]}
+      >
+        <View style={styles.duplicateModalIcon}>
+          <IconButton
+            icon="account-alert"
+            size={32}
+            iconColor={theme.colors.error}
+          />
+        </View>
+        <Text style={[styles.duplicateModalTitle, { color: theme.colors.error }]}>
+          Account Already Exists
+        </Text>
+        <Text style={[styles.duplicateModalMessage, { color: theme.colors.text }]}>
+          An account with this email or phone number is already registered.
+        </Text>
+        <Button 
+          mode="contained" 
+          onPress={onDismiss}
+          style={styles.duplicateModalButton}
+          buttonColor={theme.colors.error}
+        >
+          OK
+        </Button>
+      </Surface>
+    </View>
+  );
+};
+
+// Add this component before the main ManagerRegistration component
+const PasswordRequirements = () => {
+  const { theme } = useTheme();
+  
+  return (
+    <View style={styles.passwordRequirements}>
+      <Text style={[styles.requirementTitle, { color: theme.colors.text }]}>
+        Password must contain:
+      </Text>
+      <Text style={[styles.requirementText, { color: theme.colors.textSecondary }]}>
+        • At least 8 characters
+      </Text>
+      <Text style={[styles.requirementText, { color: theme.colors.textSecondary }]}>
+        • At least one uppercase letter
+      </Text>
+      <Text style={[styles.requirementText, { color: theme.colors.textSecondary }]}>
+        • At least one lowercase letter
+      </Text>
+      <Text style={[styles.requirementText, { color: theme.colors.textSecondary }]}>
+        • At least one number
+      </Text>
+      <Text style={[styles.requirementText, { color: theme.colors.textSecondary }]}>
+        • At least one special character
+      </Text>
+    </View>
+  );
+};
+
 export default function ManagerRegistration() {
   const { theme, isDarkMode } = useTheme();
+  
+  // Group all useState declarations together at the top of the component
   const [currentStep, setCurrentStep] = useState(0);
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [showInfoModal, setShowInfoModal] = useState(false);
-  
-  // Form states for Step 1
+  const [isLoading, setIsLoading] = useState(false);
+  const [showOTP, setShowOTP] = useState(false);
+  const [otp, setOTP] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Array<{ field: string; message: string }>>([]);
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [isLoadingAmenities, setIsLoadingAmenities] = useState(false);
+  const [availableAmenities, setAvailableAmenities] = useState<Amenity[]>([]);
+  const [showDuplicateManagerModal, setShowDuplicateManagerModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [managerDetails, setManagerDetails] = useState({
     fullName: '',
     email: '',
@@ -267,7 +572,179 @@ export default function ManagerRegistration() {
     alternatePhone: '',
   });
 
-  // Add new state for PG details
+  // Move validateField and handleFieldChange back inside the component
+  const validateField = (field: string, value: string): string => {
+    switch (field) {
+      case 'fullName':
+        return !value.trim() ? 'Full name is required' : '';
+      case 'email':
+        return !value.trim() 
+          ? 'Email is required' 
+          : !validateEmail(value) 
+            ? 'Please enter a valid email' 
+            : '';
+      case 'phone':
+        return !value.trim() 
+          ? 'Phone number is required' 
+          : !validatePhone(value) 
+            ? 'Please enter a valid 10-digit number' 
+            : '';
+      case 'password':
+        const passwordValidation = validatePassword(value);
+        return !passwordValidation.isValid ? passwordValidation.message : '';
+      case 'confirmPassword':
+        return value !== managerDetails.password 
+          ? 'Passwords do not match' 
+          : '';
+      default:
+        return '';
+    }
+  };
+
+  const handleFieldChange = (field: string, value: string) => {
+    const error = validateField(field, value);
+    
+    setManagerDetails(prev => ({
+      ...prev,
+      [field]: value
+    }));
+
+    setValidationErrors(prev => {
+      const filtered = prev.filter(e => e.field !== field);
+      if (error) {
+        filtered.push({ field, message: error });
+      }
+      return filtered;
+    });
+  };
+
+  // Add handleNext function
+  const handleNext = () => {
+    let isValid = false;
+    
+    switch (currentStep) {
+      case 0:
+        isValid = validatePersonalDetails();
+        break;
+      case 1:
+        isValid = validatePGDetails();
+        break;
+      case 2:
+        isValid = validatePaymentDetails();
+        break;
+      case 3:
+        handleSubmit();
+        return;
+      default:
+        isValid = true;
+    }
+
+    if (isValid) {
+      setCurrentStep(prev => prev + 1);
+    } else {
+      setShowValidationModal(true);
+    }
+  };
+
+  // Add validation helper functions
+  const validatePersonalDetails = () => {
+    const errors: Array<{ field: string; message: string }> = [];
+
+    if (!managerDetails.fullName.trim()) {
+      errors.push({ field: 'fullName', message: 'Full name is required' });
+    }
+
+    if (!managerDetails.email.trim()) {
+      errors.push({ field: 'email', message: 'Email is required' });
+    } else if (!validateEmail(managerDetails.email)) {
+      errors.push({ field: 'email', message: 'Please enter a valid email address' });
+    }
+
+    if (!managerDetails.phone.trim()) {
+      errors.push({ field: 'phone', message: 'Phone number is required' });
+    } else if (!validatePhone(managerDetails.phone)) {
+      errors.push({ field: 'phone', message: 'Please enter a valid 10-digit phone number' });
+    }
+
+    if (!managerDetails.password) {
+      errors.push({ field: 'password', message: 'Password is required' });
+    } else if (managerDetails.password.length < 8) {
+      errors.push({ field: 'password', message: 'Password must be at least 8 characters' });
+    }
+
+    if (managerDetails.password !== managerDetails.confirmPassword) {
+      errors.push({ field: 'confirmPassword', message: 'Passwords do not match' });
+    }
+
+    setValidationErrors(errors);
+    return errors.length === 0;
+  };
+
+  const validatePGDetails = () => {
+    const errors: Array<{ field: string; message: string }> = [];
+
+    if (!pgDetails.name.trim()) {
+      errors.push({ field: 'pgName', message: 'PG name is required' });
+    }
+
+    if (!pgDetails.address.trim()) {
+      errors.push({ field: 'pgAddress', message: 'PG address is required' });
+    }
+
+    if (!pgDetails.city.trim()) {
+      errors.push({ field: 'city', message: 'City is required' });
+    }
+
+    if (!pgDetails.state.trim()) {
+      errors.push({ field: 'state', message: 'State is required' });
+    }
+
+    if (!pgDetails.pincode.trim()) {
+      errors.push({ field: 'pincode', message: 'Pincode is required' });
+    } else if (!/^\d{6}$/.test(pgDetails.pincode)) {
+      errors.push({ field: 'pincode', message: 'Please enter a valid 6-digit pincode' });
+    }
+
+    if (!pgDetails.totalRooms) {
+      errors.push({ field: 'totalRooms', message: 'Total rooms is required' });
+    }
+
+    if (!pgDetails.costPerBed) {
+      errors.push({ field: 'costPerBed', message: 'Cost per bed is required' });
+    }
+
+    setValidationErrors(errors);
+    return errors.length === 0;
+  };
+
+  const validatePaymentDetails = () => {
+    const errors: Array<{ field: string; message: string }> = [];
+
+    if (paymentDetails.paymentMethod === 'upi') {
+      if (!paymentDetails.upiId.trim()) {
+        errors.push({ field: 'upiId', message: 'UPI ID is required' });
+      } else if (!/^[\w.-]+@[\w.-]+$/.test(paymentDetails.upiId)) {
+        errors.push({ field: 'upiId', message: 'Please enter a valid UPI ID' });
+      }
+    } else {
+      if (!paymentDetails.bankDetails.bankName.trim()) {
+        errors.push({ field: 'bankName', message: 'Bank name is required' });
+      }
+      if (!paymentDetails.bankDetails.accountNumber.trim()) {
+        errors.push({ field: 'accountNumber', message: 'Account number is required' });
+      }
+      if (!paymentDetails.bankDetails.ifscCode.trim()) {
+        errors.push({ field: 'ifscCode', message: 'IFSC code is required' });
+      } else if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(paymentDetails.bankDetails.ifscCode)) {
+        errors.push({ field: 'ifscCode', message: 'Please enter a valid IFSC code' });
+      }
+    }
+
+    setValidationErrors(errors);
+    return errors.length === 0;
+  };
+
+  // Form states for Step 1
   const [pgDetails, setPgDetails] = useState<PGDetails>({
     name: '',
     address: '',
@@ -309,13 +786,6 @@ export default function ManagerRegistration() {
     includeGST: true,
     includeServiceCharge: true
   });
-
-  // Add termsAccepted state
-  const [termsAccepted, setTermsAccepted] = useState(false);
-
-  // Add state for amenities
-  const [availableAmenities, setAvailableAmenities] = useState<Amenity[]>([]);
-  const [isLoadingAmenities, setIsLoadingAmenities] = useState(false);
 
   // Add useEffect to fetch amenities
   useEffect(() => {
@@ -424,6 +894,7 @@ export default function ManagerRegistration() {
 
   const renderPersonalDetails = () => (
     <View style={styles.formContainer}>
+      <ValidationAlert errors={validationErrors} />
       {/* Profile Image Section */}
       <Surface style={styles.profileSection}>
       <View style={styles.imageUpload}>
@@ -456,43 +927,37 @@ export default function ManagerRegistration() {
         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Personal Information</Text>
         
         <View style={styles.inputGroup}>
-      <TextInput
+      <ValidationInput
         label="Full Name"
         value={managerDetails.fullName}
-        onChangeText={(text) => setManagerDetails({ ...managerDetails, fullName: text })}
-        mode="outlined"
+        onChangeText={(text) => handleFieldChange('fullName', text)}
+        error={validationErrors.find(error => error.field === 'fullName')?.message}
+        icon="account"
         style={styles.input}
-        theme={{
-          colors: {
-            primary: theme.colors.primary,
-            background: 'transparent',
-          },
-        }}
-        left={<TextInput.Icon icon="account" />}
       />
         </View>
 
         <View style={styles.inputRow}>
-      <TextInput
+      <ValidationInput
         label="Email"
         value={managerDetails.email}
-        onChangeText={text => setManagerDetails({ ...managerDetails, email: text })}
-        mode="outlined"
+        onChangeText={text => handleFieldChange('email', text)}
+        error={validationErrors.find(error => error.field === 'email')?.message}
+        icon="email"
         keyboardType="email-address"
             style={[styles.input, { flex: 1 }]}
-            left={<TextInput.Icon icon="email" />}
       />
         </View>
 
         <View style={styles.inputRow}>
-      <TextInput
+      <ValidationInput
         label="Phone Number"
         value={managerDetails.phone}
-        onChangeText={text => setManagerDetails({ ...managerDetails, phone: text })}
-        mode="outlined"
+        onChangeText={text => handleFieldChange('phone', text)}
+        error={validationErrors.find(error => error.field === 'phone')?.message}
+        icon="phone"
         keyboardType="phone-pad"
             style={[styles.input, { flex: 1 }]}
-            left={<TextInput.Icon icon="phone" />}
         right={
           <TextInput.Icon 
             icon={showOTP ? "check-circle" : "send"}
@@ -544,27 +1009,30 @@ export default function ManagerRegistration() {
         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Security</Text>
         
         <View style={styles.inputGroup}>
-      <TextInput
-        label="Password"
+      <ValidationInput
+        label="Password *"
         value={managerDetails.password}
-        onChangeText={text => setManagerDetails({ ...managerDetails, password: text })}
-        mode="outlined"
+        onChangeText={(text) => handleFieldChange('password', text)}
+        error={validationErrors.find(error => error.field === 'password')?.message}
+        icon="eye"
         secureTextEntry
+        multiline
+        numberOfLines={1}
         style={styles.input}
-            left={<TextInput.Icon icon="lock" />}
-            right={<TextInput.Icon icon="eye" />}
       />
+      <PasswordRequirements />
 
-      <TextInput
-        label="Confirm Password"
+      <ValidationInput
+        label="Confirm Password *"
         value={managerDetails.confirmPassword}
-        onChangeText={text => setManagerDetails({ ...managerDetails, confirmPassword: text })}
-        mode="outlined"
+        onChangeText={text => handleFieldChange('confirmPassword', text)}
+        error={validationErrors.find(error => error.field === 'confirmPassword')?.message}
+        icon="eye"
         secureTextEntry
+        multiline
+        numberOfLines={1}
         style={styles.input}
-            left={<TextInput.Icon icon="lock-check" />}
-            right={<TextInput.Icon icon="eye" />}
-          />
+      />
         </View>
       </Surface>
 
@@ -572,62 +1040,78 @@ export default function ManagerRegistration() {
       <Surface style={styles.infoSection}>
         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Address</Text>
 
-      <TextInput
+      <ValidationInput
           label="Current Address"
         value={managerDetails.address}
-        onChangeText={text => setManagerDetails({ ...managerDetails, address: text })}
-        mode="outlined"
+        onChangeText={text => handleFieldChange('address', text)}
+        error={validationErrors.find(error => error.field === 'address')?.message}
+        icon="map-marker"
         multiline
         numberOfLines={3}
         style={styles.input}
-          left={<TextInput.Icon icon="map-marker" />}
-        />
+      />
       </Surface>
     </View>
   );
 
   const renderPGDetails = () => (
     <View style={styles.formContainer}>
-      <TextInput
+      <ValidationAlert errors={validationErrors} />
+      <ValidationInput
         label="PG Name"
         value={pgDetails.name}
         onChangeText={text => setPgDetails(prev => ({ ...prev, name: text }))}
-        mode="outlined"
+        error={validationErrors.find(error => error.field === 'pgName')?.message}
+        icon="home"
         style={styles.input}
       />
 
-      <TextInput
-        label="Address"
+      <ValidationInput
+        label="PG Address"
         value={pgDetails.address}
         onChangeText={text => setPgDetails(prev => ({ ...prev, address: text }))}
-        mode="outlined"
+        error={validationErrors.find(error => error.field === 'pgAddress')?.message}
+        icon="map-marker"
         multiline
         numberOfLines={3}
         style={styles.input}
       />
 
+      <ValidationInput
+        label="Contact Number"
+        value={pgDetails.contactNumber}
+        onChangeText={text => setPgDetails(prev => ({ ...prev, contactNumber: text }))}
+        error={validationErrors.find(error => error.field === 'pgContactNumber')?.message}
+        icon="phone"
+        keyboardType="phone-pad"
+        style={styles.input}
+      />
+
       <View style={styles.inputRow}>
-        <TextInput
+        <ValidationInput
           label="City"
           value={pgDetails.city}
           onChangeText={text => setPgDetails(prev => ({ ...prev, city: text }))}
-          mode="outlined"
+          error={validationErrors.find(error => error.field === 'city')?.message}
+          icon="city"
           style={[styles.input, { flex: 1 }]}
         />
-        <TextInput
+        <ValidationInput
           label="State"
           value={pgDetails.state}
           onChangeText={text => setPgDetails(prev => ({ ...prev, state: text }))}
-          mode="outlined"
+          error={validationErrors.find(error => error.field === 'state')?.message}
+          icon="state"
           style={[styles.input, { flex: 1 }]}
         />
       </View>
 
-      <TextInput
+      <ValidationInput
         label="Pincode"
         value={pgDetails.pincode}
         onChangeText={text => setPgDetails(prev => ({ ...prev, pincode: text }))}
-        mode="outlined"
+        error={validationErrors.find(error => error.field === 'pincode')?.message}
+        icon="postal-code"
         keyboardType="numeric"
         style={styles.input}
       />
@@ -643,15 +1127,6 @@ export default function ManagerRegistration() {
           { value: 'Girls', label: 'Girls' },
           { value: 'Co-ed', label: 'Co-ed' }
         ]}
-      />
-
-      <TextInput
-        label="Contact Number"
-        value={pgDetails.contactNumber}
-        onChangeText={text => setPgDetails(prev => ({ ...prev, contactNumber: text }))}
-        mode="outlined"
-        keyboardType="phone-pad"
-        style={styles.input}
       />
 
       <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Amenities</Text>
@@ -683,43 +1158,44 @@ export default function ManagerRegistration() {
         </View>
       )}
 
-      <TextInput
+      <ValidationInput
         label="Other Amenities"
         value={pgDetails.otherAmenities}
         onChangeText={text => setPgDetails(prev => ({ ...prev, otherAmenities: text }))}
-        mode="outlined"
+        error={validationErrors.find(error => error.field === 'otherAmenities')?.message}
+        icon="other-amenities"
         style={styles.input}
       />
 
       <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Room Details</Text>
       <Surface style={styles.detailsCard}>
         <View style={styles.inputGroup}>
-          <TextInput
+          <ValidationInput
             label="Total Number of Rooms"
             value={pgDetails.totalRooms}
             onChangeText={text => setPgDetails(prev => ({ ...prev, totalRooms: text }))}
-            mode="outlined"
+            error={validationErrors.find(error => error.field === 'totalRooms')?.message}
+            icon="door"
             keyboardType="numeric"
             style={styles.input}
-            left={<TextInput.Icon icon="door" />}
           />
-          <TextInput
+          <ValidationInput
             label="Total Number of Tenants"
             value={pgDetails.totalTenants}
             onChangeText={text => setPgDetails(prev => ({ ...prev, totalTenants: text }))}
-            mode="outlined"
+            error={validationErrors.find(error => error.field === 'totalTenants')?.message}
+            icon="account-group"
             keyboardType="numeric"
             style={styles.input}
-            left={<TextInput.Icon icon="account-group" />}
           />
-          <TextInput
+          <ValidationInput
             label="Cost per Bed"
             value={pgDetails.costPerBed}
             onChangeText={text => setPgDetails(prev => ({ ...prev, costPerBed: text }))}
-            mode="outlined"
+            error={validationErrors.find(error => error.field === 'costPerBed')?.message}
+            icon="currency-inr"
             keyboardType="numeric"
             style={styles.input}
-            left={<TextInput.Icon icon="currency-inr" />}
           />
         </View>
       </Surface>
@@ -744,11 +1220,12 @@ export default function ManagerRegistration() {
         </ScrollView>
       )}
 
-      <TextInput
+      <ValidationInput
         label="Description"
         value={pgDetails.description}
         onChangeText={text => setPgDetails(prev => ({ ...prev, description: text }))}
-        mode="outlined"
+        error={validationErrors.find(error => error.field === 'description')?.message}
+        icon="description"
         multiline
         numberOfLines={4}
         style={styles.input}
@@ -784,49 +1261,49 @@ export default function ManagerRegistration() {
 
       {paymentDetails.paymentMethod === 'upi' ? (
         <Surface style={styles.paymentMethodCard}>
-          <TextInput
+          <ValidationInput
             label="UPI ID"
             value={paymentDetails.upiId}
             onChangeText={text => setPaymentDetails(prev => ({ ...prev, upiId: text }))}
-            mode="outlined"
+            error={validationErrors.find(error => error.field === 'upiId')?.message}
+            icon="at"
             style={styles.input}
-            left={<TextInput.Icon icon="at" />}
           />
         </Surface>
       ) : (
         <Surface style={styles.paymentMethodCard}>
-          <TextInput
+          <ValidationInput
             label="Bank Name"
             value={paymentDetails.bankDetails.bankName}
             onChangeText={text => setPaymentDetails(prev => ({
               ...prev,
               bankDetails: { ...prev.bankDetails, bankName: text }
             }))}
-            mode="outlined"
+            error={validationErrors.find(error => error.field === 'bankName')?.message}
+            icon="bank"
             style={styles.input}
-            left={<TextInput.Icon icon="bank" />}
           />
-          <TextInput
+          <ValidationInput
             label="Account Number"
             value={paymentDetails.bankDetails.accountNumber}
             onChangeText={text => setPaymentDetails(prev => ({
               ...prev,
               bankDetails: { ...prev.bankDetails, accountNumber: text }
             }))}
-            mode="outlined"
+            error={validationErrors.find(error => error.field === 'accountNumber')?.message}
+            icon="numeric"
             style={styles.input}
-            left={<TextInput.Icon icon="numeric" />}
           />
-          <TextInput
+          <ValidationInput
             label="IFSC Code"
             value={paymentDetails.bankDetails.ifscCode}
             onChangeText={text => setPaymentDetails(prev => ({
               ...prev,
               bankDetails: { ...prev.bankDetails, ifscCode: text }
             }))}
-            mode="outlined"
+            error={validationErrors.find(error => error.field === 'ifscCode')?.message}
+            icon="code-brackets"
             style={styles.input}
-            left={<TextInput.Icon icon="code-brackets" />}
           />
         </Surface>
       )}
@@ -878,94 +1355,23 @@ export default function ManagerRegistration() {
     </View>
   );
 
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Add state for validation modal
-  const [validationErrors, setValidationErrors] = useState<Array<{ field: string; message: string }>>([]);
-  const [showValidationModal, setShowValidationModal] = useState(false);
-
   const handleSubmit = async () => {
     try {
       setIsLoading(true);
 
-      // Validate form data
-      const errors = [];
-      
-      // Personal Details validation
-      if (!managerDetails.fullName) {
-        errors.push({ field: 'fullName', message: 'Full name is required' });
-      }
-      if (!managerDetails.email) {
-        errors.push({ field: 'email', message: 'Email is required' });
-      } else if (!validateEmail(managerDetails.email)) {
-        errors.push({ field: 'email', message: 'Please enter a valid email address' });
-      }
-      if (!managerDetails.phone) {
-        errors.push({ field: 'phone', message: 'Phone number is required' });
-      } else if (!validatePhone(managerDetails.phone)) {
-        errors.push({ field: 'phone', message: 'Please enter a valid 10-digit phone number' });
-      }
-      if (!managerDetails.password) {
-        errors.push({ field: 'password', message: 'Password is required' });
-      } else if (managerDetails.password.length < 8) {
-        errors.push({ field: 'password', message: 'Password must be at least 8 characters' });
-      }
-      if (managerDetails.password !== managerDetails.confirmPassword) {
-        errors.push({ field: 'confirmPassword', message: 'Passwords do not match' });
-      }
-
-      // PG Details validation
-      if (!pgDetails.name) {
-        errors.push({ field: 'pgName', message: 'PG name is required' });
-      }
-      if (!pgDetails.address) {
-        errors.push({ field: 'pgAddress', message: 'PG address is required' });
-      }
-      if (!pgDetails.totalRooms) {
-        errors.push({ field: 'totalRooms', message: 'Total rooms is required' });
-      }
-      if (!pgDetails.costPerBed) {
-        errors.push({ field: 'costPerBed', message: 'Cost per bed is required' });
-      }
-
-      // Payment validation
-      if (paymentDetails.paymentMethod === 'upi' && !paymentDetails.upiId) {
-        errors.push({ field: 'upiId', message: 'UPI ID is required' });
-      }
-      if (paymentDetails.paymentMethod === 'bank') {
-        if (!paymentDetails.bankDetails.bankName) {
-          errors.push({ field: 'bankName', message: 'Bank name is required' });
-        }
-        if (!paymentDetails.bankDetails.accountNumber) {
-          errors.push({ field: 'accountNumber', message: 'Account number is required' });
-        }
-        if (!paymentDetails.bankDetails.ifscCode) {
-          errors.push({ field: 'ifscCode', message: 'IFSC code is required' });
-        }
-      }
-
-      if (errors.length > 0) {
-        setValidationErrors(errors);
-        setShowValidationModal(true);
-        return;
-      }
-
-      // Upload profile image if exists
-      let profileImageUrl = '';
+      // Upload profile image first if exists
+      let profileImageUrl = null;
       if (profileImage) {
         profileImageUrl = await uploadImage(profileImage);
       }
 
-      // Upload PG images if exists
-      let pgImageUrls: string[] = [];
+      // Upload PG images if any
+      let pgImageUrls = [];
       if (pgDetails.images.length > 0) {
-        pgImageUrls = await Promise.all(
-          pgDetails.images.map(image => uploadImage(image))
-        );
+        pgImageUrls = await Promise.all(pgDetails.images.map(image => uploadImage(image)));
       }
 
-      // Prepare form data with all fields
+      // Create the form data object with correct field mappings
       const formData = {
         // Personal Details
         fullName: managerDetails.fullName,
@@ -974,7 +1380,7 @@ export default function ManagerRegistration() {
         password: managerDetails.password,
         profileImage: profileImageUrl,
         address: managerDetails.address,
-        alternatePhone: managerDetails.alternatePhone,
+        alternatePhone: managerDetails.alternatePhone || null,
 
         // PG Details
         pgName: pgDetails.name,
@@ -984,9 +1390,9 @@ export default function ManagerRegistration() {
         pincode: pgDetails.pincode,
         pgType: pgDetails.type,
         pgContactNumber: pgDetails.contactNumber,
-        totalRooms: parseInt(pgDetails.totalRooms),
-        costPerBed: parseInt(pgDetails.costPerBed),
-        totalTenants: parseInt(pgDetails.totalTenants),
+        totalRooms: parseInt(pgDetails.totalRooms) || 0,
+        costPerBed: parseInt(pgDetails.costPerBed) || 0,
+        totalTenants: parseInt(pgDetails.totalTenants) || 0,
         amenities: pgDetails.amenities,
         otherAmenities: pgDetails.otherAmenities,
         pgImages: pgImageUrls,
@@ -1037,46 +1443,29 @@ export default function ManagerRegistration() {
         updatedAt: new Date().toISOString()
       };
 
-      // Validate form data
-      if (!formData.fullName || !formData.email || !formData.phone || !formData.password) {
-        throw new Error('Please fill in all personal details');
-      }
-
-      if (!formData.pgName || !formData.pgAddress || !formData.totalRooms || !formData.costPerBed) {
-        throw new Error('Please fill in all PG details');
-      }
-
-      if (formData.paymentMethod === 'upi' && !formData.upiId) {
-        throw new Error('Please enter UPI ID');
-      }
-
-      if (formData.paymentMethod === 'bank' && 
-          (!formData.bankDetails?.bankName || 
-           !formData.bankDetails?.accountNumber || 
-           !formData.bankDetails?.ifscCode)) {
-        throw new Error('Please fill in all bank details');
-      }
-
-      // Submit form data
       const response = await registerManager(formData);
 
-      showMessage({
-        message: 'Registration Successful',
-        description: 'Your account has been created successfully. Please wait for verification.',
-        type: 'success',
-      });
-
-      // Navigate to login
-      router.replace('/screens/LoginScreen');
-
+      if (response.success) {
+        setIsLoading(false);
+        setShowSuccessModal(true);
+      }
     } catch (error: any) {
-      setValidationErrors([{
-        field: 'api',
-        message: error.response?.data?.error || 'Registration failed'
-      }]);
-      setShowValidationModal(true);
-    } finally {
+      console.error('Registration error:', error);
       setIsLoading(false);
+      
+      if (error.error === "Manager with this email or phone already exists" || 
+          error.response?.data?.error === "Manager with this email or phone already exists") {
+        setShowDuplicateManagerModal(true);
+        return;
+      }
+      
+      showMessage({
+        message: 'Registration Failed',
+        description: error.response?.data?.error || 'Registration failed',
+        type: 'danger',
+        duration: 4000,
+        floating: true,
+      });
     }
   };
 
@@ -1213,6 +1602,19 @@ export default function ManagerRegistration() {
           onDismiss={() => setShowInfoModal(false)}
         />
 
+        <SuccessModal 
+          visible={showSuccessModal} 
+          onDismiss={() => {
+            setShowSuccessModal(false);
+            router.replace('/screens/LoginScreen');
+          }} 
+        />
+
+        <DuplicateManagerModal 
+          visible={showDuplicateManagerModal}
+          onDismiss={() => setShowDuplicateManagerModal(false)}
+        />
+
         {isLoading && (
           <View style={styles.loadingOverlay}>
             <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -1224,7 +1626,7 @@ export default function ManagerRegistration() {
           visible={showValidationModal}
           onDismiss={() => setShowValidationModal(false)}
           errors={validationErrors}
-          title="Registration Failed"
+          title="Please Fix the Following Errors"
         />
       </ScrollView>
     </>
@@ -1281,7 +1683,9 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   formContainer: {
+    padding: 16,
     gap: 16,
+    width: '100%',
   },
   imageUpload: {
     alignItems: 'center',
@@ -1292,7 +1696,9 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: 'transparent',
-    marginBottom: 12,
+    marginBottom: 4,
+    minWidth: 150,
+    flex: 1,
   },
   buttonContainer: {
     flexDirection: 'row',
@@ -1415,7 +1821,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
-  // Removed duplicate roomDetailsCard style
   modalContainer: {
     margin: 20,
     padding: 20,
@@ -1514,12 +1919,15 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   inputGroup: {
+    width: '100%',
     gap: 12,
   },
   inputRow: {
     flexDirection: 'row',
     gap: 12,
     marginBottom: 12,
+    width: '100%',
+    flexWrap: 'wrap',
   },
   sectionTitleContainer: {
     flexDirection: 'row',
@@ -1584,7 +1992,6 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 8,
   },
- 
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1616,55 +2023,237 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   errorText: {
+    fontSize: 12,
     color: 'red',
-    marginBottom: 4,
+  },
+  validationErrorText: {
+    fontSize: 14,
+    color: 'red',
+    marginLeft: 8,
   },
   modalWrapper: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalContent: {
     padding: 24,
     borderRadius: 16,
     width: '90%',
-    maxWidth: 400,
+    maxWidth: 340,
     alignItems: 'center',
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
-  modalIcon: {
+  modalIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 16,
   },
-  modalTitle: {
+  modalHeaderTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 16,
+    marginBottom: 8,
     textAlign: 'center',
   },
-  errorList: {
-    width: '100%',
-    marginBottom: 24,
-  },
-  errorItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  errorText: {
-    flex: 1,
+  modalMessage: {
     fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 24,
+  },
+  modalActions: {
+    width: '100%',
   },
   modalButton: {
-    width: '100%',
-    marginTop: 8,
+    borderRadius: 8,
   },
-  validationModalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+  modalButtonContent: {
+    paddingVertical: 8,
+  },
+  inputContainer: {
     marginBottom: 16,
+    width: '100%',
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    paddingHorizontal: 8,
+    flexWrap: 'wrap',
+  },
+  errorIcon: {
+    margin: 0,
+    padding: 0,
+    marginRight: 4,
+  },
+  errorText: {
+    fontSize: 12,
+    flex: 1,
+    flexWrap: 'wrap',
+  },
+  alertContainer: {
+    marginBottom: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  alertContent: {
+    flexDirection: 'row',
+    padding: 12,
+    alignItems: 'flex-start',
+  },
+  alertTextContainer: {
+    flex: 1,
+    marginLeft: 8,
+  },
+  alertTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  alertMessage: {
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  inputError: {
+    borderColor: 'rgba(255, 59, 48, 0.5)',
+  },
+  fieldErrorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    paddingHorizontal: 8,
+    backgroundColor: 'rgba(255, 59, 48, 0.08)',
+    borderRadius: 8,
+    padding: 4,
+  },
+  fieldErrorText: {
+    fontSize: 12,
+    flex: 1,
+    marginLeft: 4,
+  },
+  duplicateModalContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    padding: 16,
+    zIndex: 1000,
+  },
+  duplicateModalContent: {
+    padding: 24,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  duplicateModalIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  duplicateModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 8,
     textAlign: 'center',
   },
-  validationErrorText: {
-    flex: 1,
+  duplicateModalMessage: {
     fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 24,
+  },
+  duplicateModalButton: {
+    minWidth: 120,
+  },
+  passwordRequirements: {
+    marginTop: 8,
+    marginBottom: 16,
+    paddingLeft: 16,
+  },
+  requirementTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    color: '#666',
+  },
+  requirementText: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  successModalContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 1000,
+  },
+  successModalContent: {
+    padding: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+    width: '90%',
+    maxWidth: 340,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  successModalIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  successModalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  successModalMessage: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 24,
+  },
+  successModalButton: {
+    minWidth: 200,
+    borderRadius: 8,
   },
 });
