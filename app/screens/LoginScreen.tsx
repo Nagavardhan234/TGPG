@@ -139,14 +139,14 @@ export default function LoginScreen() {
         case 'PHONE_NOT_FOUND':
         case 'INVALID_PHONE_FORMAT':
           setError({
-            message: errorMessage,
+            message: 'Invalid phone number',
             type: 'warning',
             field: 'identifier'
           });
           break;
         case 'INVALID_PASSWORD':
           setError({
-            message: errorMessage,
+            message: 'Invalid password',
             type: 'error',
             field: 'password'
           });
