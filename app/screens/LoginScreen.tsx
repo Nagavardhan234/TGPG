@@ -381,6 +381,9 @@ const styles = StyleSheet.create<Styles>({
   animation: {
     width: '100%',
     height: '100%',
+    marginLeft:-15,
+    marginTop:-10,
+    
   },
   welcomeText: {
     fontSize: 28,
