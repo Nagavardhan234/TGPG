@@ -122,35 +122,43 @@ export default function LoginScreen() {
   const handleLoginError = (error: any) => {
     console.error('Login error:', error);
     
-    if (error.response?.data?.error) {
-      switch (error.response.data.error) {
+    // First check if it's a network error
+    if (error.code === 'ERR_NETWORK') {
+      setError({
+        message: 'Network error. Please check your internet connection.',
+        type: 'error'
+      });
+      return;
+    }
+
+    // Then check for response data
+    const errorMessage = error?.response?.data?.message || error?.error || error?.errors[0].message;
+    
+    if (errorMessage) {
+      switch (error.error || error.errors[0].message) {
         case 'PHONE_NOT_FOUND':
         case 'INVALID_PHONE_FORMAT':
           setError({
-            message: error.response.data.message,
+            message: errorMessage,
             type: 'warning',
             field: 'identifier'
           });
           break;
         case 'INVALID_PASSWORD':
           setError({
-            message: error.response.data.message,
+            message: errorMessage,
             type: 'error',
             field: 'password'
           });
           break;
         default:
           setError({
-            message: error.response.data.message || 'Login failed',
+            message: errorMessage,
             type: 'error'
           });
       }
-    } else if (error.code === 'ERR_NETWORK') {
-      setError({
-        message: 'Network error. Please check your internet connection.',
-        type: 'error'
-      });
     } else {
+      // Fallback error message
       setError({
         message: 'An unexpected error occurred. Please try again later.',
         type: 'error'
