@@ -383,50 +383,6 @@ const ValidationInput = ({
 };
 
 // Add this component near other component definitions
-const ValidationAlert = ({ errors }: { errors: ValidationError[] }) => {
-  const { theme, isDarkMode } = useTheme();
-  
-  if (errors.length === 0) return null;
-  
-  return (
-    <Surface 
-      style={[
-        styles.alertContainer, 
-        { 
-          backgroundColor: isDarkMode 
-            ? 'rgba(255, 59, 48, 0.1)' 
-            : 'rgba(255, 59, 48, 0.08)',
-          borderColor: theme.colors.error,
-          borderWidth: 1,
-          backdropFilter: 'blur(10px)',
-        }
-      ]}
-    >
-      <View style={styles.alertContent}>
-        <IconButton
-          icon="alert-circle"
-          size={24}
-          iconColor={theme.colors.error}
-        />
-        <View style={styles.alertTextContainer}>
-          <Text style={[styles.alertTitle, { color: theme.colors.error }]}>
-            Validation Error
-          </Text>
-          {errors.map((error, index) => (
-            <Text 
-              key={index} 
-              style={[styles.alertMessage, { color: theme.colors.error }]}
-            >
-              • {error.message}
-            </Text>
-          ))}
-        </View>
-      </View>
-    </Surface>
-  );
-};
-
-// Add this component near other component definitions
 const SuccessModal = ({ visible, onDismiss }: { visible: boolean; onDismiss: () => void }) => {
   const { theme, isDarkMode } = useTheme();
   
@@ -931,7 +887,6 @@ export default function ManagerRegistration() {
 
   const renderPersonalDetails = () => (
     <View style={styles.formContainer}>
-      <ValidationAlert errors={validationErrors} />
       {/* Profile Image Section */}
       <Surface style={styles.profileSection}>
       <View style={styles.imageUpload}>
@@ -1093,7 +1048,6 @@ export default function ManagerRegistration() {
 
   const renderPGDetails = () => (
     <View style={styles.formContainer}>
-      <ValidationAlert errors={validationErrors} />
       <ValidationInput
         label="PG Name"
         value={pgDetails.name}
@@ -2275,47 +2229,6 @@ const styles = StyleSheet.create({
   successModalButton: {
     minWidth: 200,
     borderRadius: 8,
-  },
-  alertContainer: {
-    margin: 16,
-    padding: 16,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  alertContent: {
-    flexDirection: 'row',
-    padding: 12,
-    alignItems: 'flex-start',
-  },
-  alertTextContainer: {
-    flex: 1,
-    marginLeft: 8,
-  },
-  alertTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  alertMessage: {
-    fontSize: 14,
-    marginBottom: 2,
-  },
-  // Password requirement styles
-  passwordRequirements: {
-    marginTop: 8,
-    marginBottom: 16,
-    paddingLeft: 16,
-  },
-  requirementTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    color: '#666',
-  },
-  requirementText: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 4,
   },
   rootContainer: {
     flex: 1,
