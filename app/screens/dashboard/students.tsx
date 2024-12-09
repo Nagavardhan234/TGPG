@@ -18,10 +18,12 @@ import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getStudents, addStudent, getDefaultRent, Student, StudentForm } from '@/app/services/student.service';
 import { showMessage } from 'react-native-flash-message';
+import { ErrorNotification } from '@/app/components/ErrorNotification';
 
 interface FormData extends StudentForm {
   roomNo: number;
   monthlyRent: string;
+  joinDate: string;
 }
 
 export default function StudentManagement() {
@@ -42,8 +44,16 @@ export default function StudentManagement() {
     guardianName: '',
     guardianPhone: '',
     password: '',
-    roomNo: 0
+    roomNo: 0,
+    joinDate: new Date().toISOString().split('T')[0]
   });
+
+  // Add error state for the notification
+  const [error, setError] = useState<{
+    message: string;
+    type: 'error' | 'warning' | 'info';
+    field?: string;
+  } | null>(null);
 
   useEffect(() => {
     loadStudents();
@@ -51,55 +61,120 @@ export default function StudentManagement() {
   }, []);
 
   const validateForm = () => {
-    if (!formData.name || !formData.phone || !formData.password || !formData.roomNo) {
-      showMessage({
-        message: 'Error',
-        description: 'Please fill all required fields',
-        type: 'danger',
+    const errors: string[] = [];
+
+    // Name validation
+    if (!formData.name.trim()) {
+      errors.push('Full name is required');
+    } else if (formData.name.length < 3) {
+      errors.push('Name must be at least 3 characters long');
+    } else if (!/^[a-zA-Z\s]+$/.test(formData.name)) {
+      errors.push('Name should only contain letters and spaces');
+    }
+
+    // Phone validation
+    if (!formData.phone) {
+      errors.push('Phone number is required');
+    } else if (!/^[6-9]\d{9}$/.test(formData.phone)) {
+      errors.push('Please enter a valid 10-digit phone number');
+    }
+
+    // Email validation (optional)
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      errors.push('Please enter a valid email address');
+    }
+
+    // Room number validation
+    if (!formData.roomNo) {
+      errors.push('Room number is required');
+    } else if (formData.roomNo <= 0) {
+      errors.push('Room number must be greater than 0');
+    }
+
+    // Monthly rent validation
+    if (!formData.monthlyRent) {
+      errors.push('Monthly rent is required');
+    } else if (isNaN(Number(formData.monthlyRent)) || Number(formData.monthlyRent) <= 0) {
+      errors.push('Please enter a valid monthly rent amount');
+    }
+
+    // Guardian details validation
+    if (formData.guardianPhone && !/^[6-9]\d{9}$/.test(formData.guardianPhone)) {
+      errors.push('Please enter a valid guardian phone number');
+    }
+
+    // Password validation
+    if (!formData.password) {
+      errors.push('Password is required');
+    } else if (formData.password.length < 6) {
+      errors.push('Password must be at least 6 characters long');
+    }
+
+    // Join date validation
+    if (!formData.joinDate) {
+      errors.push('Join date is required');
+    } else {
+      const joinDate = new Date(formData.joinDate);
+      const today = new Date();
+      if (joinDate < today) {
+        errors.push('Join date cannot be in the past');
+      }
+    }
+
+    if (errors.length > 0) {
+      setError({
+        message: errors.join('\n'),
+        type: 'error'
       });
       return false;
     }
-    if (formData.phone.length !== 10) {
-      showMessage({
-        message: 'Error',
-        description: 'Phone number must be 10 digits',
-        type: 'danger',
-      });
-      return false;
-    }
-    if (formData.password.length < 6) {
-      showMessage({
-        message: 'Error',
-        description: 'Password must be at least 6 characters',
-        type: 'danger',
-      });
-      return false;
-    }
+
     return true;
   };
 
   const loadStudents = async () => {
     try {
       setIsLoading(true);
-      const pgData = await AsyncStorage.getItem('pg');
+      
+      const [pgData, token] = await Promise.all([
+        AsyncStorage.getItem('pg'),
+        AsyncStorage.getItem('token')
+      ]);
+
       if (!pgData) {
-        showMessage({
-          message: 'Error',
-          description: 'PG data not found',
-          type: 'danger',
+        setError({
+          message: 'PG data not found',
+          type: 'error'
+        });
+        return;
+      }
+
+      if (!token) {
+        setError({
+          message: 'Authentication token not found',
+          type: 'error'
         });
         return;
       }
 
       const { PGID } = JSON.parse(pgData);
-      const studentsData = await getStudents(PGID);
+      const studentsData = await getStudents(PGID, token);
       setStudents(studentsData);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading students:', error);
-      showMessage({
-        message: 'Error',
-        description: 'Failed to load students',
-        type: 'danger',
+      
+      if (error.message === 'INVALID_TOKEN') {
+        setError({
+          message: 'Session expired. Please login again.',
+          type: 'warning'
+        });
+        router.replace('/screens/LoginScreen');
+        return;
+      }
+
+      setError({
+        message: error.message || 'Failed to load students',
+        type: 'error'
       });
     } finally {
       setIsLoading(false);
@@ -110,7 +185,10 @@ export default function StudentManagement() {
     try {
       const pgData = await AsyncStorage.getItem('pg');
       if (!pgData) {
-        console.warn('No PG data found');
+        setError({
+          message: 'No PG data found',
+          type: 'warning'
+        });
         return;
       }
 
@@ -121,7 +199,6 @@ export default function StudentManagement() {
           monthlyRent: pgDetails.Rent.toString()
         }));
       } else {
-        // Fallback to getting rent from API if not in AsyncStorage
         const { PGID } = pgDetails;
         const defaultRent = await getDefaultRent(PGID);
         
@@ -131,14 +208,16 @@ export default function StudentManagement() {
             monthlyRent: defaultRent.toString()
           }));
         } else {
-          console.warn('No default rent found');
+          setError({
+            message: 'No default rent found',
+            type: 'warning'
+          });
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading default rent:', error);
-      showMessage({
-        message: 'Warning',
-        description: 'Failed to load default rent',
+      setError({
+        message: 'Failed to load default rent',
         type: 'warning'
       });
     }
@@ -149,11 +228,20 @@ export default function StudentManagement() {
 
     try {
       setIsSubmitting(true);
-      const pgData = await AsyncStorage.getItem('pg');
+      
+      // Get both PG data and token
+      const [pgData, token] = await Promise.all([
+        AsyncStorage.getItem('pg'),
+        AsyncStorage.getItem('token')
+      ]);
+
       if (!pgData) throw new Error('PG data not found');
+      if (!token) throw new Error('Authentication token not found');
 
       const { PGID } = JSON.parse(pgData);
-      await addStudent(PGID, formData);
+      
+      // Pass the token to the addStudent function
+      await addStudent(PGID, formData, token);
       
       showMessage({
         message: 'Success',
@@ -162,8 +250,9 @@ export default function StudentManagement() {
       });
       
       setModalVisible(false);
-      loadStudents();
+      loadStudents(); // Make sure this function also uses the token
       
+      // Reset form
       setFormData({
         name: '',
         phone: '',
@@ -173,14 +262,24 @@ export default function StudentManagement() {
         guardianName: '',
         guardianPhone: '',
         password: '',
-        roomNo: 0
+        roomNo: 0,
+        joinDate: new Date().toISOString().split('T')[0]
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding student:', error);
-      showMessage({
-        message: 'Error',
-        description: 'Failed to add student',
-        type: 'danger',
+      
+      if (error.message === 'INVALID_TOKEN') {
+        setError({
+          message: 'Session expired. Please login again.',
+          type: 'warning'
+        });
+        router.replace('/screens/LoginScreen');
+        return;
+      }
+
+      setError({
+        message: error.message || 'Failed to add student',
+        type: 'error'
       });
     } finally {
       setIsSubmitting(false);
@@ -189,48 +288,15 @@ export default function StudentManagement() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <Title style={[styles.title, { color: theme.colors.text }]}>Student Management</Title>
-      
-      <Searchbar
-        placeholder="Search students..."
-        onChangeText={setSearchQuery}
-        value={searchQuery}
-        style={styles.searchBar}
-      />
-
-      <DataTable>
-        <DataTable.Header>
-          <DataTable.Title textStyle={{ color: theme.colors.text }}>Name</DataTable.Title>
-          <DataTable.Title textStyle={{ color: theme.colors.text }}>Room No</DataTable.Title>
-          <DataTable.Title textStyle={{ color: theme.colors.text }}>Phone</DataTable.Title>
-          <DataTable.Title textStyle={{ color: theme.colors.text }}>Status</DataTable.Title>
-        </DataTable.Header>
-
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-          </View>
-        ) : (
-          students.map(student => (
-            <DataTable.Row key={student.TenantID}>
-              <DataTable.Cell textStyle={{ color: theme.colors.text }}>
-                {student.FullName}
-              </DataTable.Cell>
-              <DataTable.Cell textStyle={{ color: theme.colors.text }}>
-                {student.Room_No || '-'}
-              </DataTable.Cell>
-              <DataTable.Cell textStyle={{ color: theme.colors.text }}>
-                {student.Phone}
-              </DataTable.Cell>
-              <DataTable.Cell textStyle={{ color: theme.colors.text }}>
-                {student.Status}
-              </DataTable.Cell>
-            </DataTable.Row>
-          ))
-        )}
-      </DataTable>
-
       <Portal>
+        <ErrorNotification
+          visible={!!error}
+          message={error?.message || ''}
+          type={error?.type || 'error'}
+          onDismiss={() => setError(null)}
+          style={styles.errorNotification}
+        />
+
         <Modal
           visible={modalVisible}
           onDismiss={() => setModalVisible(false)}
@@ -284,12 +350,13 @@ export default function StudentManagement() {
               />
 
               <TextInput
-                label="Monthly Rent"
+                label="Monthly Rent *"
                 value={formData.monthlyRent}
                 onChangeText={(text) => setFormData({ ...formData, monthlyRent: text })}
                 mode="outlined"
                 keyboardType="numeric"
                 style={styles.input}
+                error={!formData.monthlyRent}
               />
 
               <TextInput
@@ -327,6 +394,24 @@ export default function StudentManagement() {
                 style={styles.input}
               />
 
+              <TextInput
+                label="Join Date *"
+                value={formData.joinDate}
+                onChangeText={(text) => setFormData({ ...formData, joinDate: text })}
+                mode="outlined"
+                style={styles.input}
+                error={!formData.joinDate}
+                right={
+                  <TextInput.Icon 
+                    icon="calendar" 
+                    onPress={() => {
+                      // Here you can add a date picker
+                      // For now, we're using the default text input
+                    }} 
+                  />
+                }
+              />
+
               <View style={styles.buttonContainer}>
                 <Button 
                   mode="outlined" 
@@ -349,6 +434,47 @@ export default function StudentManagement() {
           </ScrollView>
         </Modal>
       </Portal>
+
+      <Title style={[styles.title, { color: theme.colors.text }]}>Student Management</Title>
+      
+      <Searchbar
+        placeholder="Search students..."
+        onChangeText={setSearchQuery}
+        value={searchQuery}
+        style={styles.searchBar}
+      />
+
+      <DataTable>
+        <DataTable.Header>
+          <DataTable.Title textStyle={{ color: theme.colors.text }}>Name</DataTable.Title>
+          <DataTable.Title textStyle={{ color: theme.colors.text }}>Room No</DataTable.Title>
+          <DataTable.Title textStyle={{ color: theme.colors.text }}>Phone</DataTable.Title>
+          <DataTable.Title textStyle={{ color: theme.colors.text }}>Status</DataTable.Title>
+        </DataTable.Header>
+
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+          </View>
+        ) : (
+          students.map(student => (
+            <DataTable.Row key={student.TenantID}>
+              <DataTable.Cell textStyle={{ color: theme.colors.text }}>
+                {student.FullName}
+              </DataTable.Cell>
+              <DataTable.Cell textStyle={{ color: theme.colors.text }}>
+                {student.Room_No || '-'}
+              </DataTable.Cell>
+              <DataTable.Cell textStyle={{ color: theme.colors.text }}>
+                {student.Phone}
+              </DataTable.Cell>
+              <DataTable.Cell textStyle={{ color: theme.colors.text }}>
+                {student.Status}
+              </DataTable.Cell>
+            </DataTable.Row>
+          ))
+        )}
+      </DataTable>
 
       <FAB
         icon="plus"
@@ -382,12 +508,14 @@ const styles = StyleSheet.create({
     margin: 20,
     borderRadius: 20,
     maxHeight: '90%',
+    zIndex: 1001,
   },
   modalContent: {
     padding: 20,
   },
   modalOverlay: {
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 1000,
   },
   avatarContainer: {
     alignItems: 'center',
@@ -424,5 +552,13 @@ const styles = StyleSheet.create({
   fabLabel: {
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  errorNotification: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 9999,
+    elevation: 9999,
   },
 }); 

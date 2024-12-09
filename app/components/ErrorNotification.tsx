@@ -1,20 +1,22 @@
 import React from 'react';
-import { StyleSheet, View, Animated } from 'react-native';
+import { StyleSheet, View, Animated, ViewStyle } from 'react-native';
 import { Surface, Text, IconButton } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 
 interface ErrorNotificationProps {
   visible: boolean;
   message: string;
+  type: 'error' | 'warning' | 'info';
   onDismiss: () => void;
-  type?: 'error' | 'warning' | 'info';
+  style?: ViewStyle;
 }
 
 export const ErrorNotification: React.FC<ErrorNotificationProps> = ({
   visible,
   message,
   onDismiss,
-  type = 'error'
+  type = 'error',
+  style
 }) => {
   const { theme, isDarkMode } = useTheme();
   const [fadeAnim] = React.useState(new Animated.Value(0));
