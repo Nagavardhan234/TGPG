@@ -135,11 +135,25 @@ export default function StudentManagement() {
   const loadStudents = async () => {
     try {
       setIsLoading(true);
+      setError(null);
       
+      // Get both PG data and token
       const [pgData, token] = await Promise.all([
         AsyncStorage.getItem('pg'),
         AsyncStorage.getItem('token')
       ]);
+
+      console.log('Token before request:', token); // Debug log
+      console.log('PG data:', pgData); // Debug log
+
+      if (!token) {
+        setError({
+          message: 'Authentication token not found. Please login again.',
+          type: 'error'
+        });
+        router.replace('/screens/LoginScreen');
+        return;
+      }
 
       if (!pgData) {
         setError({
@@ -149,18 +163,10 @@ export default function StudentManagement() {
         return;
       }
 
-      if (!token) {
-        setError({
-          message: 'Authentication token not found',
-          type: 'error'
-        });
-        return;
-      }
-
       const { PGID } = JSON.parse(pgData);
-      const studentsData = await getStudents(PGID, token);
+      const studentsData = await getStudents(PGID);
       setStudents(studentsData);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error loading students:', error);
       
       if (error.message === 'INVALID_TOKEN') {
@@ -229,19 +235,16 @@ export default function StudentManagement() {
     try {
       setIsSubmitting(true);
       
-      // Get both PG data and token
-      const [pgData, token] = await Promise.all([
-        AsyncStorage.getItem('pg'),
-        AsyncStorage.getItem('token')
-      ]);
-
-      if (!pgData) throw new Error('PG data not found');
-      if (!token) throw new Error('Authentication token not found');
+      // Get PG data
+      const pgData = await AsyncStorage.getItem('pg');
+      if (!pgData) {
+        throw new Error('PG data not found');
+      }
 
       const { PGID } = JSON.parse(pgData);
       
-      // Pass the token to the addStudent function
-      await addStudent(PGID, formData, token);
+      // Pass only pgId and formData
+      await addStudent(PGID, formData);
       
       showMessage({
         message: 'Success',
@@ -250,7 +253,7 @@ export default function StudentManagement() {
       });
       
       setModalVisible(false);
-      loadStudents(); // Make sure this function also uses the token
+      loadStudents();
       
       // Reset form
       setFormData({

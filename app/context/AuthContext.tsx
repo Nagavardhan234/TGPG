@@ -61,6 +61,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (token: string, managerData: Manager, pgData: PG | null) => {
     try {
+      console.log('Storing token:', token);
       await AsyncStorage.setItem('token', token);
       await AsyncStorage.setItem('manager', JSON.stringify(managerData));
       if (pgData) {

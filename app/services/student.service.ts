@@ -1,5 +1,6 @@
-import api from '@/app/config/axios.config';
-import { ENDPOINTS } from '@/app/constants/endpoints';
+import api from '../config/axios.config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ENDPOINTS } from '../constants/endpoints';
 
 export interface Student {
   TenantID: number;
@@ -28,30 +29,52 @@ export interface StudentForm {
   guardianPhone: string;
   password: string;
   roomNo: number;
+  joinDate: string;
 }
 
 export const getStudents = async (pgId: number) => {
   try {
-    const response = await api.get<{ success: boolean; data: Student[] }>(
-      `${ENDPOINTS.STUDENTS}/pg/${pgId}`
-    );
+    // Verify token before making request
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+
+    const response = await api.get(`/api/students/pg/${pgId}`);
     return response.data.data;
   } catch (error) {
     console.error('Error fetching students:', error);
+    if (error.response?.status === 401) {
+      throw new Error('INVALID_TOKEN');
+    }
     throw error;
   }
 };
 
-export const addStudent = async (pgId: number, studentData: StudentForm) => {
+export const addStudent = async (pgId: number, formData: StudentForm) => {
   try {
-    const response = await api.post<{ success: boolean; data: Student }>(
-      `${ENDPOINTS.STUDENTS}/pg/${pgId}`,
-      studentData
+    // Verify token before making request
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+
+    const response = await api.post(
+      `/api/students/pg/${pgId}`,
+      formData
     );
+
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Failed to add student');
+    }
+
     return response.data;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error adding student:', error);
-    throw error;
+    if (error.response?.status === 401) {
+      throw new Error('INVALID_TOKEN');
+    }
+    throw new Error(error.response?.data?.message || error.message || 'Failed to add student');
   }
 };
 

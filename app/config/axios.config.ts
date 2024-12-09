@@ -1,41 +1,46 @@
 import axios from 'axios';
+import { BASE_URL } from '../constants/endpoints';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from './api.config';
 
 const api = axios.create({
-  baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  baseURL: BASE_URL,
+  timeout: 10000,
 });
 
-// Request interceptor for API calls
+// Add request interceptor to handle token
 api.interceptors.request.use(
   async (config) => {
-    const token = await AsyncStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    try {
+      const token = await AsyncStorage.getItem('token');
+      console.log('Token from storage:', token); // Debug log
+      
+      if (token) {
+        // Ensure token is properly formatted
+        const formattedToken = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        config.headers.Authorization = formattedToken;
+      } else {
+        console.warn('No token found in storage');
+      }
+      return config;
+    } catch (error) {
+      console.error('Error in axios interceptor:', error);
+      return Promise.reject(error);
     }
-    return config;
   },
   (error) => {
     return Promise.reject(error);
   }
 );
 
-// Response interceptor for API calls
+// Add response interceptor to handle token errors
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config;
-
-    // Handle token expiration
-    if (error.response?.status === 401 && error.response?.data?.error === 'TOKEN_EXPIRED') {
-      // Redirect to login
-      router.replace('/');
-      await AsyncStorage.multiRemove(['token', 'manager', 'pg']);
+    if (error.response?.status === 401 && error.response?.data?.error === 'INVALID_TOKEN') {
+      // Clear stored token
+      await AsyncStorage.removeItem('token');
+      // You could also redirect to login here if needed
     }
-
     return Promise.reject(error);
   }
 );
