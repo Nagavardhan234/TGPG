@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Animated } from 'react-native';
 import { Text, Surface } from 'react-native-paper';
 import Svg, { Circle, Defs, LinearGradient, Stop, Filter, FeGaussianBlur, FeOffset, FeComposite } from 'react-native-svg';
@@ -19,6 +19,32 @@ interface ModernPieChartProps {
   onComplete?: () => void;
 }
 
+// Move getProgressColor function before its usage
+const getProgressColor = (percentage: number) => {
+  // Modern gradient colors based on percentage
+  if (percentage >= 75) {
+    return {
+      start: '#00C6FB',
+      end: '#005BEA'
+    };
+  } else if (percentage >= 50) {
+    return {
+      start: '#38EF7D',
+      end: '#11998E'
+    };
+  } else if (percentage >= 25) {
+    return {
+      start: '#FFE259',
+      end: '#FFA751'
+    };
+  } else {
+    return {
+      start: '#FF5E62',
+      end: '#FF9966'
+    };
+  }
+};
+
 export const ModernPieChart: React.FC<ModernPieChartProps> = ({
   data,
   size,
@@ -28,65 +54,44 @@ export const ModernPieChart: React.FC<ModernPieChartProps> = ({
 }) => {
   const { theme, isDarkMode } = useTheme();
   const animatedValue = useRef(new Animated.Value(0)).current;
-  const percentage = (data.value / data.total) * 100;
+  const [currentColors, setCurrentColors] = useState(getProgressColor(0));
 
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
-  const strokeDashoffset = circumference - (percentage / 100) * circumference;
+  const strokeDashoffset = circumference - (data.value / data.total) * circumference;
 
   useEffect(() => {
     Animated.timing(animatedValue, {
-      toValue: percentage,
+      toValue: data.value / data.total,
       duration,
       useNativeDriver: true,
     }).start(() => {
       onComplete?.();
     });
-  }, [percentage]);
+  }, [data]);
 
-  const getProgressColor = () => {
-    // Modern gradient colors based on percentage
-    if (percentage >= 75) {
-      return {
-        start: '#00C6FB',
-        end: '#005BEA'
-      };
-    } else if (percentage >= 50) {
-      return {
-        start: '#38EF7D',
-        end: '#11998E'
-      };
-    } else if (percentage >= 25) {
-      return {
-        start: '#FFE259',
-        end: '#FFA751'
-      };
-    } else {
-      return {
-        start: '#FF5E62',
-        end: '#FF9966'
-      };
-    }
-  };
-
-  const colors = getProgressColor();
+  useEffect(() => {
+    const percentage = (data.value / data.total) * 100;
+    const colors = getProgressColor(percentage);
+    setCurrentColors(colors);
+  }, [data]);
 
   // Calculate responsive font sizes
-  const percentageFontSize = size * 0.15; // 15% of chart size
-  const labelFontSize = size * 0.06; // 6% of chart size
+  const percentageFontSize = size * 0.15;
+  const labelFontSize = size * 0.06;
 
   return (
     <Surface style={[styles.container, { 
       width: size, 
       height: size+50,
       backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.03)' : '#FFFFFF',
-      padding: size * 0.05, // Responsive padding
+      padding: size * 0.05,
     }]}>
       <Svg width={size} height={size}>
         <Defs>
           <LinearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor={colors.start} stopOpacity="1" />
-            <Stop offset="100%" stopColor={colors.end} stopOpacity="1" />
+            <Stop offset="0%" stopColor={currentColors.start} stopOpacity="1" />
+            <Stop offset="100%" stopColor={currentColors.end} stopOpacity="1" />
           </LinearGradient>
         </Defs>
 
@@ -125,7 +130,7 @@ export const ModernPieChart: React.FC<ModernPieChartProps> = ({
             fontSize: percentageFontSize,
             color: isDarkMode ? '#FFFFFF' : theme.colors.text,
           }]}>
-            {Math.round(percentage)}%
+            {Math.round(data.value / data.total * 100)}%
           </Text>
           <Text style={[styles.label, { 
             fontSize: labelFontSize,
@@ -168,13 +173,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: 1,
     includeFontPadding: false,
-    lineHeight: undefined, // Removes extra padding
+    lineHeight: undefined,
   },
   label: {
     textAlign: 'center',
     marginTop: '2%',
     opacity: 0.8,
     includeFontPadding: false,
-    lineHeight: undefined, // Removes extra padding
+    lineHeight: undefined,
   },
 }); 

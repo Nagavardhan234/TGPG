@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import { View, StyleSheet, ScrollView, ActivityIndicator, Platform, useWindowDimensions } from 'react-native';
 import { 
   DataTable, 
   FAB, 
@@ -11,20 +11,49 @@ import {
   Button,
   Avatar,
   Text,
-  useTheme
+  useTheme,
+  IconButton,
+  Dialog,
+  Chip,
+  RadioButton
 } from 'react-native-paper';
 import { useTheme as useCustomTheme } from '@/app/context/ThemeContext';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getStudents, addStudent, getDefaultRent, Student, StudentForm } from '@/app/services/student.service';
+import { getStudents, addStudent, getDefaultRent, Student, StudentForm, deleteStudent, updateStudent } from '@/app/services/student.service';
 import { showMessage } from 'react-native-flash-message';
 import { ErrorNotification } from '@/app/components/ErrorNotification';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { StudentDetailsModal } from '@/app/components/StudentDetailsModal';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import XLSX from 'xlsx';
+import { ExtendedTheme } from '@/app/types/theme';
 
-interface FormData extends StudentForm {
-  roomNo: number;
+interface FormData {
+  name: string;
+  phone: string;
+  email: string;
   monthlyRent: string;
+  guardianName: string;
+  guardianPhone: string;
+  password: string;
+  roomNo: number;
   joinDate: string;
 }
+
+const getStatusColor = (status: string, theme: any) => {
+  switch (status) {
+    case 'ACTIVE':
+      return theme.colors.primaryContainer;
+    case 'INACTIVE':
+      return theme.colors.errorContainer;
+    case 'MOVED_OUT':
+      return theme.colors.surfaceVariant;
+    default:
+      return theme.colors.surfaceVariant;
+  }
+};
 
 export default function StudentManagement() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -39,7 +68,6 @@ export default function StudentManagement() {
     name: '',
     phone: '',
     email: '',
-    moveInDate: new Date().toISOString().split('T')[0],
     monthlyRent: '',
     guardianName: '',
     guardianPhone: '',
@@ -55,10 +83,45 @@ export default function StudentManagement() {
     field?: string;
   } | null>(null);
 
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [dateType, setDateType] = useState<'joinDate'>('joinDate');
+
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+
+  // Add state for edit mode
+  const [isEditMode, setIsEditMode] = useState(false);
+
+  const [viewModalVisible, setViewModalVisible] = useState(false);
+
+  const [refreshing, setRefreshing] = useState(false);
+  const [filterVisible, setFilterVisible] = useState(false);
+  const [filters, setFilters] = useState({
+    status: 'all',
+    sortBy: 'name',
+    order: 'asc'
+  });
+
+  const [filterStatus, setFilterStatus] = useState<'ALL' | 'ACTIVE' | 'INACTIVE' | 'MOVED_OUT'>('ALL');
+  const [sortBy, setSortBy] = useState<'name' | 'room' | 'date'>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const [deleteType, setDeleteType] = useState<'SOFT' | 'HARD'>('SOFT');
+
+  const { width } = useWindowDimensions();
+  const isSmallScreen = width < 768;
+
   useEffect(() => {
     loadStudents();
     loadDefaultRent();
   }, []);
+
+  useEffect(() => {
+    if (modalVisible) {
+      loadDefaultRent();
+    }
+  }, [modalVisible]);
 
   const validateForm = () => {
     const errors: string[] = [];
@@ -113,12 +176,6 @@ export default function StudentManagement() {
     // Join date validation
     if (!formData.joinDate) {
       errors.push('Join date is required');
-    } else {
-      const joinDate = new Date(formData.joinDate);
-      const today = new Date();
-      if (joinDate < today) {
-        errors.push('Join date cannot be in the past');
-      }
     }
 
     if (errors.length > 0) {
@@ -199,26 +256,14 @@ export default function StudentManagement() {
       }
 
       const pgDetails = JSON.parse(pgData);
-      if (pgDetails.Rent) {
+      const { PGID } = pgDetails;
+      
+      const defaultRent = await getDefaultRent(PGID);
+      if (defaultRent) {
         setFormData(prev => ({
           ...prev,
-          monthlyRent: pgDetails.Rent.toString()
+          monthlyRent: defaultRent.toString()
         }));
-      } else {
-        const { PGID } = pgDetails;
-        const defaultRent = await getDefaultRent(PGID);
-        
-        if (defaultRent) {
-          setFormData(prev => ({
-            ...prev,
-            monthlyRent: defaultRent.toString()
-          }));
-        } else {
-          setError({
-            message: 'No default rent found',
-            type: 'warning'
-          });
-        }
       }
     } catch (error: any) {
       console.error('Error loading default rent:', error);
@@ -232,35 +277,102 @@ export default function StudentManagement() {
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
+    if (isEditMode) {
+      await handleUpdate();
+    } else {
+      try {
+        setIsSubmitting(true);
+        
+        const pgData = await AsyncStorage.getItem('pg');
+        if (!pgData) {
+          throw new Error('PG data not found');
+        }
+
+        const { PGID } = JSON.parse(pgData);
+        await addStudent(PGID, formData);
+        
+        showMessage({
+          message: 'Success',
+          description: 'Student added successfully',
+          type: 'success',
+        });
+        
+        setModalVisible(false);
+        loadStudents();
+        
+        // Reset form
+        setFormData({
+          name: '',
+          phone: '',
+          email: '',
+          monthlyRent: '',
+          guardianName: '',
+          guardianPhone: '',
+          password: '',
+          roomNo: 0,
+          joinDate: new Date().toISOString().split('T')[0]
+        });
+      } catch (error: any) {
+        console.error('Error adding student:', error);
+        setError({
+          message: error.message || 'Failed to add student',
+          type: 'error'
+        });
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+  };
+
+  const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    setShowDatePicker(false); // Close the picker after a date is selected
+    if (selectedDate) {
+      const formattedDate = selectedDate.toISOString().split('T')[0];
+      setFormData(prev => ({
+        ...prev,
+        [dateType]: formattedDate,
+      }));
+    }
+  };
+
+  const handleEdit = (student: Student) => {
+    setSelectedStudent(student);
+    setFormData({
+      name: student.FullName,
+      phone: student.Phone,
+      email: student.Email || '',
+      monthlyRent: student.Monthly_Rent || '',
+      guardianName: student.GuardianName || '',
+      guardianPhone: student.GuardianNumber || '',
+      password: '', // Don't set password for edit
+      roomNo: student.Room_No || 0,
+      joinDate: new Date(student.MoveInDate).toISOString().split('T')[0]
+    });
+    setIsEditMode(true);
+    setModalVisible(true);
+  };
+
+  const handleUpdate = async () => {
+    if (!selectedStudent) return;
+
     try {
       setIsSubmitting(true);
-      
-      // Get PG data
-      const pgData = await AsyncStorage.getItem('pg');
-      if (!pgData) {
-        throw new Error('PG data not found');
-      }
-
-      const { PGID } = JSON.parse(pgData);
-      
-      // Pass only pgId and formData
-      await addStudent(PGID, formData);
+      await updateStudent(selectedStudent.TenantID, formData);
       
       showMessage({
         message: 'Success',
-        description: 'Student added successfully',
+        description: 'Student updated successfully',
         type: 'success',
       });
       
       setModalVisible(false);
       loadStudents();
       
-      // Reset form
+      // Reset form and state
       setFormData({
         name: '',
         phone: '',
         email: '',
-        moveInDate: new Date().toISOString().split('T')[0],
         monthlyRent: '',
         guardianName: '',
         guardianPhone: '',
@@ -268,26 +380,126 @@ export default function StudentManagement() {
         roomNo: 0,
         joinDate: new Date().toISOString().split('T')[0]
       });
+      setIsEditMode(false);
+      setSelectedStudent(null);
     } catch (error: any) {
-      console.error('Error adding student:', error);
-      
-      if (error.message === 'INVALID_TOKEN') {
-        setError({
-          message: 'Session expired. Please login again.',
-          type: 'warning'
-        });
-        router.replace('/screens/LoginScreen');
-        return;
-      }
-
+      console.error('Error updating student:', error);
       setError({
-        message: error.message || 'Failed to add student',
+        message: error.message || 'Failed to update student',
         type: 'error'
       });
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const handleDelete = async (studentId: number, deleteType: 'SOFT' | 'HARD') => {
+    try {
+      const response = await deleteStudent(studentId, deleteType);
+      
+      showMessage({
+        message: 'Success',
+        description: response.message || (deleteType === 'HARD' 
+          ? 'Student permanently deleted'
+          : 'Student marked as moved out'),
+        type: 'success',
+      });
+
+      // Refresh the list
+      loadStudents();
+      
+      // Close any open modals
+      setDeleteConfirmVisible(false);
+      setViewModalVisible(false);
+      setSelectedStudent(null);
+    } catch (error: any) {
+      console.error('Delete error:', error);
+      setError({
+        message: error.message || 'Failed to delete student',
+        type: 'error'
+      });
+    }
+  };
+
+  // Update modal close handler
+  const handleModalClose = () => {
+    setModalVisible(false);
+    setIsEditMode(false);
+    setSelectedStudent(null);
+    setFormData({
+      name: '',
+      phone: '',
+      email: '',
+      monthlyRent: '',
+      guardianName: '',
+      guardianPhone: '',
+      password: '',
+      roomNo: 0,
+      joinDate: new Date().toISOString().split('T')[0]
+    });
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadStudents();
+    setRefreshing(false);
+  };
+
+  const exportToExcel = async () => {
+    try {
+      const ws = XLSX.utils.json_to_sheet(students.map(s => ({
+        Name: s.FullName,
+        Phone: s.Phone,
+        Email: s.Email || '',
+        Room: s.Room_No || '',
+        Status: s.Status,
+        'Monthly Rent': s.Monthly_Rent || '',
+        'Join Date': new Date(s.MoveInDate).toLocaleDateString()
+      })));
+      
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Students");
+      
+      const wbout = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+      const fileName = `${FileSystem.documentDirectory}students.xlsx`;
+      
+      await FileSystem.writeAsStringAsync(fileName, wbout, {
+        encoding: FileSystem.EncodingType.Base64
+      });
+      
+      await Sharing.shareAsync(fileName);
+    } catch (error) {
+      console.error('Export error:', error);
+      showMessage({
+        message: 'Export failed',
+        description: 'Failed to export student data',
+        type: 'error'
+      });
+    }
+  };
+
+  const filteredStudents = useMemo(() => {
+    return students
+      .filter(student => filterStatus === 'ALL' ? true : student.Status === filterStatus)
+      .sort((a, b) => {
+        switch (sortBy) {
+          case 'name':
+            return sortOrder === 'asc' 
+              ? a.FullName.localeCompare(b.FullName)
+              : b.FullName.localeCompare(a.FullName);
+          case 'room':
+            return sortOrder === 'asc'
+              ? (a.Room_No || 0) - (b.Room_No || 0)
+              : (b.Room_No || 0) - (a.Room_No || 0);
+          case 'date':
+            return sortOrder === 'asc'
+              ? new Date(a.MoveInDate).getTime() - new Date(b.MoveInDate).getTime()
+              : new Date(b.MoveInDate).getTime() - new Date(a.MoveInDate).getTime();
+          default:
+            return 0;
+        }
+      });
+  }, [students, filterStatus, sortBy, sortOrder]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -302,7 +514,7 @@ export default function StudentManagement() {
 
         <Modal
           visible={modalVisible}
-          onDismiss={() => setModalVisible(false)}
+          onDismiss={handleModalClose}
           contentContainerStyle={[
             styles.modalContainer,
             { 
@@ -321,7 +533,7 @@ export default function StudentManagement() {
                   style={[styles.avatar, { backgroundColor: theme.colors.primary }]}
                 />
                 <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
-                  Add New Student
+                  {isEditMode ? 'Edit Student' : 'Add New Student'}
                 </Text>
               </View>
 
@@ -397,28 +609,33 @@ export default function StudentManagement() {
                 style={styles.input}
               />
 
-              <TextInput
-                label="Join Date *"
-                value={formData.joinDate}
-                onChangeText={(text) => setFormData({ ...formData, joinDate: text })}
-                mode="outlined"
-                style={styles.input}
-                error={!formData.joinDate}
-                right={
-                  <TextInput.Icon 
-                    icon="calendar" 
-                    onPress={() => {
-                      // Here you can add a date picker
-                      // For now, we're using the default text input
-                    }} 
-                  />
-                }
-              />
+<TextInput
+        label="Join Date *"
+        value={formData.joinDate}
+        mode="outlined"
+        style={styles.input}
+        error={!formData.joinDate}
+        editable={false}
+        right={
+          <TextInput.Icon 
+            icon="calendar" 
+            onPress={() => setShowDatePicker(true)} 
+          />
+        }
+      />
+      {showDatePicker && (
+        <DateTimePicker
+          value={formData.joinDate ? new Date(formData.joinDate) : new Date()}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'inline' : 'default'}
+          onChange={onDateChange}
+        />
+      )}
 
               <View style={styles.buttonContainer}>
                 <Button 
                   mode="outlined" 
-                  onPress={() => setModalVisible(false)}
+                  onPress={handleModalClose}
                   style={styles.button}
                 >
                   Cancel
@@ -430,7 +647,10 @@ export default function StudentManagement() {
                   loading={isSubmitting}
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? 'Adding...' : 'Add Student'}
+                  {isSubmitting 
+                    ? (isEditMode ? 'Updating...' : 'Adding...') 
+                    : (isEditMode ? 'Update Student' : 'Add Student')
+                  }
                 </Button>
               </View>
             </View>
@@ -438,46 +658,173 @@ export default function StudentManagement() {
         </Modal>
       </Portal>
 
-      <Title style={[styles.title, { color: theme.colors.text }]}>Student Management</Title>
-      
-      <Searchbar
-        placeholder="Search students..."
-        onChangeText={setSearchQuery}
-        value={searchQuery}
-        style={styles.searchBar}
-      />
-
-      <DataTable>
-        <DataTable.Header>
-          <DataTable.Title textStyle={{ color: theme.colors.text }}>Name</DataTable.Title>
-          <DataTable.Title textStyle={{ color: theme.colors.text }}>Room No</DataTable.Title>
-          <DataTable.Title textStyle={{ color: theme.colors.text }}>Phone</DataTable.Title>
-          <DataTable.Title textStyle={{ color: theme.colors.text }}>Status</DataTable.Title>
-        </DataTable.Header>
-
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
+      <View style={styles.header}>
+        <Title style={[styles.title, { color: theme.colors.text }]}>
+          Student Management
+        </Title>
+        
+        <View style={styles.searchContainer}>
+          <Searchbar
+            placeholder="Search students..."
+            onChangeText={setSearchQuery}
+            value={searchQuery}
+            style={[styles.searchBar, isSmallScreen && styles.fullWidth]}
+          />
+          
+          <View style={styles.actionButtons}>
+            <IconButton
+              icon="refresh"
+              mode="contained-tonal"
+              onPress={handleRefresh}
+              loading={refreshing}
+            />
+            <IconButton
+              icon="filter-variant"
+              mode="contained-tonal"
+              onPress={() => setFilterVisible(true)}
+            />
+            <IconButton
+              icon="microsoft-excel"
+              mode="contained-tonal"
+              onPress={exportToExcel}
+            />
           </View>
-        ) : (
-          students.map(student => (
-            <DataTable.Row key={student.TenantID}>
-              <DataTable.Cell textStyle={{ color: theme.colors.text }}>
-                {student.FullName}
-              </DataTable.Cell>
-              <DataTable.Cell textStyle={{ color: theme.colors.text }}>
-                {student.Room_No || '-'}
-              </DataTable.Cell>
-              <DataTable.Cell textStyle={{ color: theme.colors.text }}>
-                {student.Phone}
-              </DataTable.Cell>
-              <DataTable.Cell textStyle={{ color: theme.colors.text }}>
-                {student.Status}
-              </DataTable.Cell>
-            </DataTable.Row>
-          ))
-        )}
-      </DataTable>
+        </View>
+      </View>
+
+      <View style={styles.filterContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <Chip
+            selected={filterStatus === 'ALL'}
+            onPress={() => setFilterStatus('ALL')}
+            style={styles.filterChip}
+          >
+            All
+          </Chip>
+          <Chip
+            selected={filterStatus === 'ACTIVE'}
+            onPress={() => setFilterStatus('ACTIVE')}
+            style={styles.filterChip}
+          >
+            Active
+          </Chip>
+          <Chip
+            selected={filterStatus === 'INACTIVE'}
+            onPress={() => setFilterStatus('INACTIVE')}
+            style={styles.filterChip}
+          >
+            Inactive
+          </Chip>
+          <Chip
+            selected={filterStatus === 'MOVED_OUT'}
+            onPress={() => setFilterStatus('MOVED_OUT')}
+            style={styles.filterChip}
+          >
+            Moved Out
+          </Chip>
+        </ScrollView>
+      </View>
+
+      <ScrollView style={styles.tableContainer}>
+        <DataTable>
+          <DataTable.Header style={[
+            styles.tableHeader,
+            { backgroundColor: theme.colors.surfaceVariant }
+          ]}>
+            <DataTable.Title 
+              style={styles.nameColumn}
+              textStyle={[styles.headerText, { color: theme.colors.text }]}
+            >
+              Name
+            </DataTable.Title>
+            <DataTable.Title 
+              style={styles.roomColumn}
+              textStyle={[styles.headerText, { color: theme.colors.text }]}
+            >
+              Room
+            </DataTable.Title>
+            <DataTable.Title 
+              style={styles.statusColumn}
+              textStyle={[styles.headerText, { color: theme.colors.text }]}
+            >
+              Status
+            </DataTable.Title>
+            <DataTable.Title 
+              style={styles.actionColumn}
+              textStyle={[styles.headerText, { color: theme.colors.text }]}
+            >
+              View
+            </DataTable.Title>
+          </DataTable.Header>
+
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={theme.colors.primary} />
+            </View>
+          ) : (
+            filteredStudents.map(student => (
+              <DataTable.Row 
+                key={student.TenantID}
+                style={[
+                  styles.tableRow,
+                  { borderBottomColor: theme.colors.surfaceVariant }
+                ]}
+                onPress={() => {
+                  setSelectedStudent(student);
+                  setViewModalVisible(true);
+                }}
+              >
+                <DataTable.Cell style={styles.nameColumn}>
+                  <View style={styles.nameCell}>
+                    <Avatar.Text 
+                      size={32} 
+                      label={student.FullName.substring(0, 2).toUpperCase()} 
+                      style={styles.avatar}
+                    />
+                    <Text style={[
+                      styles.nameText,
+                      { color: theme.colors.text }
+                    ]}>
+                      {student.FullName}
+                    </Text>
+                  </View>
+                </DataTable.Cell>
+                
+                <DataTable.Cell style={styles.roomColumn}>
+                  <Text style={[
+                    styles.roomText,
+                    { color: theme.colors.text }
+                  ]}>
+                    {student.Room_No || '-'}
+                  </Text>
+                </DataTable.Cell>
+                
+                <DataTable.Cell style={styles.statusColumn}>
+                  <View style={[
+                    styles.statusBadge,
+                    { backgroundColor: getStatusColor(student.Status, theme) }
+                  ]}>
+                    <Text style={[
+                      styles.statusText,
+                      { color: isDarkMode ? '#000' : '#FFF' }
+                    ]}>
+                      {student.Status}
+                    </Text>
+                  </View>
+                </DataTable.Cell>
+                
+                <DataTable.Cell style={styles.actionColumn}>
+                  <IconButton
+                    icon="chevron-right"
+                    size={20}
+                    iconColor={theme.colors.primary}
+                  />
+                </DataTable.Cell>
+              </DataTable.Row>
+            ))
+          )}
+        </DataTable>
+      </ScrollView>
 
       <FAB
         icon="plus"
@@ -488,6 +835,81 @@ export default function StudentManagement() {
         ]}
         onPress={() => setModalVisible(true)}
       />
+
+      <Portal>
+        <Dialog
+          visible={deleteConfirmVisible}
+          onDismiss={() => setDeleteConfirmVisible(false)}
+        >
+          <Dialog.Title>Delete Student</Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ marginBottom: 16 }}>
+              Are you sure you want to delete {selectedStudent?.FullName}?
+            </Text>
+            <View style={styles.deleteOptions}>
+              <RadioButton.Group
+                onValueChange={value => setDeleteType(value as 'SOFT' | 'HARD')}
+                value={deleteType}
+              >
+                <View style={styles.radioOption}>
+                  <RadioButton value="SOFT" />
+                  <Text>Mark as Moved Out</Text>
+                </View>
+                <View style={styles.radioOption}>
+                  <RadioButton value="HARD" />
+                  <Text>Permanently Delete</Text>
+                </View>
+              </RadioButton.Group>
+            </View>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setDeleteConfirmVisible(false)}>Cancel</Button>
+            <Button 
+              onPress={() => {
+                if (selectedStudent) {
+                  handleDelete(selectedStudent.TenantID, deleteType);
+                }
+                setDeleteConfirmVisible(false);
+              }}
+              textColor={theme.colors.error}
+            >
+              Delete
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      <StudentDetailsModal
+        visible={viewModalVisible}
+        onDismiss={() => {
+          setViewModalVisible(false);
+          setSelectedStudent(null);
+        }}
+        student={selectedStudent}
+        onEdit={(student) => {
+          setViewModalVisible(false);
+          handleEdit(student);
+        }}
+        onDelete={(student) => {
+          setViewModalVisible(false);
+          setSelectedStudent(student);
+          setDeleteConfirmVisible(true);
+        }}
+      />
+
+      <Portal>
+        <Modal
+          visible={filterVisible}
+          onDismiss={() => setFilterVisible(false)}
+          contentContainerStyle={[
+            styles.filterModal,
+            { backgroundColor: theme.colors.surface }
+          ]}
+        >
+          <Title>Filter Students</Title>
+          {/* Add filter options */}
+        </Modal>
+      </Portal>
     </View>
   );
 }
@@ -563,5 +985,103 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 9999,
     elevation: 9999,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  header: {
+    marginBottom: 16,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  tableContainer: {
+    flex: 1,
+  },
+  fullWidth: {
+    width: '100%',
+  },
+  filterModal: {
+    margin: 20,
+    padding: 20,
+    borderRadius: 8,
+  },
+  tableHeader: {
+    height: 48,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  headerText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  tableRow: {
+    minHeight: 64,
+    borderBottomWidth: 1,
+  },
+  nameColumn: {
+    flex: 3,
+    paddingRight: 8,
+  },
+  roomColumn: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  statusColumn: {
+    flex: 2,
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  actionColumn: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  nameCell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  avatar: {
+    marginRight: 12,
+  },
+  nameText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  roomText: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    alignSelf: 'center',
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  filterContainer: {
+    marginBottom: 16,
+  },
+  filterChip: {
+    marginRight: 8,
+  },
+  deleteOptions: {
+    marginTop: 8,
+  },
+  radioOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 4,
   },
 }); 
