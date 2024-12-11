@@ -29,6 +29,18 @@ export interface StudentForm {
   password: string;
   roomNo: number;
   joinDate: string;
+  status?: 'ACTIVE' | 'INACTIVE' | 'MOVED_OUT';
+}
+
+export interface ExcelStudent {
+  'Full Name': string;
+  'Phone': string;
+  'Room No': string | number;
+  'Monthly Rent': string | number;
+  'Email'?: string;
+  'Guardian Name'?: string;
+  'Guardian Phone'?: string;
+  'Password': string;
 }
 
 export const getStudents = async (pgId: number) => {
@@ -107,7 +119,8 @@ export const updateStudent = async (studentId: number, formData: StudentForm) =>
         guardianName: formData.guardianName || null,
         guardianPhone: formData.guardianPhone || null,
         roomNo: formData.roomNo,
-        joinDate: formData.joinDate
+        joinDate: formData.joinDate,
+        status: formData.status
       }
     );
 
@@ -179,5 +192,31 @@ export const deleteStudent = async (studentId: number, deleteType: 'SOFT' | 'HAR
       throw new Error('INVALID_TOKEN');
     }
     throw new Error(error.response?.data?.message || error.message || 'Failed to delete student');
+  }
+};
+
+export const importStudentsFromExcel = async (pgId: number, students: ExcelStudent[]) => {
+  try {
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+
+    const response = await api.post(
+      `/api/students/pg/${pgId}/bulk`,
+      { students }
+    );
+
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Failed to import students');
+    }
+
+    return response.data;
+  } catch (error: any) {
+    console.error('Error importing students:', error);
+    if (error.response?.status === 401) {
+      throw new Error('INVALID_TOKEN');
+    }
+    throw new Error(error.response?.data?.message || error.message || 'Failed to import students');
   }
 }; 

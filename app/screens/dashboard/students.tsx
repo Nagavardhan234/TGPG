@@ -15,12 +15,13 @@ import {
   IconButton,
   Dialog,
   Chip,
-  RadioButton
+  RadioButton,
+  SegmentedButtons
 } from 'react-native-paper';
 import { useTheme as useCustomTheme } from '@/app/context/ThemeContext';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getStudents, addStudent, getDefaultRent, Student, StudentForm, deleteStudent, updateStudent } from '@/app/services/student.service';
+import { getStudents, addStudent, getDefaultRent, Student, StudentForm, deleteStudent, updateStudent, importStudentsFromExcel } from '@/app/services/student.service';
 import { showMessage } from 'react-native-flash-message';
 import { ErrorNotification } from '@/app/components/ErrorNotification';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
@@ -29,6 +30,7 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import XLSX from 'xlsx';
 import { ExtendedTheme } from '@/app/types/theme';
+import * as DocumentPicker from 'expo-document-picker';
 
 interface FormData {
   name: string;
@@ -111,6 +113,26 @@ export default function StudentManagement() {
 
   const { width } = useWindowDimensions();
   const isSmallScreen = width < 768;
+
+  const [editFormData, setEditFormData] = useState<FormData & { status: string }>({
+    name: '',
+    phone: '',
+    email: '',
+    monthlyRent: '',
+    guardianName: '',
+    guardianPhone: '',
+    password: '',
+    roomNo: 0,
+    joinDate: new Date().toISOString().split('T')[0],
+    status: 'ACTIVE'
+  });
+
+  const [filterName, setFilterName] = useState('');
+  const [filterRoom, setFilterRoom] = useState('');
+  const [sortField, setSortField] = useState<'name' | 'room'>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const [importModalVisible, setImportModalVisible] = useState(false);
 
   useEffect(() => {
     loadStudents();
@@ -337,7 +359,7 @@ export default function StudentManagement() {
 
   const handleEdit = (student: Student) => {
     setSelectedStudent(student);
-    setFormData({
+    setEditFormData({
       name: student.FullName,
       phone: student.Phone,
       email: student.Email || '',
@@ -346,7 +368,8 @@ export default function StudentManagement() {
       guardianPhone: student.GuardianNumber || '',
       password: '', // Don't set password for edit
       roomNo: student.Room_No || 0,
-      joinDate: new Date(student.MoveInDate).toISOString().split('T')[0]
+      joinDate: new Date(student.MoveInDate).toISOString().split('T')[0],
+      status: student.Status
     });
     setIsEditMode(true);
     setModalVisible(true);
@@ -447,21 +470,145 @@ export default function StudentManagement() {
 
   const exportToExcel = async () => {
     try {
-      const ws = XLSX.utils.json_to_sheet(students.map(s => ({
-        Name: s.FullName,
-        Phone: s.Phone,
-        Email: s.Email || '',
-        Room: s.Room_No || '',
-        Status: s.Status,
+      // Create data for Excel
+      const data = students.map(s => ({
+        'Full Name': s.FullName,
+        'Phone': s.Phone,
+        'Email': s.Email || '',
+        'Room No': s.Room_No || '',
+        'Status': s.Status,
         'Monthly Rent': s.Monthly_Rent || '',
+        'Guardian Name': s.GuardianName || '',
+        'Guardian Phone': s.GuardianNumber || '',
         'Join Date': new Date(s.MoveInDate).toLocaleDateString()
-      })));
-      
+      }));
+
+      // Convert data to CSV string
+      const csvContent = [
+        Object.keys(data[0]).join(','), // Headers
+        ...data.map(row => Object.values(row).join(',')) // Data rows
+      ].join('\n');
+
+      // Create file
+      const fileName = `students_${new Date().toISOString().split('T')[0]}.csv`;
+      const filePath = `${FileSystem.documentDirectory}${fileName}`;
+
+      // Write file
+      await FileSystem.writeAsStringAsync(filePath, csvContent, {
+        encoding: FileSystem.EncodingType.UTF8
+      });
+
+      // Share file
+      await Sharing.shareAsync(filePath);
+    } catch (error) {
+      console.error('Export error:', error);
+      showMessage({
+        message: 'Export failed',
+        description: 'Failed to export student data',
+        type: 'error' as any
+      });
+    }
+  };
+
+  const importExcel = async () => {
+    try {
+      // Show import instructions modal first
+      setImportModalVisible(true);
+    } catch (error) {
+      console.error('Import error:', error);
+      showMessage({
+        message: 'Import failed',
+        description: 'Failed to import student data',
+        type: 'error'
+      });
+    }
+  };
+
+  const handleFileSelect = async () => {
+    try {
+      const pgData = await AsyncStorage.getItem('pg');
+      if (!pgData) {
+        throw new Error('PG data not found');
+      }
+      const { PGID } = JSON.parse(pgData);
+
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        copyToCacheDirectory: true
+      });
+
+      if (result.type === 'success') {
+        const fileContent = await FileSystem.readAsStringAsync(result.uri, {
+          encoding: FileSystem.EncodingType.Base64
+        });
+
+        const workbook = XLSX.read(fileContent, { type: 'base64' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const data = XLSX.utils.sheet_to_json(worksheet);
+
+        // Validate data
+        const validatedData = data.map((row: any) => {
+          if (!row['Full Name'] || !row['Phone'] || !row['Room No'] || !row['Monthly Rent'] || !row['Password']) {
+            throw new Error('Missing required fields');
+          }
+          return {
+            'Full Name': row['Full Name'],
+            'Phone': row['Phone'],
+            'Room No': row['Room No'],
+            'Monthly Rent': row['Monthly Rent'],
+            'Password': row['Password'],
+            'Email': row['Email'] || null,
+            'Guardian Name': row['Guardian Name'] || null,
+            'Guardian Phone': row['Guardian Phone'] || null
+          };
+        });
+
+        const response = await importStudentsFromExcel(PGID, validatedData);
+
+        showMessage({
+          message: 'Import Successful',
+          description: `Added ${response.data.added} students. ${
+            response.data.failed > 0 
+              ? `Failed to add ${response.data.failed} students.` 
+              : ''
+          }`,
+          type: 'success'
+        });
+
+        loadStudents();
+      }
+    } catch (error: any) {
+      console.error('Import error:', error);
+      showMessage({
+        message: 'Import Failed',
+        description: error.message || 'Failed to import students',
+        type: 'error'
+      });
+    } finally {
+      setImportModalVisible(false);
+    }
+  };
+
+  const downloadTemplate = async () => {
+    try {
+      const template = [{
+        'Full Name': 'John Doe',
+        'Phone': '9876543210',
+        'Room No': '101',
+        'Monthly Rent': '5000',
+        'Password': 'password123',
+        'Email': 'john@example.com',
+        'Guardian Name': 'Jane Doe',
+        'Guardian Phone': '9876543211'
+      }];
+
+      const ws = XLSX.utils.json_to_sheet(template);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Students");
+      XLSX.utils.book_append_sheet(wb, ws, "Template");
       
       const wbout = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
-      const fileName = `${FileSystem.documentDirectory}students.xlsx`;
+      const fileName = `${FileSystem.documentDirectory}student_template.xlsx`;
       
       await FileSystem.writeAsStringAsync(fileName, wbout, {
         encoding: FileSystem.EncodingType.Base64
@@ -469,10 +616,10 @@ export default function StudentManagement() {
       
       await Sharing.shareAsync(fileName);
     } catch (error) {
-      console.error('Export error:', error);
+      console.error('Template download error:', error);
       showMessage({
-        message: 'Export failed',
-        description: 'Failed to export student data',
+        message: 'Download Failed',
+        description: 'Failed to download template',
         type: 'error'
       });
     }
@@ -480,26 +627,25 @@ export default function StudentManagement() {
 
   const filteredStudents = useMemo(() => {
     return students
-      .filter(student => filterStatus === 'ALL' ? true : student.Status === filterStatus)
+      .filter(student => {
+        const matchesStatus = filterStatus === 'ALL' ? true : student.Status === filterStatus;
+        const matchesSearch = searchQuery 
+          ? student.FullName.toLowerCase().includes(searchQuery.toLowerCase())
+          : true;
+        const matchesRoom = filterRoom 
+          ? student.Room_No?.toString() === filterRoom
+          : true;
+        return matchesStatus && matchesSearch && matchesRoom;
+      })
       .sort((a, b) => {
-        switch (sortBy) {
-          case 'name':
-            return sortOrder === 'asc' 
-              ? a.FullName.localeCompare(b.FullName)
-              : b.FullName.localeCompare(a.FullName);
-          case 'room':
-            return sortOrder === 'asc'
-              ? (a.Room_No || 0) - (b.Room_No || 0)
-              : (b.Room_No || 0) - (a.Room_No || 0);
-          case 'date':
-            return sortOrder === 'asc'
-              ? new Date(a.MoveInDate).getTime() - new Date(b.MoveInDate).getTime()
-              : new Date(b.MoveInDate).getTime() - new Date(a.MoveInDate).getTime();
-          default:
-            return 0;
+        const direction = sortDirection === 'asc' ? 1 : -1;
+        if (sortField === 'name') {
+          return direction * a.FullName.localeCompare(b.FullName);
+        } else {
+          return direction * ((a.Room_No || 0) - (b.Room_No || 0));
         }
       });
-  }, [students, filterStatus, sortBy, sortOrder]);
+  }, [students, filterStatus, searchQuery, filterRoom, sortField, sortDirection]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -632,6 +778,44 @@ export default function StudentManagement() {
         />
       )}
 
+              {isEditMode && (
+                <View style={styles.statusSelector}>
+                  <Text style={[styles.label, { color: theme.colors.text }]}>Status</Text>
+                  <SegmentedButtons
+                    value={editFormData.status}
+                    onValueChange={value => 
+                      setEditFormData(prev => ({ ...prev, status: value as 'ACTIVE' | 'INACTIVE' | 'MOVED_OUT' }))
+                    }
+                    buttons={[
+                      {
+                        value: 'ACTIVE',
+                        label: 'Active',
+                        style: [
+                          styles.statusButton,
+                          { backgroundColor: editFormData.status === 'ACTIVE' ? theme.colors.primaryContainer : undefined }
+                        ]
+                      },
+                      {
+                        value: 'INACTIVE',
+                        label: 'Inactive',
+                        style: [
+                          styles.statusButton,
+                          { backgroundColor: editFormData.status === 'INACTIVE' ? theme.colors.errorContainer : undefined }
+                        ]
+                      },
+                      {
+                        value: 'MOVED_OUT',
+                        label: 'Moved Out',
+                        style: [
+                          styles.statusButton,
+                          { backgroundColor: editFormData.status === 'MOVED_OUT' ? theme.colors.surfaceVariant : undefined }
+                        ]
+                      }
+                    ]}
+                  />
+                </View>
+              )}
+
               <View style={styles.buttonContainer}>
                 <Button 
                   mode="outlined" 
@@ -665,12 +849,21 @@ export default function StudentManagement() {
         
         <View style={styles.searchContainer}>
           <Searchbar
-            placeholder="Search students..."
+            placeholder="Search by name..."
             onChangeText={setSearchQuery}
             value={searchQuery}
-            style={[styles.searchBar, isSmallScreen && styles.fullWidth]}
+            style={[styles.searchBar, { backgroundColor: theme.colors.surfaceVariant }]}
           />
-          
+          {!isSmallScreen && (
+          <TextInput
+            placeholder="Room No."
+            value={filterRoom}
+            onChangeText={setFilterRoom}
+            mode="outlined"
+            keyboardType="numeric"
+              style={styles.roomSearch}
+          />
+          )}
           <View style={styles.actionButtons}>
             <IconButton
               icon="refresh"
@@ -679,7 +872,7 @@ export default function StudentManagement() {
               loading={refreshing}
             />
             <IconButton
-              icon="filter-variant"
+              icon="sort"
               mode="contained-tonal"
               onPress={() => setFilterVisible(true)}
             />
@@ -698,6 +891,7 @@ export default function StudentManagement() {
             selected={filterStatus === 'ALL'}
             onPress={() => setFilterStatus('ALL')}
             style={styles.filterChip}
+            elevation={2}
           >
             All
           </Chip>
@@ -705,6 +899,7 @@ export default function StudentManagement() {
             selected={filterStatus === 'ACTIVE'}
             onPress={() => setFilterStatus('ACTIVE')}
             style={styles.filterChip}
+            elevation={2}
           >
             Active
           </Chip>
@@ -712,6 +907,7 @@ export default function StudentManagement() {
             selected={filterStatus === 'INACTIVE'}
             onPress={() => setFilterStatus('INACTIVE')}
             style={styles.filterChip}
+            elevation={2}
           >
             Inactive
           </Chip>
@@ -719,6 +915,7 @@ export default function StudentManagement() {
             selected={filterStatus === 'MOVED_OUT'}
             onPress={() => setFilterStatus('MOVED_OUT')}
             style={styles.filterChip}
+            elevation={2}
           >
             Moved Out
           </Chip>
@@ -767,11 +964,11 @@ export default function StudentManagement() {
                 key={student.TenantID}
                 style={[
                   styles.tableRow,
-                  { borderBottomColor: theme.colors.surfaceVariant }
+                  { borderBottomColor: '#e0e0e0' }
                 ]}
                 onPress={() => {
                   setSelectedStudent(student);
-                  setViewModalVisible(true);
+                  setModalVisible(true);
                 }}
               >
                 <DataTable.Cell style={styles.nameColumn}>
@@ -781,20 +978,14 @@ export default function StudentManagement() {
                       label={student.FullName.substring(0, 2).toUpperCase()} 
                       style={styles.avatar}
                     />
-                    <Text style={[
-                      styles.nameText,
-                      { color: theme.colors.text }
-                    ]}>
+                    <Text style={[styles.nameText, { color: '#000000' }]}>
                       {student.FullName}
                     </Text>
                   </View>
                 </DataTable.Cell>
                 
                 <DataTable.Cell style={styles.roomColumn}>
-                  <Text style={[
-                    styles.roomText,
-                    { color: theme.colors.text }
-                  ]}>
+                  <Text style={[styles.roomText, { color: '#000000' }]}>
                     {student.Room_No || '-'}
                   </Text>
                 </DataTable.Cell>
@@ -804,10 +995,7 @@ export default function StudentManagement() {
                     styles.statusBadge,
                     { backgroundColor: getStatusColor(student.Status, theme) }
                   ]}>
-                    <Text style={[
-                      styles.statusText,
-                      { color: isDarkMode ? '#000' : '#FFF' }
-                    ]}>
+                    <Text style={[styles.statusText, { color: '#ffffff' }]}>
                       {student.Status}
                     </Text>
                   </View>
@@ -816,7 +1004,7 @@ export default function StudentManagement() {
                 <DataTable.Cell style={styles.actionColumn}>
                   <IconButton
                     icon="chevron-right"
-                    size={20}
+                    size={24}
                     iconColor={theme.colors.primary}
                   />
                 </DataTable.Cell>
@@ -906,8 +1094,120 @@ export default function StudentManagement() {
             { backgroundColor: theme.colors.surface }
           ]}
         >
-          <Title>Filter Students</Title>
-          {/* Add filter options */}
+          <ScrollView>
+            <View style={styles.filterModalContent}>
+              <Title style={styles.filterTitle}>Sort Students</Title>
+
+              <View style={styles.sortSection}>
+                <Text style={[styles.filterSubtitle, { color: theme.colors.text }]}>Sort By</Text>
+                <RadioButton.Group
+                  onValueChange={value => setSortField(value as 'name' | 'room')}
+                  value={sortField}
+                >
+                  <View style={styles.radioOption}>
+                    <RadioButton value="name" />
+                    <Text>Name</Text>
+                  </View>
+                  <View style={styles.radioOption}>
+                    <RadioButton value="room" />
+                    <Text>Room Number</Text>
+                  </View>
+                </RadioButton.Group>
+
+                <View style={styles.sortDirectionContainer}>
+                  <Button
+                    mode={sortDirection === 'asc' ? 'contained' : 'outlined'}
+                    onPress={() => setSortDirection('asc')}
+                    style={styles.sortButton}
+                  >
+                    Ascending
+                  </Button>
+                  <Button
+                    mode={sortDirection === 'desc' ? 'contained' : 'outlined'}
+                    onPress={() => setSortDirection('desc')}
+                    style={styles.sortButton}
+                  >
+                    Descending
+                  </Button>
+                </View>
+              </View>
+
+              <View style={styles.filterActions}>
+                <Button
+                  mode="outlined"
+                  onPress={() => {
+                    setSortField('name');
+                    setSortDirection('asc');
+                  }}
+                  style={styles.filterButton}
+                >
+                  Reset
+                </Button>
+                <Button
+                  mode="contained"
+                  onPress={() => setFilterVisible(false)}
+                  style={styles.filterButton}
+                >
+                  Apply
+                </Button>
+              </View>
+            </View>
+          </ScrollView>
+        </Modal>
+      </Portal>
+
+      <Portal>
+        <Modal
+          visible={importModalVisible}
+          onDismiss={() => setImportModalVisible(false)}
+          contentContainerStyle={[
+            styles.importModal,
+            { backgroundColor: theme.colors.surface }
+          ]}
+        >
+          <ScrollView>
+            <View style={styles.importModalContent}>
+              <Title>Import Students from Excel</Title>
+              
+              <Text style={[styles.importInstructions, { color: theme.colors.text }]}>
+                Please ensure your Excel file has the following columns:
+              </Text>
+              
+              <View style={styles.columnList}>
+                <Text>• Full Name (required)</Text>
+                <Text>• Phone (required)</Text>
+                <Text>• Room No (required)</Text>
+                <Text>• Monthly Rent (required)</Text>
+                <Text>• Email (optional)</Text>
+                <Text>• Guardian Name (optional)</Text>
+                <Text>• Guardian Phone (optional)</Text>
+              </View>
+
+              <View style={styles.importActions}>
+                <Button
+                  mode="outlined"
+                  onPress={() => setImportModalVisible(false)}
+                  style={styles.importButton}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  mode="contained"
+                  onPress={handleFileSelect}
+                  style={styles.importButton}
+                >
+                  Select File
+                </Button>
+                <Button
+                  mode="outlined"
+                  onPress={downloadTemplate}
+                  style={styles.importButton}
+                >
+                  Download Template
+                </Button>
+              </View>
+            </View>
+          </ScrollView>
         </Modal>
       </Portal>
     </View>
@@ -919,14 +1219,29 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
+  header: {
+    marginBottom: 24,
+    gap: 16,
+  },
   title: {
-    marginBottom: 16,
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    alignItems: 'center',
   },
   searchBar: {
-    marginBottom: 16,
+    flex: 2,
+    minWidth: 200,
+    backgroundColor: '#f5f5f5',
   },
   loadingContainer: {
-    padding: 20,
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
   },
   modalContainer: {
@@ -969,10 +1284,14 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     margin: 16,
-    right: 0,
-    bottom: 0,
-    borderRadius: 28,
-    height: 56,
+    right: 16,
+    bottom: 16,
+    borderRadius: 16,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
   },
   fabLabel: {
     fontSize: 14,
@@ -988,39 +1307,39 @@ const styles = StyleSheet.create({
   },
   actionButtons: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
-  header: {
-    marginBottom: 16,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 8,
     flexWrap: 'wrap',
   },
+  filterContainer: {
+    marginBottom: 16,
+    paddingVertical: 8,
+  },
+  filterChip: {
+    marginRight: 8,
+    borderRadius: 20,
+  },
   tableContainer: {
     flex: 1,
-  },
-  fullWidth: {
-    width: '100%',
-  },
-  filterModal: {
-    margin: 20,
-    padding: 20,
-    borderRadius: 8,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#ffffff',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
   },
   tableHeader: {
-    height: 48,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
+    height: 56,
+    backgroundColor: '#f5f5f5',
   },
   headerText: {
     fontSize: 14,
     fontWeight: '600',
+    letterSpacing: 0.5,
   },
   tableRow: {
-    minHeight: 64,
+    minHeight: 72,
     borderBottomWidth: 1,
   },
   nameColumn: {
@@ -1048,6 +1367,7 @@ const styles = StyleSheet.create({
   },
   avatar: {
     marginRight: 12,
+    backgroundColor: '#e0e0e0',
   },
   nameText: {
     fontSize: 14,
@@ -1063,18 +1383,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignSelf: 'center',
     minWidth: 80,
-    alignItems: 'center',
   },
   statusText: {
     fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
-  },
-  filterContainer: {
-    marginBottom: 16,
-  },
-  filterChip: {
-    marginRight: 8,
   },
   deleteOptions: {
     marginTop: 8,
@@ -1083,5 +1396,93 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginVertical: 4,
+  },
+  statusSelector: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  statusButton: {
+    flex: 1,
+  },
+  importModal: {
+    margin: 20,
+    padding: 20,
+    borderRadius: 8,
+  },
+  importModalContent: {
+    padding: 20,
+  },
+  importInstructions: {
+    marginBottom: 20,
+  },
+  columnList: {
+    marginBottom: 20,
+  },
+  importActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  importButton: {
+    minWidth: 100,
+  },
+  filterModal: {
+    margin: 20,
+    padding: 20,
+    borderRadius: 8,
+  },
+  filterModalContent: {
+    padding: 20,
+  },
+  filterTitle: {
+    marginBottom: 20,
+  },
+  filterInput: {
+    marginBottom: 16,
+  },
+  sortSection: {
+    marginTop: 16,
+  },
+  filterSubtitle: {
+    marginBottom: 8,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  sortDirectionContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
+  },
+  sortButton: {
+    flex: 1,
+    marginHorizontal: 4,
+  },
+  filterButton: {
+    minWidth: 100,
+  },
+  filterActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    marginTop: 20,
+  },
+  searchBarSmall: {
+    flex: 1,
+    width: '100%',
+    marginBottom: 8,
+  },
+  roomSearch: {
+    flex: 1,
+    minWidth: 100,
+    maxWidth: 150,
+    backgroundColor: 'transparent',
+  },
+  roomSearchSmall: {
+    flex: 1,
+    width: '100%',
+    marginBottom: 8,
   },
 }); 
