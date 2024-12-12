@@ -145,6 +145,23 @@ export default function StudentManagement() {
     }
   }, [modalVisible]);
 
+  useEffect(() => {
+    if (selectedStudent && editModalVisible) {
+      setEditFormData({
+        name: selectedStudent.FullName,
+        phone: selectedStudent.Phone,
+        email: selectedStudent.Email || '',
+        monthlyRent: selectedStudent.Monthly_Rent || '',
+        guardianName: selectedStudent.GuardianName || '',
+        guardianPhone: selectedStudent.GuardianNumber || '',
+        password: '', // Don't populate password
+        roomNo: selectedStudent.Room_No || 0,
+        joinDate: selectedStudent.MoveInDate,
+        status: selectedStudent.Status
+      });
+    }
+  }, [selectedStudent, editModalVisible]);
+
   const validateForm = () => {
     const errors: string[] = [];
 
@@ -358,8 +375,9 @@ export default function StudentManagement() {
   };
 
   const handleEdit = (student: Student) => {
+    setViewModalVisible(false); // Close view modal first
     setSelectedStudent(student);
-    setEditFormData({
+    setFormData({
       name: student.FullName,
       phone: student.Phone,
       email: student.Email || '',
@@ -380,7 +398,16 @@ export default function StudentManagement() {
 
     try {
       setIsSubmitting(true);
-      await updateStudent(selectedStudent.TenantID, formData);
+      const pgData = await AsyncStorage.getItem('pg');
+      if (!pgData) {
+        throw new Error('PG data not found');
+      }
+      const { PGID } = JSON.parse(pgData);
+
+      await updateStudent(selectedStudent.TenantID, {
+        ...formData,
+        pgId: PGID // Include PG ID in update
+      });
       
       showMessage({
         message: 'Success',
@@ -418,25 +445,14 @@ export default function StudentManagement() {
 
   const handleDelete = async (studentId: number, deleteType: 'SOFT' | 'HARD') => {
     try {
-      const response = await deleteStudent(studentId, deleteType);
-      
+      setViewModalVisible(false); // Close view modal first
+      await deleteStudent(studentId, deleteType);
       showMessage({
-        message: 'Success',
-        description: response.message || (deleteType === 'HARD' 
-          ? 'Student permanently deleted'
-          : 'Student marked as moved out'),
+        message: 'Student deleted successfully',
         type: 'success',
       });
-
-      // Refresh the list
-      loadStudents();
-      
-      // Close any open modals
-      setDeleteConfirmVisible(false);
-      setViewModalVisible(false);
-      setSelectedStudent(null);
-    } catch (error: any) {
-      console.error('Delete error:', error);
+      loadStudents(); // Refresh the list
+    } catch (error) {
       setError({
         message: error.message || 'Failed to delete student',
         type: 'error'
@@ -972,7 +988,7 @@ export default function StudentManagement() {
 
       <Portal>
         <Dialog
-          visible={deleteConfirmVisible}
+          visible={deleteConfirmVisible && selectedStudent !== null}
           onDismiss={() => setDeleteConfirmVisible(false)}
         >
           <Dialog.Title>Delete Student</Dialog.Title>
@@ -1020,8 +1036,11 @@ export default function StudentManagement() {
           setSelectedStudent(null);
         }}
         student={selectedStudent}
-        onEdit={handleEdit}
+        onEdit={(student) => {
+          handleEdit(student);
+        }}
         onDelete={(student) => {
+          setViewModalVisible(false);
           setSelectedStudent(student);
           setDeleteConfirmVisible(true);
         }}

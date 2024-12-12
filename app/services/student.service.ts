@@ -89,25 +89,13 @@ export const addStudent = async (pgId: number, formData: StudentForm) => {
   }
 };
 
-export const updateStudent = async (studentId: number, formData: StudentForm) => {
+export const updateStudent = async (studentId: number, formData: StudentForm & { pgId?: number }) => {
   try {
-    const [token, pgData] = await Promise.all([
-      AsyncStorage.getItem('token'),
-      AsyncStorage.getItem('pg')
-    ]);
-
-    if (!token || !pgData) {
-      throw new Error('Authentication data missing');
+    const pgData = await AsyncStorage.getItem('pg');
+    if (!pgData) {
+      throw new Error('PG data not found');
     }
-
     const { PGID } = JSON.parse(pgData);
-
-    // Log the request data
-    console.log('Update request:', {
-      studentId,
-      pgId: PGID,
-      formData
-    });
 
     const response = await api.put(
       `/api/students/pg/${PGID}/student/${studentId}`,
@@ -120,7 +108,7 @@ export const updateStudent = async (studentId: number, formData: StudentForm) =>
         guardianPhone: formData.guardianPhone || null,
         roomNo: formData.roomNo,
         joinDate: formData.joinDate,
-        status: formData.status
+        status: formData.status || 'ACTIVE'
       }
     );
 
@@ -130,20 +118,12 @@ export const updateStudent = async (studentId: number, formData: StudentForm) =>
 
     return response.data;
   } catch (error: any) {
-    console.error('Error updating student:', {
-      error: error.message,
-      response: error.response?.data,
-      status: error.response?.status
-    });
-
+    console.error('Error updating student:', error);
     if (error.response?.status === 403) {
       throw new Error('You do not have access to this PG');
     }
     if (error.response?.status === 401) {
       throw new Error('INVALID_TOKEN');
-    }
-    if (error.response?.status === 400) {
-      throw new Error(error.response.data.message || 'Invalid input data');
     }
     throw new Error(error.response?.data?.message || error.message || 'Failed to update student');
   }
