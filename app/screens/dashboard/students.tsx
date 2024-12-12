@@ -940,35 +940,52 @@ export default function StudentManagement() {
 
       <ScrollView style={styles.tableContainer}>
         <DataTable>
-          <DataTable.Header style={{ backgroundColor: theme.colors.surfaceVariant }}>
-            <DataTable.Title>Name</DataTable.Title>
-            <DataTable.Title>Room</DataTable.Title>
-            <DataTable.Title>Status</DataTable.Title>
-            <DataTable.Title style={{ justifyContent: 'center' }}>View</DataTable.Title>
+          <DataTable.Header style={[styles.tableHeader, { backgroundColor: theme.colors.surfaceVariant }]}>
+            <DataTable.Title style={styles.nameColumn}>
+              <Text style={[styles.headerText, { color: theme.colors.onSurface }]}>Name</Text>
+            </DataTable.Title>
+            <DataTable.Title style={styles.roomColumn}>
+              <Text style={[styles.headerText, { color: theme.colors.onSurface }]}>Room</Text>
+            </DataTable.Title>
+            <DataTable.Title style={styles.actionColumn}>
+              <Text style={[styles.headerText, { color: theme.colors.onSurface }]}>View</Text>
+            </DataTable.Title>
           </DataTable.Header>
 
           {students.map((student) => (
-            <DataTable.Row key={student.TenantID}>
-              <DataTable.Cell>{student.FullName}</DataTable.Cell>
-              <DataTable.Cell>{student.Room_No || '-'}</DataTable.Cell>
-              <DataTable.Cell>
-                <View style={[
-                  styles.statusBadge,
-                  { backgroundColor: getStatusColor(student.Status, theme) }
-                ]}>
-                  <Text style={[styles.statusText, { color: '#ffffff' }]}>
-                    {student.Status}
+            <DataTable.Row 
+              key={student.TenantID}
+              style={[styles.tableRow, { backgroundColor: theme.colors.surface }]}
+            >
+              <DataTable.Cell style={styles.nameColumn}>
+                <View style={styles.nameCell}>
+                  <Avatar.Text 
+                    size={36} 
+                    label={student.FullName.substring(0, 2).toUpperCase()}
+                    style={[styles.avatar, { backgroundColor: theme.colors.primary }]}
+                  />
+                  <Text style={[styles.nameText, { color: theme.colors.onSurface }]}>
+                    {student.FullName}
                   </Text>
                 </View>
               </DataTable.Cell>
-              <DataTable.Cell style={{ justifyContent: 'center' }}>
+              <DataTable.Cell style={styles.roomColumn}>
+                <View style={styles.roomBadge}>
+                  <Text style={[styles.roomText, { color: theme.colors.onSurface }]}>
+                    {student.Room_No || '-'}
+                  </Text>
+                </View>
+              </DataTable.Cell>
+              <DataTable.Cell style={styles.actionColumn}>
                 <IconButton
                   icon="eye"
-                  size={20}
+                  size={24}
+                  iconColor={theme.colors.primary}
                   onPress={() => {
                     setSelectedStudent(student);
                     setViewModalVisible(true);
                   }}
+                  style={styles.viewButton}
                 />
               </DataTable.Cell>
             </DataTable.Row>
@@ -1281,74 +1298,66 @@ const styles = StyleSheet.create({
   },
   tableContainer: {
     flex: 1,
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: '#ffffff',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    paddingHorizontal: 16,
   },
   tableHeader: {
-    height: 56,
-    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
+    marginHorizontal: 4,
+    marginVertical: 8,
+    elevation: 2,
   },
   headerText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
-    letterSpacing: 0.5,
   },
   tableRow: {
-    minHeight: 72,
-    borderBottomWidth: 1,
+    marginHorizontal: 4,
+    marginVertical: 4,
+    borderRadius: 12,
+    elevation: 1,
   },
   nameColumn: {
-    flex: 3,
-    paddingRight: 8,
+    flex: 4,
+    paddingRight: 16,
   },
   roomColumn: {
-    flex: 1,
+    flex: 1.5,
     justifyContent: 'center',
-    paddingHorizontal: 8,
-  },
-  statusColumn: {
-    flex: 2,
-    justifyContent: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
   },
   actionColumn: {
     flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   nameCell: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    gap: 12,
+    flexWrap: 'nowrap',
   },
   avatar: {
-    marginRight: 12,
-    backgroundColor: '#e0e0e0',
+    width: 40,
+    height: 40,
   },
   nameText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '500',
+    flex: 1,
+  },
+  roomBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    alignSelf: 'flex-start',
   },
   roomText: {
     fontSize: 14,
-    textAlign: 'center',
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    alignSelf: 'center',
-    minWidth: 80,
-  },
-  statusText: {
-    fontSize: 12,
     fontWeight: '600',
-    textAlign: 'center',
+  },
+  viewButton: {
+    margin: 0,
   },
   deleteOptions: {
     marginTop: 8,
