@@ -924,93 +924,39 @@ export default function StudentManagement() {
 
       <ScrollView style={styles.tableContainer}>
         <DataTable>
-          <DataTable.Header style={[
-            styles.tableHeader,
-            { backgroundColor: theme.colors.surfaceVariant }
-          ]}>
-            <DataTable.Title 
-              style={styles.nameColumn}
-              textStyle={[styles.headerText, { color: theme.colors.text }]}
-            >
-              Name
-            </DataTable.Title>
-            <DataTable.Title 
-              style={styles.roomColumn}
-              textStyle={[styles.headerText, { color: theme.colors.text }]}
-            >
-              Room
-            </DataTable.Title>
-            <DataTable.Title 
-              style={styles.statusColumn}
-              textStyle={[styles.headerText, { color: theme.colors.text }]}
-            >
-              Status
-            </DataTable.Title>
-            <DataTable.Title 
-              style={styles.actionColumn}
-              textStyle={[styles.headerText, { color: theme.colors.text }]}
-            >
-              View
-            </DataTable.Title>
+          <DataTable.Header style={{ backgroundColor: theme.colors.surfaceVariant }}>
+            <DataTable.Title>Name</DataTable.Title>
+            <DataTable.Title>Room</DataTable.Title>
+            <DataTable.Title>Status</DataTable.Title>
+            <DataTable.Title style={{ justifyContent: 'center' }}>View</DataTable.Title>
           </DataTable.Header>
 
-          {isLoading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.colors.primary} />
-            </View>
-          ) : (
-            filteredStudents.map(student => (
-              <DataTable.Row 
-                key={student.TenantID}
-                style={[
-                  styles.tableRow,
-                  { borderBottomColor: '#e0e0e0' }
-                ]}
-                onPress={() => {
-                  setSelectedStudent(student);
-                  setModalVisible(true);
-                }}
-              >
-                <DataTable.Cell style={styles.nameColumn}>
-                  <View style={styles.nameCell}>
-                    <Avatar.Text 
-                      size={32} 
-                      label={student.FullName.substring(0, 2).toUpperCase()} 
-                      style={styles.avatar}
-                    />
-                    <Text style={[styles.nameText, { color: '#000000' }]}>
-                      {student.FullName}
-                    </Text>
-                  </View>
-                </DataTable.Cell>
-                
-                <DataTable.Cell style={styles.roomColumn}>
-                  <Text style={[styles.roomText, { color: '#000000' }]}>
-                    {student.Room_No || '-'}
+          {students.map((student) => (
+            <DataTable.Row key={student.TenantID}>
+              <DataTable.Cell>{student.FullName}</DataTable.Cell>
+              <DataTable.Cell>{student.Room_No || '-'}</DataTable.Cell>
+              <DataTable.Cell>
+                <View style={[
+                  styles.statusBadge,
+                  { backgroundColor: getStatusColor(student.Status, theme) }
+                ]}>
+                  <Text style={[styles.statusText, { color: '#ffffff' }]}>
+                    {student.Status}
                   </Text>
-                </DataTable.Cell>
-                
-                <DataTable.Cell style={styles.statusColumn}>
-                  <View style={[
-                    styles.statusBadge,
-                    { backgroundColor: getStatusColor(student.Status, theme) }
-                  ]}>
-                    <Text style={[styles.statusText, { color: '#ffffff' }]}>
-                      {student.Status}
-                    </Text>
-                  </View>
-                </DataTable.Cell>
-                
-                <DataTable.Cell style={styles.actionColumn}>
-                  <IconButton
-                    icon="chevron-right"
-                    size={24}
-                    iconColor={theme.colors.primary}
-                  />
-                </DataTable.Cell>
-              </DataTable.Row>
-            ))
-          )}
+                </View>
+              </DataTable.Cell>
+              <DataTable.Cell style={{ justifyContent: 'center' }}>
+                <IconButton
+                  icon="eye"
+                  size={20}
+                  onPress={() => {
+                    setSelectedStudent(student);
+                    setViewModalVisible(true);
+                  }}
+                />
+              </DataTable.Cell>
+            </DataTable.Row>
+          ))}
         </DataTable>
       </ScrollView>
 
@@ -1074,12 +1020,8 @@ export default function StudentManagement() {
           setSelectedStudent(null);
         }}
         student={selectedStudent}
-        onEdit={(student) => {
-          setViewModalVisible(false);
-          handleEdit(student);
-        }}
+        onEdit={handleEdit}
         onDelete={(student) => {
-          setViewModalVisible(false);
           setSelectedStudent(student);
           setDeleteConfirmVisible(true);
         }}
