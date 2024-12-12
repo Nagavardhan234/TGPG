@@ -3,6 +3,7 @@ import { ThemeProvider } from '@/app/context/ThemeContext';
 import { PaperProvider } from 'react-native-paper';
 import { AuthProvider } from '@/app/context/AuthContext';
 import { useTheme } from '@/app/context/ThemeContext';
+import { StudentAuthProvider } from '@/app/context/StudentAuthContext';
 
 function AppContent() {
   const { theme } = useTheme();
@@ -33,16 +34,25 @@ function AppContent() {
             gestureEnabled: false,
           }} 
         />
+        <Stack.Screen 
+          name="screens/student/dashboard" 
+          options={{
+            headerShown: false,
+            gestureEnabled: false,
+          }} 
+        />
       </Stack>
     </PaperProvider>
   );
 }
 
-export default function Layout() {
+export default function RootLayout() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <AppContent />
+        <StudentAuthProvider>
+          <AppContent />
+        </StudentAuthProvider>
       </AuthProvider>
     </ThemeProvider>
   );
@@ -64,6 +74,7 @@ export const routeMap = {
   'screens/dashboard/profile': 'dashboard/profile',
   'screens/dashboard/settings': 'dashboard/settings',
   'screens/dashboard/notifications': 'dashboard/notifications',
+  'screens/student/dashboard': 'student/dashboard',
 } as const;
 
 export type RouteMap = typeof routeMap;
