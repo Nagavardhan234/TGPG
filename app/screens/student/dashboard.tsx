@@ -168,9 +168,13 @@ export default function StudentDashboard() {
       backgroundColor: paperTheme.dark ? '#121212' : theme?.colors?.background,
     },
     card: {
-      backgroundColor: paperTheme.dark ? '#1E1E1E' : theme?.colors?.surface,
-      borderColor: paperTheme.dark ? '#2C2C2C' : undefined,
-      borderWidth: paperTheme.dark ? 1 : 0,
+      backgroundColor: paperTheme.dark 
+        ? 'rgba(30, 30, 30, 0.8)' 
+        : 'rgba(255, 255, 255, 0.8)',
+      borderColor: paperTheme.dark 
+        ? 'rgba(255, 255, 255, 0.1)' 
+        : 'rgba(255, 255, 255, 0.3)',
+      borderWidth: 1,
     },
     menuCard: {
       backgroundColor: paperTheme.dark ? '#1E1E1E' : theme?.colors?.surface,
@@ -190,6 +194,41 @@ export default function StudentDashboard() {
     },
     surfaceVariant: {
       backgroundColor: paperTheme.dark ? '#2C2C2C' : '#E8E8E8',
+    },
+    floatingShapes: {
+      shape1: {
+        width: 150,
+        height: 150,
+        backgroundColor: theme?.colors?.primary || '#6200ee',
+        top: -30,
+        right: -30,
+        transform: [{ scale: 1.2 }],
+        position: 'absolute',
+        borderRadius: 100,
+        opacity: 0.1,
+      },
+      shape2: {
+        width: 100,
+        height: 100,
+        backgroundColor: paperTheme.dark ? '#8F6BF2' : '#4CAF50',
+        bottom: -20,
+        left: -20,
+        transform: [{ scale: 0.8 }],
+        position: 'absolute',
+        borderRadius: 100,
+        opacity: 0.1,
+      },
+      shape3: {
+        width: 80,
+        height: 80,
+        backgroundColor: theme?.colors?.secondary || '#03DAC6',
+        top: '50%',
+        right: '20%',
+        transform: [{ scale: 0.6 }],
+        position: 'absolute',
+        borderRadius: 100,
+        opacity: 0.1,
+      }
     }
   };
 
@@ -281,7 +320,29 @@ export default function StudentDashboard() {
         </Surface>
 
         {/* Payment Progress Tracker */}
-        <Surface style={[styles.paymentCard, dynamicStyles.card]}>
+        <Surface 
+          style={[
+            styles.paymentCard, 
+            dynamicStyles.card,
+            styles.glassEffect
+          ]}
+        >
+          {/* Add gradient background */}
+          <LinearGradient
+            colors={[
+              'rgba(255, 255, 255, 0.1)',
+              'rgba(255, 255, 255, 0.05)',
+            ]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.glassGradient}
+          />
+          
+          {/* Update floating shapes to use dynamic styles */}
+          <View style={dynamicStyles.floatingShapes.shape1} />
+          <View style={dynamicStyles.floatingShapes.shape2} />
+          <View style={dynamicStyles.floatingShapes.shape3} />
+
           <View style={styles.paymentHeader}>
             <View>
               <Text style={[styles.sectionTitle, { color: theme?.colors?.primary }]}>
@@ -753,6 +814,10 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 24,
     elevation: 4,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 1,
   },
   paymentHeader: {
     flexDirection: 'row',
@@ -837,5 +902,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  glassEffect: {
+    backdropFilter: 'blur(10px)',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+  },
+  glassGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    opacity: 0.5,
   },
 }); 
