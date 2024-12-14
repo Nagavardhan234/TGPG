@@ -13,7 +13,7 @@ import {
   Divider
 } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
-import DashboardLayout from '@/app/components/layouts/DashboardLayout';
+import { StudentDashboardLayout } from '@/app/components/layouts';
 import { router } from 'expo-router';
 
 interface ChatRoom {
@@ -151,10 +151,7 @@ export default function MessagesScreen() {
   );
 
   return (
-    <DashboardLayout
-      title="Messages"
-      subtitle="Chat with roommates and PG"
-    >
+    <StudentDashboardLayout title="Messages">
       <View style={styles.container}>
         <Surface style={[styles.header, { backgroundColor: theme?.colors?.surface }]}>
           <Searchbar
@@ -199,7 +196,7 @@ export default function MessagesScreen() {
           onPress={() => {/* Handle new chat */}}
         />
       </View>
-    </DashboardLayout>
+    </StudentDashboardLayout>
   );
 }
 

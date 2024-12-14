@@ -15,7 +15,7 @@ import {
   ActivityIndicator
 } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
-import DashboardLayout from '@/app/components/layouts/DashboardLayout';
+import { StudentDashboardLayout } from '@/app/components/layouts';
 import { useLocalSearchParams, router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
@@ -251,17 +251,7 @@ export default function ChatScreen() {
   );
 
   return (
-    <DashboardLayout
-      title="Room 301 Group"
-      subtitle="3 participants"
-      headerRight={() => (
-        <View style={styles.headerRight}>
-          <IconButton icon="video" onPress={() => {}} />
-          <IconButton icon="phone" onPress={() => {}} />
-          <IconButton icon="dots-vertical" onPress={() => {}} />
-        </View>
-      )}
-    >
+    <StudentDashboardLayout title="Chat">
       <KeyboardAvoidingView 
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -358,7 +348,7 @@ export default function ChatScreen() {
           </Modal>
         </Portal>
       </KeyboardAvoidingView>
-    </DashboardLayout>
+    </StudentDashboardLayout>
   );
 }
 

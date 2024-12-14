@@ -12,7 +12,7 @@ import {
   SegmentedButtons
 } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
-import DashboardLayout from '@/app/components/layouts/DashboardLayout';
+import { StudentDashboardLayout } from '@/app/components/layouts';
 import { Calendar } from 'react-native-calendars';
 import { router } from 'expo-router';
 
@@ -148,10 +148,7 @@ export default function EventsScreen() {
   );
 
   return (
-    <DashboardLayout
-      title="PG Events"
-      subtitle="Stay updated with upcoming events"
-    >
+    <StudentDashboardLayout title="Events">
       <View style={styles.container}>
         <Surface style={[styles.header, { backgroundColor: theme?.colors?.surface }]}>
           <SegmentedButtons
@@ -196,7 +193,7 @@ export default function EventsScreen() {
           onPress={() => router.push('/screens/student/community/events/create')}
         />
       </View>
-    </DashboardLayout>
+    </StudentDashboardLayout>
   );
 }
 

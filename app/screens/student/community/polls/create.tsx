@@ -12,7 +12,7 @@ import {
   Modal
 } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
-import DashboardLayout from '@/app/components/layouts/DashboardLayout';
+import { StudentDashboardLayout } from '@/app/components/layouts';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 
@@ -69,10 +69,7 @@ export default function CreatePollScreen() {
   };
 
   return (
-    <DashboardLayout
-      title="Create Poll"
-      subtitle="Add a new community poll"
-    >
+    <StudentDashboardLayout title="Create Poll">
       <ScrollView style={styles.container}>
         <Surface style={[styles.section, { backgroundColor: theme?.colors?.surface }]}>
           <SegmentedButtons
@@ -170,7 +167,7 @@ export default function CreatePollScreen() {
           </Button>
         </Surface>
       </ScrollView>
-    </DashboardLayout>
+    </StudentDashboardLayout>
   );
 }
 

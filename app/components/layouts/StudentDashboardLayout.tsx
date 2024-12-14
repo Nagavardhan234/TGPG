@@ -61,9 +61,9 @@ const studentMenuItems = [
     route: '/screens/student/meals'
   },
   {
-    icon: 'washing-machine',
-    label: 'Laundry',
-    route: '/screens/student/laundry'
+    icon: 'account-group-outline',
+    label: 'Split Work',
+    route: '/screens/student/split-work'
   },
   {
     icon: 'alert-circle',
@@ -73,11 +73,32 @@ const studentMenuItems = [
 ];
 
 export default function StudentDashboardLayout({ children, title, subtitle, headerRight }: Props) {
-  const { theme } = useTheme();
+  const { theme, toggleTheme } = useTheme();
   const paperTheme = usePaperTheme();
   const { student, logout } = useStudentAuth();
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
   const [expandedMenu, setExpandedMenu] = React.useState<string | null>(null);
+
+  const dynamicStyles = {
+    container: {
+      flex: 1,
+      backgroundColor: paperTheme.dark ? '#121212' : theme?.colors?.background,
+    },
+    header: {
+      backgroundColor: paperTheme.dark ? '#1E1E1E' : theme?.colors?.surface,
+      borderBottomColor: paperTheme.dark ? '#2C2C2C' : undefined,
+      borderBottomWidth: paperTheme.dark ? 1 : 0,
+    },
+    drawer: {
+      backgroundColor: paperTheme.dark ? '#1E1E1E' : theme?.colors?.surface,
+      borderRightColor: paperTheme.dark ? '#2C2C2C' : undefined,
+      borderRightWidth: paperTheme.dark ? 1 : 0,
+    },
+    headerIcon: {
+      backgroundColor: paperTheme.dark ? '#2C2C2C' : theme?.colors?.surfaceVariant,
+      borderRadius: 12,
+    }
+  };
 
   const renderMenuItem = (item: typeof studentMenuItems[0]) => {
     if ('children' in item) {
@@ -119,13 +140,14 @@ export default function StudentDashboardLayout({ children, title, subtitle, head
   };
 
   return (
-    <View style={styles.container}>
-      <Surface style={[styles.header, { backgroundColor: theme?.colors?.surface }]}>
+    <View style={dynamicStyles.container}>
+      <Surface style={[styles.header, dynamicStyles.header]}>
         <View style={styles.headerContent}>
           <View style={styles.headerLeft}>
             <IconButton 
               icon="menu" 
-              onPress={() => setIsDrawerOpen(true)} 
+              onPress={() => setIsDrawerOpen(true)}
+              iconColor={theme?.colors?.onSurface}
             />
             <View>
               <Text style={[styles.title, { color: theme?.colors?.onSurface }]}>
@@ -139,8 +161,18 @@ export default function StudentDashboardLayout({ children, title, subtitle, head
             </View>
           </View>
           <View style={styles.headerRight}>
-            <IconButton icon="bell" onPress={() => {}} />
-            <IconButton icon="theme-light-dark" onPress={() => {}} />
+            <IconButton 
+              icon="bell" 
+              onPress={() => {}}
+              style={styles.headerIcon}
+              iconColor={theme?.colors?.onSurface}
+            />
+            <IconButton 
+              icon={paperTheme.dark ? 'weather-sunny' : 'weather-night'}
+              onPress={toggleTheme}
+              style={styles.headerIcon}
+              iconColor={theme?.colors?.onSurface}
+            />
             <Avatar.Text
               size={35}
               label={student?.FullName?.substring(0, 2).toUpperCase() || 'ST'}
@@ -154,10 +186,7 @@ export default function StudentDashboardLayout({ children, title, subtitle, head
         <Modal
           visible={isDrawerOpen}
           onDismiss={() => setIsDrawerOpen(false)}
-          contentContainerStyle={[
-            styles.drawer,
-            { backgroundColor: theme?.colors?.surface }
-          ]}
+          contentContainerStyle={[styles.drawer, dynamicStyles.drawer]}
         >
           <Surface style={[styles.drawerHeader, { backgroundColor: theme?.colors?.surface }]}>
             <Avatar.Text
@@ -248,5 +277,8 @@ const styles = StyleSheet.create({
     elevation: 16,
     borderTopRightRadius: 20,
     borderBottomRightRadius: 20,
+  },
+  headerIcon: {
+    margin: 0,
   },
 }); 

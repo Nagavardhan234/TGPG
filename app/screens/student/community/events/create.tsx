@@ -15,7 +15,7 @@ import {
   Divider
 } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
-import DashboardLayout from '@/app/components/layouts/DashboardLayout';
+import { StudentDashboardLayout } from '@/app/components/layouts';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
@@ -74,10 +74,7 @@ export default function CreateEventScreen() {
   };
 
   return (
-    <DashboardLayout
-      title="Create Event"
-      subtitle="Add a new PG event"
-    >
+    <StudentDashboardLayout title="Create Event">
       <ScrollView style={styles.container}>
         <Surface style={[styles.section, { backgroundColor: theme?.colors?.surface }]}>
           {/* Event Type Selector */}
@@ -224,7 +221,7 @@ export default function CreateEventScreen() {
           }}
         />
       )}
-    </DashboardLayout>
+    </StudentDashboardLayout>
   );
 }
 

@@ -13,7 +13,7 @@ import {
   Modal
 } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
-import DashboardLayout from '@/app/components/layouts/DashboardLayout';
+import { StudentDashboardLayout } from '@/app/components/layouts';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useStudentAuth } from '@/app/context/StudentAuthContext';
 import DailyRankingModal from './DailyRankingModal';
@@ -167,10 +167,7 @@ export default function RankingsScreen() {
   };
 
   return (
-    <DashboardLayout
-      title="Rankings & Achievements"
-      subtitle="Track your progress"
-    >
+    <StudentDashboardLayout title="Rankings">
       <View style={styles.container}>
         <Surface style={[styles.header, { backgroundColor: theme?.colors?.surface }]}>
           <SegmentedButtons
@@ -202,7 +199,7 @@ export default function RankingsScreen() {
         onDismiss={() => setShowDailyModal(false)}
         onSubmit={handleDailyRanking}
       />
-    </DashboardLayout>
+    </StudentDashboardLayout>
   );
 }
 
