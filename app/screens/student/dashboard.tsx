@@ -123,12 +123,33 @@ const paymentHistory: PaymentHistory[] = [
   }
 ];
 
-// Helper function for color opacity
+// Update the color helper function to properly handle rgba colors
 const withOpacity = (color: string | undefined, opacity: number) => {
-  if (!color) return '#00000020';
-  // Remove any existing opacity
-  const baseColor = color.replace(/[^0-9a-f]/gi, '');
-  return `#${baseColor}${Math.round(opacity * 255).toString(16).padStart(2, '0')}`;
+  if (!color) return `rgba(0, 0, 0, ${opacity})`;
+  
+  try {
+    // For rgb/rgba colors
+    if (color.startsWith('rgb')) {
+      const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
+      if (rgbaMatch) {
+        const [_, r, g, b] = rgbaMatch;
+        return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+      }
+    }
+    
+    // For hex colors
+    if (color.startsWith('#')) {
+      const hex = color.replace('#', '');
+      const r = parseInt(hex.substring(0, 2), 16);
+      const g = parseInt(hex.substring(2, 4), 16);
+      const b = parseInt(hex.substring(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    }
+    
+    return `rgba(0, 0, 0, ${opacity})`;
+  } catch {
+    return `rgba(0, 0, 0, ${opacity})`;
+  }
 };
 
 export default function StudentDashboard() {
@@ -156,35 +177,19 @@ export default function StudentDashboard() {
       borderColor: paperTheme.dark ? '#2C2C2C' : undefined,
       borderWidth: paperTheme.dark ? 1 : 0,
     },
-    progressBar: {
-      height: 8,
-      backgroundColor: theme?.colors?.primary + '20',
-      borderRadius: 4,
-      marginBottom: 8,
-    },
-    menuIcon: {
-      margin: 0,
-      borderRadius: 16,
-      backgroundColor: theme?.colors?.primaryContainer,
-    },
-    paymentTracker: {
-      margin: 16,
-      padding: 20,
-      borderRadius: 24,
-      elevation: 4,
-    },
-    paymentHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 20,
-    },
     progressBackground: {
       height: 8,
-      backgroundColor: '#E0E0E0',
+      backgroundColor: paperTheme.dark ? '#2C2C2C' : '#E8E8E8',
       borderRadius: 4,
       overflow: 'hidden',
       marginBottom: 8,
+    },
+    progressBar: {
+      height: '100%',
+      borderRadius: 4,
+    },
+    surfaceVariant: {
+      backgroundColor: paperTheme.dark ? '#2C2C2C' : '#E8E8E8',
     }
   };
 
@@ -276,43 +281,54 @@ export default function StudentDashboard() {
         </Surface>
 
         {/* Payment Progress Tracker */}
-        <View style={styles.paymentSection}>
-          <Text style={[styles.sectionTitle, { color: theme?.colors?.primary }]}>
-            Payment Progress
-          </Text>
-          
-          <View style={styles.dueDateRow}>
-            <IconButton 
-              icon="clock-alert-outline"
-              size={18}
-              iconColor={theme?.colors?.error}
-              style={styles.clockIcon}
-            />
-            <Text style={[styles.dueText, { color: theme?.colors?.error }]}>
-              Due in 5 days
-            </Text>
+        <Surface style={[styles.paymentCard, dynamicStyles.card]}>
+          <View style={styles.paymentHeader}>
+            <View>
+              <Text style={[styles.sectionTitle, { color: theme?.colors?.primary }]}>
+                Payment Progress
+              </Text>
+              <View style={styles.dueDateContainer}>
+                <IconButton 
+                  icon="clock-alert-outline"
+                  size={18}
+                  iconColor={theme?.colors?.error}
+                  style={styles.clockIcon}
+                />
+                <Text style={[styles.dueText, { color: theme?.colors?.error }]}>
+                  Due in 5 days
+                </Text>
+              </View>
+            </View>
+            <LinearGradient
+              colors={[theme?.colors?.primary || '#6200ee', `${theme?.colors?.primary}80` || '#8F6BF2']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.paymentBadge}
+            >
+              <Text style={styles.paymentBadgeText}>Monthly Rent</Text>
+            </LinearGradient>
           </View>
 
-          <View style={styles.amountRow}>
-            <Text style={[styles.amount, { color: theme?.colors?.onSurface }]}>
-              ₹4,000
-            </Text>
-            <Text style={[styles.amountLabel, { color: theme?.colors?.onSurfaceVariant }]}> of </Text>
+          <View style={styles.amountContainer}>
+            <View style={styles.amountWrapper}>
+              <Text style={[styles.currencySymbol, { color: theme?.colors?.onSurfaceVariant }]}>₹</Text>
+              <Text style={[styles.amount, { color: theme?.colors?.onSurface }]}>
+                4,000
+              </Text>
+            </View>
+            <Text style={[styles.amountSeparator, { color: theme?.colors?.onSurfaceVariant }]}> of </Text>
             <Text style={[styles.totalAmount, { color: theme?.colors?.onSurface }]}>
               ₹6,000
             </Text>
           </View>
 
           <View style={styles.progressContainer}>
-            <View style={styles.progressBackground}>
-              <View 
-                style={[
-                  styles.progressFill,
-                  { 
-                    width: `${(4000/6000) * 100}%`,
-                    backgroundColor: theme?.colors?.primary
-                  }
-                ]} 
+            <View style={[styles.progressBackground, dynamicStyles.surfaceVariant]}>
+              <LinearGradient
+                colors={[theme?.colors?.primary || '#6200ee', `${theme?.colors?.primary}80` || '#8F6BF2']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={[styles.progressBar, { width: '67%' }]}
               />
             </View>
             <Text style={[styles.progressText, { color: theme?.colors?.onSurfaceVariant }]}>
@@ -325,10 +341,19 @@ export default function StudentDashboard() {
             onPress={() => router.push('/screens/student/payments')}
             style={[styles.payButton, { backgroundColor: theme?.colors?.primary }]}
             contentStyle={styles.payButtonContent}
+            labelStyle={styles.payButtonLabel}
+            icon={({ size, color }) => (
+              <IconButton
+                icon="wallet"
+                size={20}
+                iconColor={color}
+                style={{ margin: 0, padding: 0 }}
+              />
+            )}
           >
             Pay Now
           </Button>
-        </View>
+        </Surface>
 
         {/* Menu Sections */}
         {menuItems.map(renderMenuSection)}
@@ -578,7 +603,6 @@ const styles = StyleSheet.create({
   },
   progressBackground: {
     height: 8,
-    backgroundColor: '#E0E0E0',
     borderRadius: 4,
     overflow: 'hidden',
     marginBottom: 8,
@@ -592,15 +616,19 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   payButton: {
-    borderRadius: 16,
-    elevation: 0,
+    marginTop: 16,
+    borderRadius: 12,
+    elevation: 2,
   },
   payButtonContent: {
-    height: 52,
+    height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   payButtonLabel: {
     fontSize: 16,
     fontWeight: '600',
+    marginLeft: 8,
   },
   recentPayments: {
     margin: 16,
@@ -693,10 +721,9 @@ const styles = StyleSheet.create({
   },
   progressBackground: {
     height: 8,
-    backgroundColor: '#E8E8E8',
     borderRadius: 4,
     overflow: 'hidden',
-    marginBottom: 4,
+    marginBottom: 8,
   },
   progressFill: {
     height: '100%',
@@ -708,9 +735,107 @@ const styles = StyleSheet.create({
   },
   payButton: {
     marginTop: 16,
-    borderRadius: 8,
+    borderRadius: 12,
+    elevation: 2,
   },
   payButtonContent: {
     height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  payButtonLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  paymentCard: {
+    margin: 16,
+    padding: 20,
+    borderRadius: 24,
+    elevation: 4,
+  },
+  paymentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 20,
+  },
+  paymentBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  paymentBadgeText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  dueDateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  clockIcon: {
+    margin: 0,
+    padding: 0,
+  },
+  dueText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  amountContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 24,
+  },
+  amountWrapper: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  currencySymbol: {
+    fontSize: 24,
+    marginRight: 2,
+  },
+  amount: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    lineHeight: 44,
+  },
+  amountSeparator: {
+    fontSize: 16,
+    marginHorizontal: 8,
+  },
+  totalAmount: {
+    fontSize: 24,
+    fontWeight: '600',
+  },
+  progressBackground: {
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressBar: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 12,
+    textAlign: 'right',
+  },
+  payButton: {
+    marginTop: 16,
+    borderRadius: 12,
+    elevation: 2,
+  },
+  payButtonContent: {
+    height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  payButtonLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
   },
 }); 

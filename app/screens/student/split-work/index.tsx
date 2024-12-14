@@ -56,42 +56,32 @@ const dummyTasks: Task[] = [
   }
 ];
 
-// Update the color helper function to handle colors safely
+// Use the same updated withOpacity function
 const withOpacity = (color: string | undefined, opacity: number) => {
-  if (!color) return 'rgba(0, 0, 0, 0.12)';
+  if (!color) return `rgba(0, 0, 0, ${opacity})`;
   
   try {
-    // For theme colors that might be rgb/rgba
+    // For rgb/rgba colors
     if (color.startsWith('rgb')) {
-      return color.replace('rgb', 'rgba').replace(')', `, ${opacity})`);
+      const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
+      if (rgbaMatch) {
+        const [_, r, g, b] = rgbaMatch;
+        return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+      }
     }
     
     // For hex colors
     if (color.startsWith('#')) {
-      // Convert hex to rgb
-      const r = parseInt(color.slice(1, 3), 16);
-      const g = parseInt(color.slice(3, 5), 16);
-      const b = parseInt(color.slice(5, 7), 16);
+      const hex = color.replace('#', '');
+      const r = parseInt(hex.substring(0, 2), 16);
+      const g = parseInt(hex.substring(2, 4), 16);
+      const b = parseInt(hex.substring(4, 6), 16);
       return `rgba(${r}, ${g}, ${b}, ${opacity})`;
     }
     
-    return 'rgba(0, 0, 0, 0.12)'; // Fallback
+    return `rgba(0, 0, 0, ${opacity})`;
   } catch {
-    return 'rgba(0, 0, 0, 0.12)'; // Fallback if parsing fails
-  }
-};
-
-// Update how we use the color function
-const getPriorityColor = (priority: 'high' | 'medium' | 'low') => {
-  switch (priority) {
-    case 'high':
-      return withOpacity(theme?.colors?.error || '#FF0000', 0.12);
-    case 'medium':
-      return withOpacity(theme?.colors?.warning || '#FFA500', 0.12);
-    case 'low':
-      return withOpacity(theme?.colors?.success || '#4CAF50', 0.12);
-    default:
-      return 'rgba(0, 0, 0, 0.12)';
+    return `rgba(0, 0, 0, ${opacity})`;
   }
 };
 
@@ -100,6 +90,20 @@ export default function SplitWorkScreen() {
   const paperTheme = usePaperTheme();
   const [tasks, setTasks] = useState<Task[]>(dummyTasks);
   const [selectedTab, setSelectedTab] = useState<'all' | 'mine'>('all');
+
+  // Move getPriorityColor inside component to access theme
+  const getPriorityColor = (priority: 'high' | 'medium' | 'low') => {
+    switch (priority) {
+      case 'high':
+        return withOpacity(theme?.colors?.error || '#FF0000', 0.12);
+      case 'medium':
+        return withOpacity(theme?.colors?.warning || '#FFA500', 0.12);
+      case 'low':
+        return withOpacity(theme?.colors?.success || '#4CAF50', 0.12);
+      default:
+        return 'rgba(0, 0, 0, 0.12)';
+    }
+  };
 
   const dynamicStyles = {
     container: {
