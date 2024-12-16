@@ -109,6 +109,7 @@ export default function DashboardHome() {
 
       const { id } = JSON.parse(managerData);
       const dashboardStats = await getDashboardStats(id);
+      console.log(dashboardStats);
       setStats(dashboardStats);
 
     } catch (error: any) {
@@ -257,7 +258,7 @@ export default function DashboardHome() {
                 : 'rgba(255,255,255,0.2)'
             }]}>
               <Text style={styles.totalMembers}>
-                🏠 Total Members: {stats?.students?.total || 0}
+                🏠 Members Available: {stats?.students?.occupied || 0}
               </Text>
             </View>
           </View>
@@ -319,7 +320,7 @@ export default function DashboardHome() {
           </Text>
           <ModernPieChart
             data={{
-              value: stats?.students?.available || 0,
+              value: stats?.students?.occupied || 0,
               total: stats?.students?.total || 1,
               label: 'Available Students'
             }}

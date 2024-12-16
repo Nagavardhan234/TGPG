@@ -1171,7 +1171,7 @@ export default function ManagerRegistration() {
             style={styles.input}
           />
           <ValidationInput
-            label="Total Number of Tenants"
+            label="Number of Tenants per Room"
             value={pgDetails.totalTenants}
             onChangeText={text => setPgDetails(prev => ({ ...prev, totalTenants: text }))}
             error={validationErrors.find(error => error.field === 'totalTenants')?.message}

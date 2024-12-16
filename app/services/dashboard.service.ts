@@ -33,6 +33,7 @@ export const getDashboardStats = async (managerId: number): Promise<DashboardSta
   try {
     const response = await api.get<ApiResponse<DashboardStats>>(`${ENDPOINTS.DASHBOARD_STATS}/${managerId}`);
     return response.data.data;
+    console.log('Dashboard Stats:', response.data.data);
   } catch (error) {
     console.error('Error fetching dashboard stats:', error);
     throw error;
