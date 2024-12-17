@@ -649,27 +649,6 @@ export default function StudentManagement() {
     }, 500));
   };
 
-  // Add pagination component
-  const renderPagination = () => (
-    <View style={styles.paginationContainer}>
-      <Button
-        mode="outlined"
-        onPress={() => loadStudents(page - 1)}
-        disabled={page === 1 || loading}
-      >
-        Previous
-      </Button>
-      <Text>Page {page} of {totalPages}</Text>
-      <Button
-        mode="outlined"
-        onPress={() => loadStudents(page + 1)}
-        disabled={page >= totalPages || loading}
-      >
-        Next
-      </Button>
-    </View>
-  );
-
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Portal>
@@ -945,7 +924,22 @@ export default function StudentManagement() {
         </ScrollView>
       </View>
 
-      <ScrollView style={styles.tableContainer}>
+      <ScrollView 
+        style={styles.tableContainer}
+        onScroll={({ nativeEvent }) => {
+          const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+          const paddingToBottom = 50; // Trigger loading earlier for smoother experience
+          const isCloseToBottom = 
+            layoutMeasurement.height + contentOffset.y >= 
+            contentSize.height - paddingToBottom;
+          
+          if (isCloseToBottom && !loading && page < totalPages) {
+            loadStudents(page + 1);
+          }
+        }}
+        scrollEventThrottle={16} // More frequent updates for smoother scrolling
+        showsVerticalScrollIndicator={false} // Cleaner look
+      >
         <DataTable>
           <DataTable.Header style={[styles.tableHeader, { backgroundColor: theme.colors.surfaceVariant }]}>
             <DataTable.Title style={styles.nameColumn}>
@@ -1194,8 +1188,6 @@ export default function StudentManagement() {
           </ScrollView>
         </Modal>
       </Portal>
-
-      {renderPagination()}
     </View>
   );
 }
@@ -1462,11 +1454,5 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     marginBottom: 8,
-  },
-  paginationContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 16,
   },
 }); 
