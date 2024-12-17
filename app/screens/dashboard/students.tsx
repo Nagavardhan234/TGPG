@@ -21,7 +21,7 @@ import {
 import { useTheme as useCustomTheme } from '@/app/context/ThemeContext';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getStudents, addStudent, getDefaultRent, Student, StudentForm, deleteStudent, updateStudent, importStudentsFromExcel } from '@/app/services/student.service';
+import { getStudents, addStudent, getDefaultRent, Student, StudentForm, deleteStudent, updateStudent, importStudentsFromExcel, getStudentsWithPagination } from '@/app/services/student.service';
 import { showMessage } from 'react-native-flash-message';
 import { ErrorNotification } from '@/app/components/ErrorNotification';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
@@ -134,6 +134,12 @@ export default function StudentManagement() {
 
   const [importModalVisible, setImportModalVisible] = useState(false);
 
+  // Add pagination state
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout>();
+
   useEffect(() => {
     loadStudents();
     loadDefaultRent();
@@ -228,58 +234,26 @@ export default function StudentManagement() {
     return true;
   };
 
-  const loadStudents = async () => {
+  const loadStudents = async (pageNum = page, search = searchQuery) => {
     try {
-      setIsLoading(true);
-      setError(null);
+      setLoading(true);
+      const pgData = await AsyncStorage.getItem('pg');
+      if (!pgData) throw new Error('PG data not found');
       
-      // Get both PG data and token
-      const [pgData, token] = await Promise.all([
-        AsyncStorage.getItem('pg'),
-        AsyncStorage.getItem('token')
-      ]);
-
-      console.log('Token before request:', token); // Debug log
-      console.log('PG data:', pgData); // Debug log
-
-      if (!token) {
-        setError({
-          message: 'Authentication token not found. Please login again.',
-          type: 'error'
-        });
-        router.replace('/screens/LoginScreen');
-        return;
-      }
-
-      if (!pgData) {
-        setError({
-          message: 'PG data not found',
-          type: 'error'
-        });
-        return;
-      }
-
       const { PGID } = JSON.parse(pgData);
-      const studentsData = await getStudents(PGID);
-      setStudents(studentsData);
+      const response = await getStudentsWithPagination(PGID, pageNum, 10, search);
+      
+      setStudents(response.data);
+      setTotalPages(response.totalPages);
+      setPage(response.currentPage);
     } catch (error) {
       console.error('Error loading students:', error);
-      
-      if (error.message === 'INVALID_TOKEN') {
-        setError({
-          message: 'Session expired. Please login again.',
-          type: 'warning'
-        });
-        router.replace('/screens/LoginScreen');
-        return;
-      }
-
       setError({
         message: error.message || 'Failed to load students',
         type: 'error'
       });
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
@@ -663,6 +637,39 @@ export default function StudentManagement() {
       });
   }, [students, filterStatus, searchQuery, filterRoom, sortField, sortDirection]);
 
+  // Add search handler with debounce
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    
+    setSearchTimeout(setTimeout(() => {
+      loadStudents(1, query);
+    }, 500));
+  };
+
+  // Add pagination component
+  const renderPagination = () => (
+    <View style={styles.paginationContainer}>
+      <Button
+        mode="outlined"
+        onPress={() => loadStudents(page - 1)}
+        disabled={page === 1 || loading}
+      >
+        Previous
+      </Button>
+      <Text>Page {page} of {totalPages}</Text>
+      <Button
+        mode="outlined"
+        onPress={() => loadStudents(page + 1)}
+        disabled={page >= totalPages || loading}
+      >
+        Next
+      </Button>
+    </View>
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Portal>
@@ -865,8 +872,8 @@ export default function StudentManagement() {
         
         <View style={styles.searchContainer}>
           <Searchbar
-            placeholder="Search by name..."
-            onChangeText={setSearchQuery}
+            placeholder="Search students..."
+            onChangeText={handleSearch}
             value={searchQuery}
             style={[styles.searchBar, { backgroundColor: theme.colors.surfaceVariant }]}
           />
@@ -995,7 +1002,6 @@ export default function StudentManagement() {
 
       <FAB
         icon="plus"
-        label="Add Student"
         style={[
           styles.fab, 
           { backgroundColor: isDarkMode ? '#D0BCFF' : theme.colors.primary }
@@ -1188,6 +1194,8 @@ export default function StudentManagement() {
           </ScrollView>
         </Modal>
       </Portal>
+
+      {renderPagination()}
     </View>
   );
 }
@@ -1454,5 +1462,11 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     marginBottom: 8,
+  },
+  paginationContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 16,
   },
 }); 

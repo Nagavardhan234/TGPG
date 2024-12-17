@@ -3,29 +3,21 @@ import { BASE_URL } from '../constants/endpoints';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const api = axios.create({
-  baseURL: BASE_URL,
+  baseURL: 'http://localhost:3000',
   timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json'
+  }
 });
 
-// Add request interceptor to handle token
+// Add request interceptor to include token
 api.interceptors.request.use(
   async (config) => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      console.log('Token from storage:', token); // Debug log
-      
-      if (token) {
-        // Ensure token is properly formatted
-        const formattedToken = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-        config.headers.Authorization = formattedToken;
-      } else {
-        console.warn('No token found in storage');
-      }
-      return config;
-    } catch (error) {
-      console.error('Error in axios interceptor:', error);
-      return Promise.reject(error);
+    const token = await AsyncStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
+    return config;
   },
   (error) => {
     return Promise.reject(error);
