@@ -1,5 +1,6 @@
 import api from '@/app/config/axios.config';
 import { ENDPOINTS } from '@/app/constants/endpoints';
+import { API_URL } from '@/app/config/api.config';
 
 export interface DashboardStats {
   students: {
@@ -36,6 +37,32 @@ export const getDashboardStats = async (managerId: number): Promise<DashboardSta
     console.log('Dashboard Stats:', response.data.data);
   } catch (error) {
     console.error('Error fetching dashboard stats:', error);
+    throw error;
+  }
+}; 
+
+export interface RoomStats {
+  room_number: number;
+  active_tenants: number;
+  room_filled_status: number;
+  capacity?: number;
+}
+
+export interface RoomStatsResponse {
+  rooms_json: RoomStats[];
+}
+
+export const getRoomStats = async (pgId: number): Promise<RoomStatsResponse> => {
+  try {
+    const response = await fetch(`${API_URL}/api/dashboard/rooms/${pgId}`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch room stats');
+    }
+    const data = await response.json();
+    console.log('Room stats response:', data);
+    return data;
+  } catch (error) {
+    console.error('Error fetching room stats:', error);
     throw error;
   }
 }; 
