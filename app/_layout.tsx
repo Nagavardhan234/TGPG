@@ -1,60 +1,22 @@
-import { Stack } from 'expo-router/stack';
-import { ThemeProvider } from '@/app/context/ThemeContext';
+import React from 'react';
+import { Stack } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
+import { ThemeProvider } from '@/app/context/ThemeContext';
 import { AuthProvider } from '@/app/context/AuthContext';
-import { useTheme } from '@/app/context/ThemeContext';
-import { StudentAuthProvider } from '@/app/context/StudentAuthContext';
 
-function AppContent() {
-  const { theme } = useTheme();
-
+export default function Layout() {
   return (
-    <PaperProvider theme={theme}>
-      <Stack
-        screenOptions={{
-          headerShown: false,
-        }}
-      >
-        <Stack.Screen 
-          name="index" 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="screens/LoginScreen" 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="screens/ManagerRegistration" 
-          options={{ headerShown: false }} 
-        />
-        <Stack.Screen 
-          name="screens/dashboard" 
-          options={{
-            headerShown: false,
-            gestureEnabled: false,
-          }} 
-        />
-        <Stack.Screen 
-          name="screens/student/dashboard" 
-          options={{
-            headerShown: false,
-            gestureEnabled: false,
-          }} 
-        />
-      </Stack>
-    </PaperProvider>
-  );
-}
-
-export default function RootLayout() {
-  return (
-    <ThemeProvider>
-      <AuthProvider>
-        <StudentAuthProvider>
-          <AppContent />
-        </StudentAuthProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <AuthProvider>
+      <ThemeProvider>
+        <PaperProvider>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+            }}
+          />
+        </PaperProvider>
+      </ThemeProvider>
+    </AuthProvider>
   );
 }
 
