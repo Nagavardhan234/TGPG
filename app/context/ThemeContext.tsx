@@ -1,77 +1,70 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useColorScheme } from 'react-native';
-import { MD3DarkTheme, MD3LightTheme } from 'react-native-paper';
+import React, { createContext, useContext, useState, useCallback } from 'react';
+import { MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
 
-// Define your custom theme colors
-const customColors = {
-  light: {
-    ...MD3LightTheme.colors,
-    primary: '#6750A4',
-    background: '#FFFFFF',
-    surface: '#F4F4F4',
-    text: '#000000',
-    onSurface: '#000000',
-    outline: 'rgba(0, 0, 0, 0.12)',
-    elevation: {
-      level0: 'transparent',
-      level1: '#fff',
-      level2: '#f5f5f5',
-      level3: '#e0e0e0',
-    },
-  },
-  dark: {
-    ...MD3DarkTheme.colors,
-    primary: '#D0BCFF',
-    background: '#121212',
-    surface: '#1E1E1E',
-    surfaceVariant: '#2d2d2d',
-    text: '#FFFFFF',
-    onSurface: '#FFFFFF',
-    outline: 'rgba(255, 255, 255, 0.12)',
-    elevation: {
-      level0: '#121212',
-      level1: '#1E1E1E',
-      level2: '#222222',
-      level3: '#242424',
-    },
-  },
+// Extend MD3Colors to include our custom colors
+interface ExtendedColors {
+  text: string;
+  textSecondary: string;
+}
+
+// Create custom theme type
+type CustomTheme = typeof MD3LightTheme & {
+  colors: typeof MD3LightTheme.colors & ExtendedColors;
 };
 
-// Create custom themes
-const lightTheme = {
-  ...MD3LightTheme,
-  colors: customColors.light,
-};
-
-const darkTheme = {
-  ...MD3DarkTheme,
-  colors: customColors.dark,
-};
-
-type ThemeContextType = {
-  theme: typeof lightTheme;
+interface ThemeContextType {
+  theme: CustomTheme;
   isDarkMode: boolean;
   toggleTheme: () => void;
+}
+
+const ThemeContext = createContext<ThemeContextType | null>(null);
+
+// Create base themes
+const darkTheme: CustomTheme = {
+  ...MD3DarkTheme,
+  colors: {
+    ...MD3DarkTheme.colors,
+    primary: '#D0BCFF',
+    secondary: '#CCC2DC',
+    background: '#1C1B1F',
+    text: '#FFFFFF',
+    textSecondary: 'rgba(255, 255, 255, 0.7)',
+  }
 };
 
-export const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+const lightTheme: CustomTheme = {
+  ...MD3LightTheme,
+  colors: {
+    ...MD3LightTheme.colors,
+    primary: '#6750A4',
+    secondary: '#625B71',
+    background: '#FFFBFE',
+    text: '#000000',
+    textSecondary: 'rgba(0, 0, 0, 0.7)',
+  }
+};
 
-export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const colorScheme = useColorScheme();
-  const [isDarkMode, setIsDarkMode] = useState(colorScheme === 'dark');
+interface ThemeProviderProps {
+  children: React.ReactNode;
+}
 
-  useEffect(() => {
-    setIsDarkMode(colorScheme === 'dark');
-  }, [colorScheme]);
-
+export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const theme = isDarkMode ? darkTheme : lightTheme;
 
-  const toggleTheme = () => {
-    setIsDarkMode(!isDarkMode);
+  const toggleTheme = useCallback(() => {
+    setIsDarkMode(prev => !prev);
+  }, []);
+
+  const value = {
+    theme,
+    isDarkMode,
+    toggleTheme
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, isDarkMode, toggleTheme }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   );
@@ -79,7 +72,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
 export const useTheme = () => {
   const context = useContext(ThemeContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useTheme must be used within a ThemeProvider');
   }
   return context;
