@@ -39,14 +39,11 @@ export default function RoomManagement() {
     try {
       setLoading(true);
       const response = await getRoomStats(pgId);
-      console.log('Response from getRoomStats:', response);
       if (response.success && response.rooms_json) {
-        // Check if rooms_json is a string and parse it if necessary
         const parsedRooms = typeof response.rooms_json[0].rooms_json === 'string' 
           ? JSON.parse(response.rooms_json[0].rooms_json) 
           : response.rooms_json[0].rooms_json;
 
-        // Ensure the rooms are in the expected format
         const formattedRooms = parsedRooms.map(room => ({
           room_number: room.room_number || 'N/A',
           capacity: response.rooms_json[0].Capacity || 0,
@@ -54,7 +51,6 @@ export default function RoomManagement() {
           room_filled_status: room.room_filled_status || 0,
         }));
         setRooms(formattedRooms);
-        console.log('Set rooms to:', formattedRooms);
       } else {
         console.error('Invalid response format:', response);
       }
@@ -82,22 +78,22 @@ export default function RoomManagement() {
 
   return (
     <View style={[styles.container, { backgroundColor: isDarkMode ? '#121212' : theme.colors.background }]}>
-      <Title style={[styles.title, { color: theme.colors.text }]}>Room Management</Title>
+      <Title style={[styles.title, { color: isDarkMode ? '#FFFFFF' : theme.colors.text }]}>Room Management</Title>
 
       <Searchbar
         placeholder="Search rooms..."
         onChangeText={setSearchQuery}
         value={searchQuery}
-        style={[styles.searchBar, { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : theme.colors.surface }]}
+        style={[styles.searchBar, { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : theme.colors.surface }]}
         iconColor={theme.colors.primary}
         inputStyle={{ color: theme.colors.text }}
       />
 
       <View style={styles.filterContainer}>
-        <Chip selected={filter === 'all'} onPress={() => setFilter('all')}>All</Chip>
-        <Chip selected={filter === 'occupied'} onPress={() => setFilter('occupied')}>Occupied</Chip>
-        <Chip selected={filter === 'vacant'} onPress={() => setFilter('vacant')}>Vacant</Chip>
-        <Chip selected={filter === 'maintenance'} onPress={() => setFilter('maintenance')}>Maintenance</Chip>
+        <Chip selected={filter === 'all'} onPress={() => setFilter('all')} style={styles.chip}>All</Chip>
+        <Chip selected={filter === 'occupied'} onPress={() => setFilter('occupied')} style={styles.chip}>Occupied</Chip>
+        <Chip selected={filter === 'vacant'} onPress={() => setFilter('vacant')} style={styles.chip}>Vacant</Chip>
+        <Chip selected={filter === 'maintenance'} onPress={() => setFilter('maintenance')} style={styles.chip}>Maintenance</Chip>
       </View>
 
       {loading ? (
@@ -109,26 +105,23 @@ export default function RoomManagement() {
           <View style={styles.roomsGrid}>
             {filteredRooms.length > 0 ? (
               filteredRooms.map((room, index) => (
-                <Card key={index} style={[styles.roomCard, {
-                  backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : theme.colors.surface
-                }]}>
+                <Card key={index} style={[styles.roomCard, { backgroundColor: isDarkMode ? '#1E1E1E' : '#FFFFFF' }]}>
                   <Card.Content>
-                    <Title style={{ color: theme.colors.text }}>
-                      Room {room.room_number}
-                    </Title>
-                    <Paragraph style={{ color: theme.colors.text }}>
-                      Capacity: {room.capacity}
-                    </Paragraph>
-                    <Paragraph style={{ color: theme.colors.text }}>
-                      Status: {room.room_filled_status === 1 ? 'Occupied' : 'Vacant'}
-                    </Paragraph>
+                    <Title style={{ color: theme.colors.text }}>Room {room.room_number}</Title>
+                    <Paragraph style={{ color: theme.colors.text }}>Capacity: {room.capacity}</Paragraph>
                     <Paragraph style={{ color: theme.colors.text }}>
                       Current Occupants: {room.active_tenants}/{room.capacity}
                     </Paragraph>
                   </Card.Content>
                   <Card.Actions>
-                    <Button textColor={theme.colors.primary}>Details</Button>
-                    <Button textColor={theme.colors.primary}>Edit</Button>
+                    <Button onPress={() => {}} style={styles.actionButton}>Edit</Button>
+                    <Button 
+                      onPress={() => {}} 
+                      style={[styles.actionButton]} 
+                      textColor={isDarkMode ? '#FF6F61' : '#FF4444'}
+                    >
+                      Delete
+                    </Button>
                   </Card.Actions>
                 </Card>
               ))
@@ -143,9 +136,10 @@ export default function RoomManagement() {
 
       <FAB
         icon="plus"
-        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+        style={[styles.fab, { 
+          backgroundColor: isDarkMode ? '#FF6F61' : '#FFB4A9',
+        }]}
         onPress={() => {}}
-        label="Add Room"
       />
     </View>
   );
@@ -158,6 +152,8 @@ const styles = StyleSheet.create({
   },
   title: {
     marginBottom: 16,
+    fontSize: 24,
+    fontWeight: 'bold',
   },
   searchBar: {
     marginBottom: 16,
@@ -168,6 +164,10 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 16,
   },
+  chip: {
+    backgroundColor: 'transparent',
+    color: '#6200EE',
+  },
   roomsContainer: {
     flex: 1,
   },
@@ -177,7 +177,19 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   roomCard: {
-    width: 300,
+    width: '100%',
+    maxWidth: 300,
+    borderRadius: 15,
+    elevation: 5,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  actionButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
   },
   fab: {
     position: 'absolute',
