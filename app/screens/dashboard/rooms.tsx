@@ -5,6 +5,7 @@ import { useTheme } from '@/app/context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getRoomStats } from '@/app/services/dashboard.service';
 import { RoomStats } from '@/app/services/dashboard.service';
+import { router } from 'expo-router';
 
 export default function RoomManagement() {
   const { theme, isDarkMode } = useTheme();
@@ -76,6 +77,14 @@ export default function RoomManagement() {
     });
   }, [rooms, searchQuery, filter]);
 
+  // Add navigation handler
+  const handleEditRoom = (room: RoomStats) => {
+    router.push({
+      pathname: '/screens/dashboard/edit-room',
+      params: { roomData: JSON.stringify(room) }
+    });
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: isDarkMode ? '#121212' : theme.colors.background }]}>
       <Title style={[styles.title, { color: isDarkMode ? '#FFFFFF' : theme.colors.text }]}>Room Management</Title>
@@ -114,7 +123,12 @@ export default function RoomManagement() {
                     </Paragraph>
                   </Card.Content>
                   <Card.Actions>
-                    <Button onPress={() => {}} style={styles.actionButton}>Edit</Button>
+                    <Button 
+                      onPress={() => handleEditRoom(room)} 
+                      style={styles.actionButton}
+                    >
+                      Edit
+                    </Button>
                     <Button 
                       onPress={() => {}} 
                       style={[styles.actionButton]} 
