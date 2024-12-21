@@ -10,6 +10,7 @@ export const ENDPOINTS = {
   DASHBOARD_STATS: '/api/dashboard/stats',
   STUDENT_LOGIN: '/api/students/login',
   STUDENT_DASHBOARD: '/api/students/dashboard',
+  ROOM_DETAILS: '/api/dashboard/rooms/:pgId/details/:roomNumber',
 };
 
 export const BASE_URL = 'http://localhost:3000';

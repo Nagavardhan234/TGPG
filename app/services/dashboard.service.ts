@@ -25,6 +25,7 @@ export interface DashboardStats {
 }
 
 interface ApiResponse<T> {
+  students: RoomOccupant[] | PromiseLike<RoomOccupant[]>;
   success: boolean;
   data: T;
   message?: string;
@@ -63,6 +64,29 @@ export const getRoomStats = async (pgId: number): Promise<RoomStatsResponse> => 
     return data;
   } catch (error) {
     console.error('Error fetching room stats:', error);
+    throw error;
+  }
+}; 
+
+export interface RoomOccupant {
+  student_id: number;
+  name: string;
+  phone: string;
+  email: string;
+  room_number: string;
+  joining_date: string;
+}
+
+export const getRoomOccupants = async (pgId: number, roomNumber: string): Promise<RoomOccupant[]> => {
+  try {
+    const endpoint = ENDPOINTS.ROOM_DETAILS
+      .replace(':pgId', pgId.toString())
+      .replace(':roomNumber', roomNumber);
+      
+    const response = await api.get<ApiResponse<RoomOccupant[]>>(endpoint);
+    return response.data.students;
+  } catch (error) {
+    console.error('Error fetching room occupants:', error);
     throw error;
   }
 }; 

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { 
   Title, 
@@ -11,33 +11,66 @@ import {
   Divider,
   Portal,
   Dialog,
-  Text
+  Text,
+  Avatar
 } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
+import { useAuth } from '@/app/context/AuthContext';
+import { getRoomOccupants, RoomOccupant } from '@/app/services/dashboard.service';
+import { ErrorNotification } from '@/app/components/ErrorNotification';
 
 export default function EditRoom() {
   const { roomData } = useLocalSearchParams();
   const { theme, isDarkMode } = useTheme();
+  const { pg } = useAuth();
   const initialRoom = roomData ? JSON.parse(roomData as string) : null;
 
-  // State for room details
+  const [showError, setShowError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [students, setStudents] = useState<RoomOccupant[] | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [roomDetails, setRoomDetails] = useState({
     room_number: initialRoom?.room_number || '',
     capacity: initialRoom?.capacity || '',
     active_tenants: initialRoom?.active_tenants || 0,
   });
 
-  // State for student list (mock data - replace with actual data)
-  const [students, setStudents] = useState([
-    { id: 1, name: 'John Doe', room_number: roomDetails.room_number },
-    { id: 2, name: 'Jane Smith', room_number: roomDetails.room_number },
-  ]);
-
-  // State for delete confirmation dialog
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<number | null>(null);
 
-  // Handle room details update
+  useEffect(() => {
+    const loadRoomOccupants = async () => {
+      if (!pg?.PGID || !roomDetails.room_number) {
+        setError(!pg?.PGID ? 'PG information not available' : 'Room number is required');
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        const occupants = await getRoomOccupants(
+          pg.PGID,
+          roomDetails.room_number.toString()
+        );
+        setStudents(occupants);
+        setError(null);
+      } catch (error) {
+        console.error('Error loading occupants:', error);
+        const message = error instanceof Error ? error.message : 'Failed to load occupants';
+        setError(message);
+        setErrorMessage(message);
+        setShowError(true);
+        setStudents(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadRoomOccupants();
+  }, [pg?.PGID, roomDetails.room_number]);
+
   const handleRoomUpdate = (field: string, value: string) => {
     setRoomDetails(prev => ({
       ...prev,
@@ -45,7 +78,6 @@ export default function EditRoom() {
     }));
   };
 
-  // Handle student deletion
   const handleDeleteStudent = (studentId: number) => {
     setSelectedStudent(studentId);
     setDeleteDialogVisible(true);
@@ -53,15 +85,13 @@ export default function EditRoom() {
 
   const confirmDeleteStudent = () => {
     if (selectedStudent) {
-      setStudents(prev => prev.filter(student => student.id !== selectedStudent));
+      setStudents(prev => prev?.filter(student => student.student_id !== selectedStudent) || null);
     }
     setDeleteDialogVisible(false);
   };
 
-  // Handle save changes
   const handleSaveChanges = async () => {
     try {
-      // Add your API call here to save the changes
       console.log('Saving changes:', { roomDetails, students });
       router.back();
     } catch (error) {
@@ -69,8 +99,60 @@ export default function EditRoom() {
     }
   };
 
+  const renderContent = () => {
+    if (isLoading) {
+      return <ActivityIndicator size="large" color={theme.colors.primary} />;
+    }
+
+    if (error) {
+      return <Text style={{ color: theme.colors.error }}>{error}</Text>;
+    }
+
+    if (!students || students.length === 0) {
+      return <Text style={{ color: theme.colors.onSurface }}>No occupants found</Text>;
+    }
+
+    return students.map((student, index) => (
+      <React.Fragment key={student.student_id}>
+        <List.Item
+          title={student.name}
+          description={`Room ${student.room_number} • Joined: ${new Date(student.joining_date).toLocaleDateString()}`}
+          left={props => (
+            <Avatar.Text
+              {...props}
+              size={40}
+              label={student.name.substring(0, 2).toUpperCase()}
+            />
+          )}
+          right={props => (
+            <View style={styles.actionButtons}>
+              <IconButton
+                icon="pencil"
+                size={20}
+                onPress={() => {}}
+              />
+              <IconButton
+                icon="delete"
+                size={20}
+                onPress={() => handleDeleteStudent(student.student_id)}
+              />
+            </View>
+          )}
+        />
+        {index < students.length - 1 && <Divider />}
+      </React.Fragment>
+    ));
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: isDarkMode ? '#121212' : theme.colors.background }]}>
+      <ErrorNotification
+        visible={showError}
+        message={errorMessage}
+        type="error"
+        onDismiss={() => setShowError(false)}
+      />
+      
       <View style={styles.header}>
         <IconButton
           icon="arrow-left"
@@ -110,29 +192,7 @@ export default function EditRoom() {
         <Card style={[styles.card, { backgroundColor: isDarkMode ? '#1E1E1E' : theme.colors.surface }]}>
           <Card.Content>
             <Title style={styles.cardTitle}>Current Occupants</Title>
-            {students.map((student, index) => (
-              <React.Fragment key={student.id}>
-                <List.Item
-                  title={student.name}
-                  description={`Room ${student.room_number}`}
-                  right={props => (
-                    <View style={styles.actionButtons}>
-                      <IconButton
-                        icon="pencil"
-                        size={20}
-                        onPress={() => {}}
-                      />
-                      <IconButton
-                        icon="delete"
-                        size={20}
-                        onPress={() => handleDeleteStudent(student.id)}
-                      />
-                    </View>
-                  )}
-                />
-                {index < students.length - 1 && <Divider />}
-              </React.Fragment>
-            ))}
+            {renderContent()}
           </Card.Content>
         </Card>
       </ScrollView>
@@ -208,5 +268,11 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     borderRadius: 8,
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
   },
 }); 
