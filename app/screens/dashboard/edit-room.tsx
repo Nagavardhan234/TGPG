@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams, router, useNavigation } from 'expo-router';
 import { 
   Title, 
   Card, 
@@ -39,6 +39,14 @@ export default function EditRoom() {
 
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<number | null>(null);
+
+  const navigation = useNavigation();
+
+  useEffect(() => {
+    navigation.setOptions({
+      title: 'Edit Room Details'
+    });
+  }, []);
 
   useEffect(() => {
     const loadRoomOccupants = async () => {
@@ -188,18 +196,6 @@ export default function EditRoom() {
         onDismiss={() => setShowError(false)}
       />
       
-      <View style={styles.header}>
-        <IconButton
-          icon="arrow-left"
-          size={24}
-          onPress={() => router.back()}
-          style={styles.backButton}
-        />
-        <Title style={[styles.title, { color: isDarkMode ? '#FFFFFF' : theme.colors.text }]}>
-          Edit Room Details
-        </Title>
-      </View>
-
       <ScrollView style={styles.scrollView}>
         {/* Room Details Card */}
         <Card style={[styles.card, { backgroundColor: isDarkMode ? '#1E1E1E' : theme.colors.surface }]}>
@@ -263,18 +259,6 @@ export default function EditRoom() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-  },
-  backButton: {
-    marginRight: 16,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
   },
   scrollView: {
     flex: 1,
