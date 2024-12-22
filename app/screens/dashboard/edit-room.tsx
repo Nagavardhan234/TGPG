@@ -69,13 +69,23 @@ export default function EditRoom() {
     };
 
     loadRoomOccupants();
-  }, [pg?.PGID, roomDetails.room_number]);
+  }, [pg?.PGID]);
 
   const handleRoomUpdate = (field: string, value: string) => {
     setRoomDetails(prev => ({
       ...prev,
       [field]: value
     }));
+  };
+
+  const handleRoomNumberChange = (studentId: number, newRoomNumber: string) => {
+    setStudents(prev => 
+      prev?.map(student => 
+        student.student_id === studentId 
+          ? { ...student, room_number: newRoomNumber }
+          : student
+      ) || null
+    );
   };
 
   const handleDeleteStudent = (studentId: number) => {
@@ -92,10 +102,25 @@ export default function EditRoom() {
 
   const handleSaveChanges = async () => {
     try {
-      console.log('Saving changes:', { roomDetails, students });
+      if (!students) return;
+
+      // Prepare the updated room numbers for all occupants
+      const updatedRoomNumbers = students.map(student => ({
+        student_id: student.student_id,
+        new_room_number: student.room_number,
+      }));
+
+      console.log('Saving changes:', { 
+        roomDetails, 
+        updatedRoomNumbers 
+      });
+      // TODO: Add API call to update room numbers for all occupants
+
       router.back();
     } catch (error) {
       console.error('Error saving changes:', error);
+      setErrorMessage('Failed to save changes');
+      setShowError(true);
     }
   };
 
@@ -116,7 +141,19 @@ export default function EditRoom() {
       <React.Fragment key={student.student_id}>
         <List.Item
           title={student.name}
-          description={`Room ${student.room_number} • Joined: ${new Date(student.joining_date).toLocaleDateString()}`}
+          description={
+            <View>
+              <Text style={styles.detailText}>
+                Current Room: {student.current_room}
+              </Text>
+              <Text style={styles.detailText}>
+                Phone: {student.phone}
+              </Text>
+              <Text style={styles.detailText}>
+                Joined: {new Date(student.joining_date).toLocaleDateString()}
+              </Text>
+            </View>
+          }
           left={props => (
             <Avatar.Text
               {...props}
@@ -126,15 +163,13 @@ export default function EditRoom() {
           )}
           right={props => (
             <View style={styles.actionButtons}>
-              <IconButton
-                icon="pencil"
-                size={20}
-                onPress={() => {}}
-              />
-              <IconButton
-                icon="delete"
-                size={20}
-                onPress={() => handleDeleteStudent(student.student_id)}
+              <TextInput
+                mode="outlined"
+                label="New Room"
+                value={student.room_number}
+                onChangeText={(value) => handleRoomNumberChange(student.student_id, value)}
+                style={styles.roomInput}
+                keyboardType="numeric"
               />
             </View>
           )}
@@ -274,5 +309,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
+  },
+  detailText: {
+    fontSize: 14,
+    color: 'rgba(0, 0, 0, 0.6)',
+    marginBottom: 2,
+  },
+  roomInput: {
+    width: 80,
+    height: 40,
+    marginLeft: 8,
   },
 }); 

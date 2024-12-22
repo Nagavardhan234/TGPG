@@ -75,6 +75,7 @@ export interface RoomOccupant {
   email: string;
   room_number: string;
   joining_date: string;
+  current_room: string;
 }
 
 export const getRoomOccupants = async (pgId: number, roomNumber: string): Promise<RoomOccupant[]> => {
@@ -84,7 +85,11 @@ export const getRoomOccupants = async (pgId: number, roomNumber: string): Promis
       .replace(':roomNumber', roomNumber);
       
     const response = await api.get<ApiResponse<RoomOccupant[]>>(endpoint);
-    return response.data.students;
+    const occupants = response.data.students.map(student => ({
+      ...student,
+      current_room: student.room_number
+    }));
+    return occupants;
   } catch (error) {
     console.error('Error fetching room occupants:', error);
     throw error;
