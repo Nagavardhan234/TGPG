@@ -192,3 +192,18 @@ export const updateOccupantRoom = async (
     throw error;
   }
 }; 
+
+export const deleteRoom = async (pgId: number, roomNumber: string): Promise<{ success: boolean; message: string }> => {
+  try {
+    const response = await api.delete(
+      `${API_URL}/api/dashboard/room/${pgId}/${roomNumber}`
+    );
+
+    return response.data;
+  } catch (error) {
+    if (error.response?.data?.message) {
+      throw new Error(error.response.data.message);
+    }
+    throw error;
+  }
+}; 

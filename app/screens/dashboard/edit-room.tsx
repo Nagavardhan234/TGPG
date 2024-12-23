@@ -88,14 +88,24 @@ export default function EditRoom() {
     }));
   };
 
-  const handleRoomNumberChange = (studentId: number, newRoomNumber: string) => {
-    setStudents(prev => 
-      prev?.map(student => 
-        student.student_id === studentId 
-          ? { ...student, room_number: newRoomNumber }
-          : student
-      ) || null
-    );
+  const handleRoomNumberChange = (value: string) => {
+    const numValue = parseInt(value);
+    if (value === '' || (numValue > 0 && numValue <= 999)) {
+      setNewRoomNumber(value);
+    }
+  };
+
+  const handleOccupantRoomChange = (studentId: number, value: string) => {
+    const numValue = parseInt(value);
+    if (value === '' || (numValue > 0 && numValue <= 999)) {
+      setStudents(prev => 
+        prev?.map(student => 
+          student.student_id === studentId 
+            ? { ...student, room_number: value }
+            : student
+        ) || null
+      );
+    }
   };
 
   const handleDeleteStudent = (studentId: number) => {
@@ -218,9 +228,10 @@ export default function EditRoom() {
                 mode="outlined"
                 label="New Room"
                 value={student.room_number}
-                onChangeText={(value) => handleRoomNumberChange(student.student_id, value)}
+                onChangeText={(value) => handleOccupantRoomChange(student.student_id, value)}
                 style={styles.roomInput}
                 keyboardType="numeric"
+                error={student.room_number === '0' || student.room_number === ''}
               />
             </View>
           )}
@@ -250,10 +261,12 @@ export default function EditRoom() {
               <TextInput
                 label="Room Number"
                 value={newRoomNumber.toString()}
-                onChangeText={setNewRoomNumber}
+                onChangeText={handleRoomNumberChange}
                 mode="outlined"
                 style={styles.roomNumberInput}
                 keyboardType="numeric"
+                error={newRoomNumber === '0' || newRoomNumber === ''}
+                helperText={newRoomNumber === '0' || newRoomNumber === '' ? 'Room number must be greater than 0' : ''}
               />
             </View>
 

@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
-import { Card, Title, Paragraph, Button, FAB, Chip, Searchbar } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, ActivityIndicator, Text } from 'react-native';
+import { Card, Title, Paragraph, Button, FAB, Chip, Searchbar, Portal, Dialog } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getRoomStats, RoomStatsResponse } from '@/app/services/dashboard.service';
+import { getRoomStats, RoomStatsResponse, deleteRoom } from '@/app/services/dashboard.service';
 import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/app/context/AuthContext';
 import { ErrorNotification } from '@/app/components/ErrorNotification';
@@ -19,6 +19,9 @@ export default function RoomManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showError, setShowError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
+  const [selectedRoom, setSelectedRoom] = useState<RoomStats | null>(null);
+  const [deleteError, setDeleteError] = useState('');
 
   // Load room statistics
   const loadRoomStats = useCallback(async () => {
@@ -88,6 +91,36 @@ export default function RoomManagement() {
     });
   };
 
+  // Add delete handler
+  const handleDeleteRoom = (room: RoomStats) => {
+    setSelectedRoom(room);
+    setDeleteDialogVisible(true);
+    setDeleteError('');
+  };
+
+  // Add confirm delete function
+  const confirmDeleteRoom = async () => {
+    if (!selectedRoom || !pg?.PGID) return;
+
+    try {
+      setLoading(true);
+      const response = await deleteRoom(pg.PGID, selectedRoom.room_number);
+      
+      if (response.success) {
+        // Remove room from state
+        setRooms(prev => prev.filter(r => r.room_number !== selectedRoom.room_number));
+        setDeleteDialogVisible(false);
+        setErrorMessage('Room deleted successfully');
+        setShowError(false);
+      }
+    } catch (error) {
+      console.error('Error deleting room:', error);
+      setDeleteError(error instanceof Error ? error.message : 'Failed to delete room');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: isDarkMode ? '#121212' : theme.colors.background }]}>
       <ErrorNotification
@@ -140,7 +173,7 @@ export default function RoomManagement() {
                       Edit
                     </Button>
                     <Button 
-                      onPress={() => {}} 
+                      onPress={() => handleDeleteRoom(room)} 
                       style={[styles.actionButton]} 
                       textColor={isDarkMode ? '#FF6F61' : '#FF4444'}
                     >
@@ -165,6 +198,28 @@ export default function RoomManagement() {
         }]}
         onPress={() => {}}
       />
+
+      <Portal>
+        <Dialog visible={deleteDialogVisible} onDismiss={() => setDeleteDialogVisible(false)}>
+          <Dialog.Title>Delete Room</Dialog.Title>
+          <Dialog.Content>
+            {deleteError ? (
+              <Text style={{ color: theme.colors.error }}>{deleteError}</Text>
+            ) : (
+              <Text>Are you sure you want to delete Room {selectedRoom?.room_number}?</Text>
+            )}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setDeleteDialogVisible(false)}>Cancel</Button>
+            <Button 
+              onPress={confirmDeleteRoom}
+              disabled={!!deleteError || loading}
+            >
+              Delete
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </View>
   );
 }
