@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, router, useNavigation } from 'expo-router';
 import { 
@@ -16,7 +16,7 @@ import {
 } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import { useAuth } from '@/app/context/AuthContext';
-import { getRoomOccupants, RoomOccupant } from '@/app/services/dashboard.service';
+import { getRoomOccupants, RoomOccupant, updateRoomDetails, updateOccupantRoom, RoomDetails } from '@/app/services/dashboard.service';
 import { ErrorNotification } from '@/app/components/ErrorNotification';
 
 export default function EditRoom() {
@@ -31,11 +31,13 @@ export default function EditRoom() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [newRoomNumber, setNewRoomNumber] = useState(initialRoom?.room_number || '');
+
   const [roomDetails, setRoomDetails] = useState({
-    room_number: initialRoom?.room_number || '',
-    capacity: initialRoom?.capacity || '',
     active_tenants: initialRoom?.active_tenants || 0,
   });
+
+  const [occupantSearch, setOccupantSearch] = useState('');
 
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<number | null>(null);
@@ -50,7 +52,7 @@ export default function EditRoom() {
 
   useEffect(() => {
     const loadRoomOccupants = async () => {
-      if (!pg?.PGID || !roomDetails.room_number) {
+      if (!pg?.PGID || !initialRoom?.room_number) {
         setError(!pg?.PGID ? 'PG information not available' : 'Room number is required');
         setIsLoading(false);
         return;
@@ -60,7 +62,7 @@ export default function EditRoom() {
         setIsLoading(true);
         const occupants = await getRoomOccupants(
           pg.PGID,
-          roomDetails.room_number.toString()
+          initialRoom.room_number.toString()
         );
         setStudents(occupants);
         setError(null);
@@ -77,7 +79,7 @@ export default function EditRoom() {
     };
 
     loadRoomOccupants();
-  }, [pg?.PGID]);
+  }, [pg?.PGID, initialRoom?.room_number]);
 
   const handleRoomUpdate = (field: string, value: string) => {
     setRoomDetails(prev => ({
@@ -110,27 +112,68 @@ export default function EditRoom() {
 
   const handleSaveChanges = async () => {
     try {
-      if (!students) return;
+      if (!students || !pg?.PGID) return;
 
-      // Prepare the updated room numbers for all occupants
-      const updatedRoomNumbers = students.map(student => ({
-        student_id: student.student_id,
-        new_room_number: student.room_number,
-      }));
+      setIsLoading(true);
 
-      console.log('Saving changes:', { 
-        roomDetails, 
-        updatedRoomNumbers 
-      });
-      // TODO: Add API call to update room numbers for all occupants
+      // First update room number if changed
+      if (newRoomNumber !== initialRoom?.room_number) {
+        await updateRoomDetails(pg.PGID, initialRoom.room_number, {
+          room_number: newRoomNumber,
+          active_tenants: roomDetails.active_tenants,
+        });
 
-      router.back();
+        // Update all occupants to new room number
+        const updatePromises = students.map(async (student) => {
+          await updateOccupantRoom(pg.PGID, student.current_room, {
+            newRoomNumber: newRoomNumber,
+            studentId: student.student_id
+          });
+        });
+
+        await Promise.all(updatePromises);
+      } else {
+        // Only update individual room changes
+        const updatePromises = students.map(async (student) => {
+          if (student.room_number !== student.current_room) {
+            await updateOccupantRoom(pg.PGID, student.current_room, {
+              newRoomNumber: student.room_number,
+              studentId: student.student_id
+            });
+          }
+        });
+
+        await Promise.all(updatePromises);
+      }
+
+      // Show success message
+      setErrorMessage('Changes saved successfully');
+      setShowError(false);
+
+      // Navigate back after a short delay
+      setTimeout(() => {
+        router.back();
+      }, 1000);
+
     } catch (error) {
       console.error('Error saving changes:', error);
-      setErrorMessage('Failed to save changes');
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to save changes');
       setShowError(true);
+    } finally {
+      setIsLoading(false);
     }
   };
+
+  const filteredStudents = useMemo(() => {
+    if (!students) return [];
+    if (!occupantSearch) return students;
+
+    const searchLower = occupantSearch.toLowerCase();
+    return students.filter(student => 
+      student.name.toLowerCase().includes(searchLower) ||
+      student.phone.includes(searchLower)
+    );
+  }, [students, occupantSearch]);
 
   const renderContent = () => {
     if (isLoading) {
@@ -141,11 +184,11 @@ export default function EditRoom() {
       return <Text style={{ color: theme.colors.error }}>{error}</Text>;
     }
 
-    if (!students || students.length === 0) {
+    if (!filteredStudents || filteredStudents.length === 0) {
       return <Text style={{ color: theme.colors.onSurface }}>No occupants found</Text>;
     }
 
-    return students.map((student, index) => (
+    return filteredStudents.map((student, index) => (
       <React.Fragment key={student.student_id}>
         <List.Item
           title={student.name}
@@ -182,7 +225,7 @@ export default function EditRoom() {
             </View>
           )}
         />
-        {index < students.length - 1 && <Divider />}
+        {index < filteredStudents.length - 1 && <Divider />}
       </React.Fragment>
     ));
   };
@@ -201,20 +244,27 @@ export default function EditRoom() {
         <Card style={[styles.card, { backgroundColor: isDarkMode ? '#1E1E1E' : theme.colors.surface }]}>
           <Card.Content>
             <Title style={styles.cardTitle}>Room Information</Title>
+            
+            {/* Room Number Input */}
+            <View style={styles.roomInfoRow}>
+              <TextInput
+                label="Room Number"
+                value={newRoomNumber.toString()}
+                onChangeText={setNewRoomNumber}
+                mode="outlined"
+                style={styles.roomNumberInput}
+                keyboardType="numeric"
+              />
+            </View>
+
+            {/* Occupants Search */}
             <TextInput
-              label="Room Number"
-              value={roomDetails.room_number.toString()}
-              onChangeText={(value) => handleRoomUpdate('room_number', value)}
+              label="Search Occupants"
+              value={occupantSearch}
+              onChangeText={setOccupantSearch}
               mode="outlined"
-              style={styles.input}
-            />
-            <TextInput
-              label="Capacity"
-              value={roomDetails.capacity.toString()}
-              onChangeText={(value) => handleRoomUpdate('capacity', value)}
-              mode="outlined"
-              style={styles.input}
-              keyboardType="numeric"
+              style={styles.searchInput}
+              placeholder="Search by name or phone"
             />
           </Card.Content>
         </Card>
@@ -303,5 +353,25 @@ const styles = StyleSheet.create({
     width: 80,
     height: 40,
     marginLeft: 8,
+  },
+  roomInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginRight: 8,
+  },
+  value: {
+    fontSize: 16,
+  },
+  searchInput: {
+    marginBottom: 16,
+  },
+  roomNumberInput: {
+    flex: 1,
+    marginBottom: 16,
   },
 }); 

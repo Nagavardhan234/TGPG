@@ -1,45 +1,32 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { Card, Title, Paragraph, Button, FAB, Chip, Searchbar } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getRoomStats } from '@/app/services/dashboard.service';
-import { RoomStats } from '@/app/services/dashboard.service';
-import { router } from 'expo-router';
+import { getRoomStats, RoomStatsResponse } from '@/app/services/dashboard.service';
+import { router, useFocusEffect } from 'expo-router';
+import { useAuth } from '@/app/context/AuthContext';
+import { ErrorNotification } from '@/app/components/ErrorNotification';
 
 export default function RoomManagement() {
   const { theme, isDarkMode } = useTheme();
+  const { pg } = useAuth(); // Get pg from AuthContext
   
   // State management
   const [loading, setLoading] = useState(true);
   const [rooms, setRooms] = useState<RoomStats[]>([]);
   const [filter, setFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [pgId, setPgId] = useState<number | null>(null);
-
-  // Load PG data and rooms on component mount
-  useEffect(() => {
-    const loadPGData = async () => {
-      try {
-        const pgData = await AsyncStorage.getItem('pg');
-        if (pgData) {
-          const pg = JSON.parse(pgData);
-          setPgId(pg.PGID);
-          await loadRoomStats(pg.PGID);
-        }
-      } catch (error) {
-        console.error('Error loading PG data:', error);
-      }
-    };
-
-    loadPGData();
-  }, []);
+  const [showError, setShowError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   // Load room statistics
-  const loadRoomStats = async (pgId: number) => {
+  const loadRoomStats = useCallback(async () => {
+    if (!pg?.PGID) return;
+
     try {
       setLoading(true);
-      const response = await getRoomStats(pgId);
+      const response = await getRoomStats(pg.PGID);
       if (response.success && response.rooms_json) {
         const parsedRooms = typeof response.rooms_json[0].rooms_json === 'string' 
           ? JSON.parse(response.rooms_json[0].rooms_json) 
@@ -52,15 +39,31 @@ export default function RoomManagement() {
           room_filled_status: room.room_filled_status || 0,
         }));
         setRooms(formattedRooms);
-      } else {
-        console.error('Invalid response format:', response);
       }
     } catch (error) {
       console.error('Error loading room stats:', error);
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to load room stats');
+      setShowError(true);
     } finally {
       setLoading(false);
     }
-  };
+  }, [pg?.PGID]);
+
+  // Load initial data
+  useEffect(() => {
+    if (pg?.PGID) {
+      loadRoomStats();
+    }
+  }, [pg?.PGID, loadRoomStats]);
+
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (pg?.PGID) {
+        loadRoomStats();
+      }
+    }, [pg?.PGID, loadRoomStats])
+  );
 
   // Memoize filtered rooms based on search query and selected filter
   const filteredRooms = useMemo(() => {
@@ -87,6 +90,13 @@ export default function RoomManagement() {
 
   return (
     <View style={[styles.container, { backgroundColor: isDarkMode ? '#121212' : theme.colors.background }]}>
+      <ErrorNotification
+        visible={showError}
+        message={errorMessage}
+        onDismiss={() => setShowError(false)}
+        type="error"
+      />
+      
       <Title style={[styles.title, { color: isDarkMode ? '#FFFFFF' : theme.colors.text }]}>Room Management</Title>
 
       <Searchbar

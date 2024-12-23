@@ -1,6 +1,7 @@
 import api from '@/app/config/axios.config';
 import { ENDPOINTS } from '@/app/constants/endpoints';
 import { API_URL } from '@/app/config/api.config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface DashboardStats {
   students: {
@@ -43,14 +44,22 @@ export const getDashboardStats = async (managerId: number): Promise<DashboardSta
 }; 
 
 export interface RoomStats {
-  room_number: number;
+  room_number: string;
+  capacity: number;
   active_tenants: number;
   room_filled_status: number;
-  capacity?: number;
 }
 
 export interface RoomStatsResponse {
-  rooms_json: RoomStats[];
+  success: boolean;
+  rooms_json: {
+    rooms_json: string | Array<{
+      room_number: string;
+      active_tenants: number;
+      room_filled_status: number;
+    }>;
+    Capacity: number;
+  }[];
 }
 
 export const getRoomStats = async (pgId: number): Promise<RoomStatsResponse> => {
@@ -92,6 +101,94 @@ export const getRoomOccupants = async (pgId: number, roomNumber: string): Promis
     return occupants;
   } catch (error) {
     console.error('Error fetching room occupants:', error);
+    throw error;
+  }
+}; 
+
+export interface RoomUpdateRequest {
+  newRoomNumber: string;
+  studentId: number;
+}
+
+export const updateRoomNumber = async (
+  pgId: number, 
+  currentRoom: string, 
+  updateData: RoomUpdateRequest
+): Promise<void> => {
+  const token = await AsyncStorage.getItem('token');
+  const response = await fetch(
+    `${API_URL}/api/dashboard/rooms/${pgId}/${currentRoom}`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(updateData)
+    }
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.message || 'Failed to update room number');
+  }
+
+  return response.json();
+}; 
+
+export interface RoomDetails {
+  room_number: string;
+  capacity: string;
+  active_tenants: number;
+}
+
+export const updateRoomDetails = async (
+  pgId: number,
+  roomNumber: string,
+  details: RoomDetails
+): Promise<void> => {
+  try {
+    const response = await api.put(
+      `${API_URL}/api/dashboard/room/${pgId}/${roomNumber}`,
+      {
+        room_number: details.room_number,
+        capacity: details.capacity
+      }
+    );
+
+    if (!response.data.success) {
+      throw new Error(response.data.message);
+    }
+
+    return response.data;
+  } catch (error) {
+    if (error.response?.data?.message) {
+      throw new Error(error.response.data.message);
+    }
+    throw error;
+  }
+};
+
+export const updateOccupantRoom = async (
+  pgId: number,
+  currentRoom: string,
+  updateData: RoomUpdateRequest
+): Promise<void> => {
+  try {
+    const response = await api.put(
+      `${API_URL}/api/dashboard/rooms/${pgId}/${currentRoom}/occupant`,
+      updateData
+    );
+
+    if (!response.data.success) {
+      throw new Error(response.data.message);
+    }
+
+    return response.data;
+  } catch (error) {
+    if (error.response?.data?.message) {
+      throw new Error(error.response.data.message);
+    }
     throw error;
   }
 }; 
