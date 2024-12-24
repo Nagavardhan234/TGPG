@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet, Animated, ScrollView } from 'react-native';
 import { Modal, Portal, Text, Button, Avatar, IconButton } from 'react-native-paper';
 import { Student } from '@/app/services/student.service';
 import { useTheme } from '@/app/context/ThemeContext';
 import { MotiView } from 'moti';
+import { getStatusColor } from '@/app/utils/theme';
 
 interface StudentDetailsModalProps {
   visible: boolean;
@@ -20,7 +21,7 @@ export const StudentDetailsModal: React.FC<StudentDetailsModalProps> = ({
   onEdit,
   onDelete
 }) => {
-  const { theme, isDarkMode } = useTheme();
+  const { theme } = useTheme();
 
   if (!student) return null;
 
@@ -31,37 +32,33 @@ export const StudentDetailsModal: React.FC<StudentDetailsModalProps> = ({
         onDismiss={onDismiss}
         contentContainerStyle={[
           styles.modalContainer,
-          { backgroundColor: isDarkMode ? 'rgba(30, 30, 30, 0.95)' : theme.colors.surface }
+          { backgroundColor: theme.colors.surface }
         ]}
       >
         <MotiView
-          from={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'timing', duration: 300 }}
+          from={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
           style={styles.content}
         >
           <IconButton
             icon="close"
             size={24}
-            style={styles.closeButton}
             onPress={onDismiss}
+            style={styles.closeButton}
           />
-
-          <View style={[
-            styles.header,
-            { backgroundColor: theme.colors.primaryContainer }
-          ]}>
-            <Avatar.Icon 
-              size={80} 
-              icon="account" 
-              style={{ backgroundColor: theme.colors.primary }}
+          
+          <View style={styles.header}>
+            <Avatar.Text
+              size={80}
+              label={student.FullName.substring(0, 2).toUpperCase()}
+              style={[styles.avatar, { backgroundColor: theme.colors.primary }]}
             />
-            <Text style={[styles.name, { color: theme.colors.text }]}>
+            <Text style={[styles.name, { color: theme.colors.onSurface }]}>
               {student.FullName}
             </Text>
             <View style={[
               styles.statusChip,
-              { backgroundColor: theme.colors.primary }
+              { backgroundColor: getStatusColor(student.Status, theme) }
             ]}>
               <Text style={styles.statusText}>{student.Status}</Text>
             </View>
@@ -70,12 +67,6 @@ export const StudentDetailsModal: React.FC<StudentDetailsModalProps> = ({
           <ScrollView style={styles.detailsScroll}>
             <View style={styles.detailsContainer}>
               <DetailItem 
-                label="Room Number"
-                value={student.Room_No?.toString() || '-'}
-                icon="door"
-                theme={theme}
-              />
-              <DetailItem 
                 label="Phone"
                 value={student.Phone}
                 icon="phone"
@@ -83,25 +74,31 @@ export const StudentDetailsModal: React.FC<StudentDetailsModalProps> = ({
               />
               <DetailItem 
                 label="Email"
-                value={student.Email || '-'}
+                value={student.Email}
                 icon="email"
                 theme={theme}
               />
               <DetailItem 
+                label="Room Number"
+                value={student.Room_No}
+                icon="door"
+                theme={theme}
+              />
+              <DetailItem 
                 label="Monthly Rent"
-                value={`₹${student.Monthly_Rent || '-'}`}
+                value={`₹${student.Monthly_Rent}`}
                 icon="currency-inr"
                 theme={theme}
               />
               <DetailItem 
                 label="Guardian Name"
-                value={student.GuardianName || '-'}
+                value={student.GuardianName}
                 icon="account-child"
                 theme={theme}
               />
               <DetailItem 
                 label="Guardian Phone"
-                value={student.GuardianNumber || '-'}
+                value={student.GuardianNumber}
                 icon="phone-classic"
                 theme={theme}
               />
@@ -142,23 +139,38 @@ export const StudentDetailsModal: React.FC<StudentDetailsModalProps> = ({
   );
 };
 
-const DetailItem = ({ label, value, icon, theme }) => (
-  <View style={styles.detailItem}>
-    <Avatar.Icon 
-      size={40} 
-      icon={icon}
-      style={[styles.icon, { backgroundColor: theme.colors.primaryContainer }]}
-    />
-    <View style={styles.detailText}>
-      <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
-        {label}
-      </Text>
-      <Text style={[styles.value, { color: theme.colors.text }]}>
-        {value}
-      </Text>
+const DetailItem = ({ label, value, icon, theme, isPassword = false }) => {
+  const [showPassword, setShowPassword] = useState(false);
+
+  return (
+    <View style={styles.detailItem}>
+      <Avatar.Icon 
+        size={40} 
+        icon={icon}
+        style={[styles.icon, { backgroundColor: theme.colors.primaryContainer }]}
+      />
+      <View style={styles.detailText}>
+        <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
+          {label}
+        </Text>
+        <View style={styles.valueContainer}>
+          <Text style={[styles.value, { color: theme.colors.text }]}>
+            {isPassword ? (showPassword ? value || '' : '••••••') : (value || '-')}
+          </Text>
+          {isPassword && (
+            <IconButton
+              icon={showPassword ? "eye-off" : "eye"}
+              size={20}
+              onPress={() => setShowPassword(!showPassword)}
+              style={styles.eyeIcon}
+              iconColor={theme.colors.primary}
+            />
+          )}
+        </View>
+      </View>
     </View>
-  </View>
-);
+  );
+};
 
 const styles = StyleSheet.create({
   modalContainer: {
@@ -233,5 +245,19 @@ const styles = StyleSheet.create({
   value: {
     fontSize: 16,
     fontWeight: '500',
+    flex: 1,
+    marginRight: 8,
   },
+  valueContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 40,
+  },
+  eyeIcon: {
+    margin: 0,
+    padding: 0,
+    width: 32,
+    height: 32,
+  }
 }); 

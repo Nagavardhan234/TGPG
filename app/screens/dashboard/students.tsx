@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, ActivityIndicator, Platform, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, ActivityIndicator, Platform, useWindowDimensions, TouchableOpacity } from 'react-native';
 import { 
   DataTable, 
   FAB, 
@@ -21,7 +21,7 @@ import {
 import { useTheme as useCustomTheme } from '@/app/context/ThemeContext';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getStudents, addStudent, getDefaultRent, Student, StudentForm, deleteStudent, updateStudent, importStudentsFromExcel, getStudentsWithPagination } from '@/app/services/student.service';
+import { getStudents, addStudent, getDefaultRent, Student, StudentForm, deleteStudent, updateStudent, importStudentsFromExcel, getStudentsWithPagination, getAvailableRooms } from '@/app/services/student.service';
 import { showMessage } from 'react-native-flash-message';
 import { ErrorNotification } from '@/app/components/ErrorNotification';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
@@ -140,6 +140,8 @@ export default function StudentManagement() {
   const [loading, setLoading] = useState(false);
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout>();
 
+  const [showPassword, setShowPassword] = useState(false);
+
   useEffect(() => {
     loadStudents();
     loadDefaultRent();
@@ -242,10 +244,6 @@ export default function StudentManagement() {
       
       const { PGID } = JSON.parse(pgData);
       const response = await getStudentsWithPagination(PGID, pageNum, 10, search);
-      
-      // Debug logs
-      console.log('Response from service:', response);
-      console.log('Student data sample:', response.data[0]);
       
       setStudents(response.data);
       setTotalPages(response.totalPages);
@@ -352,23 +350,36 @@ export default function StudentManagement() {
     }
   };
 
-  const handleEdit = (student: Student) => {
-    setViewModalVisible(false); // Close view modal first
-    setSelectedStudent(student);
-    setFormData({
-      name: student.FullName,
-      phone: student.Phone,
-      email: student.Email || '',
-      monthlyRent: student.Monthly_Rent || '',
-      guardianName: student.GuardianName || '',
-      guardianPhone: student.GuardianNumber || '',
-      password: '', // Don't set password for edit
-      roomNo: student.Room_No || 0,
-      joinDate: new Date(student.MoveInDate).toISOString().split('T')[0],
-      status: student.Status
-    });
-    setIsEditMode(true);
-    setModalVisible(true);
+  const handleEdit = async (student: Student) => {
+    try {
+      const pgData = await AsyncStorage.getItem('pg');
+      if (!pgData) throw new Error('PG data not found');
+      const { PGID } = JSON.parse(pgData);
+
+      // Set the form data correctly
+      setFormData({
+        name: student.FullName,
+        phone: student.Phone,
+        email: student.Email || '',
+        monthlyRent: student.Monthly_Rent.toString(),
+        guardianName: student.GuardianName || '',
+        guardianPhone: student.GuardianNumber || '',
+        password: student.Password || '',
+        roomNo: parseInt(student.Room_No),
+        joinDate: student.MoveInDate,
+        status: student.Status
+      });
+
+      setSelectedStudent(student);
+      setIsEditMode(true);
+      setModalVisible(true);
+    } catch (error) {
+      console.error('Error preparing edit:', error);
+      showMessage({
+        message: 'Error preparing to edit student',
+        type: 'danger'
+      });
+    }
   };
 
   const handleUpdate = async () => {
@@ -382,10 +393,7 @@ export default function StudentManagement() {
       }
       const { PGID } = JSON.parse(pgData);
 
-      await updateStudent(selectedStudent.TenantID, {
-        ...formData,
-        pgId: PGID // Include PG ID in update
-      });
+      await updateStudent(PGID, selectedStudent.TenantID, formData);
       
       showMessage({
         message: 'Success',
@@ -675,7 +683,7 @@ export default function StudentManagement() {
           ]}
           style={styles.modalOverlay}
         >
-          <ScrollView>
+          <ScrollView style={{ zIndex: 1 }}>
             <View style={styles.modalContent}>
               {/* Profile Icon */}
               <View style={styles.avatarContainer}>
@@ -707,23 +715,28 @@ export default function StudentManagement() {
                 style={styles.input}
               />
 
-              <TextInput
-                label="Room Number *"
-                value={formData.roomNo.toString()}
-                onChangeText={(text) => setFormData({ ...formData, roomNo: parseInt(text) || 0 })}
-                mode="outlined"
-                keyboardType="numeric"
-                style={styles.input}
-              />
+              <View style={styles.roomSection}>
+                <Text style={[styles.label, { color: theme.colors.onSurface }]}>Room Number *</Text>
+                <View style={styles.roomInputContainer}>
+                  <TextInput
+                    label="Room Number *"
+                    value={formData.roomNo.toString()}
+                    onChangeText={(text) => setFormData({ ...formData, roomNo: parseInt(text) || 0 })}
+                    mode="outlined"
+                    keyboardType="numeric"
+                    style={styles.input}
+                  />
+                </View>
+              </View>
 
               <TextInput
-                label="Monthly Rent *"
+                label="Monthly Rent"
                 value={formData.monthlyRent}
-                onChangeText={(text) => setFormData({ ...formData, monthlyRent: text })}
+                onChangeText={(text) => setFormData({ ...prev, monthlyRent: text })}
                 mode="outlined"
                 keyboardType="numeric"
                 style={styles.input}
-                error={!formData.monthlyRent}
+                disabled={isEditMode}
               />
 
               <TextInput
@@ -757,32 +770,38 @@ export default function StudentManagement() {
                 value={formData.password}
                 onChangeText={(text) => setFormData({ ...formData, password: text })}
                 mode="outlined"
-                secureTextEntry
+                secureTextEntry={!showPassword}
+                right={
+                  <TextInput.Icon
+                    icon={showPassword ? "eye-off" : "eye"}
+                    onPress={() => setShowPassword(!showPassword)}
+                  />
+                }
                 style={styles.input}
               />
 
-<TextInput
-        label="Join Date *"
-        value={formData.joinDate}
-        mode="outlined"
-        style={styles.input}
-        error={!formData.joinDate}
-        editable={false}
-        right={
-          <TextInput.Icon 
-            icon="calendar" 
-            onPress={() => setShowDatePicker(true)} 
-          />
-        }
-      />
-      {showDatePicker && (
-        <DateTimePicker
-          value={formData.joinDate ? new Date(formData.joinDate) : new Date()}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'inline' : 'default'}
-          onChange={onDateChange}
-        />
-      )}
+              <TextInput
+                label="Join Date *"
+                value={formData.joinDate}
+                mode="outlined"
+                style={styles.input}
+                error={!formData.joinDate}
+                editable={false}
+                right={
+                  <TextInput.Icon 
+                    icon="calendar" 
+                    onPress={() => setShowDatePicker(true)} 
+                  />
+                }
+              />
+              {showDatePicker && (
+                <DateTimePicker
+                  value={formData.joinDate ? new Date(formData.joinDate) : new Date()}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                  onChange={onDateChange}
+                />
+              )}
 
               {isEditMode && (
                 <View style={styles.statusSelector}>
@@ -977,8 +996,7 @@ export default function StudentManagement() {
               <DataTable.Cell style={styles.roomColumn}>
                 <View style={styles.roomBadge}>
                   <Text style={[styles.roomText, { color: theme.colors.onSurface }]}>
-                    {console.log('Room_No value:', student.Room_No)}
-                    {student.Room_No || '-'}
+                    {student.Room_No}
                   </Text>
                 </View>
               </DataTable.Cell>
@@ -1059,6 +1077,7 @@ export default function StudentManagement() {
         }}
         student={selectedStudent}
         onEdit={(student) => {
+          setViewModalVisible(false);
           handleEdit(student);
         }}
         onDelete={(student) => {
@@ -1235,6 +1254,8 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     padding: 20,
+    position: 'relative',
+    zIndex: 1,
   },
   modalOverlay: {
     backgroundColor: 'rgba(0, 0, 0, 0.5)',

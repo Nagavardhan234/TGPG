@@ -15,6 +15,7 @@ export interface Student {
   Monthly_Rent: number;
   GuardianNumber: string | null;
   GuardianName: string | null;
+  Password?: string;
 }
 
 export interface StudentForm {
@@ -39,6 +40,20 @@ export interface ExcelStudent {
   'Guardian Name'?: string;
   'Guardian Phone'?: string;
   'Password': string;
+}
+
+export interface RoomInfo {
+  RoomNumber: string;
+  OccupiedCount: number;
+  MaxCapacity: number;
+}
+
+export interface PaginatedResponse {
+  data: Student[];
+  rooms: RoomInfo[];
+  total: number;
+  currentPage: number;
+  totalPages: number;
 }
 
 export const getStudents = async (pgId: number) => {
@@ -96,39 +111,23 @@ export const addStudent = async (pgId: number, formData: StudentForm) => {
   }
 };
 
-export const updateStudent = async (studentId: number, formData: StudentForm) => {
+export const updateStudent = async (pgId: number, tenantId: number, formData: StudentForm) => {
   try {
     const token = await AsyncStorage.getItem('token');
     if (!token) {
       throw new Error('No authentication token found');
     }
 
-    const pgData = await AsyncStorage.getItem('pg');
-    if (!pgData) throw new Error('PG data not found');
-    const { PGID } = JSON.parse(pgData);
-
-    const currentStudent = await getStudents(PGID).then(
-      students => students.find(s => s.TenantID === studentId)
-    );
-
-    if (!currentStudent) throw new Error('Student not found');
-
-    if (currentStudent.Room_No !== formData.roomNo) {
-      await validateRoomCapacity(PGID, formData.roomNo);
-    }
-
-    if (currentStudent.Phone !== formData.phone) {
-      await validatePhoneUnique(PGID, formData.phone, studentId);
-    }
-
-    const response = await api.put(`/api/tenants/pg/${PGID}/update/${studentId}`, {
+    // Fix the endpoint URL
+    const response = await api.put(`/api/tenants/pg/${pgId}/update/${tenantId}`, {
       FullName: formData.name,
       Phone: formData.phone,
       Email: formData.email || null,
-      Monthly_Rent: parseInt(formData.monthlyRent),
+      Monthly_Rent: parseFloat(formData.monthlyRent),
       GuardianName: formData.guardianName || null,
       GuardianNumber: formData.guardianPhone || null,
-      Room_No: parseInt(formData.roomNo.toString()),
+      Password: formData.password || undefined,
+      Room_No: formData.roomNo,
       MoveInDate: formData.joinDate,
       Status: formData.status || 'ACTIVE'
     });
@@ -137,8 +136,8 @@ export const updateStudent = async (studentId: number, formData: StudentForm) =>
       throw new Error(response.data.message || 'Failed to update student');
     }
 
-    return response.data;
-  } catch (error: any) {
+    return response.data.data;
+  } catch (error) {
     console.error('Error updating student:', error);
     if (error.response?.status === 401) {
       throw new Error('INVALID_TOKEN');
@@ -286,10 +285,17 @@ export const getStudentsWithPagination = async (pgId: number, page: number = 1, 
     }
 
     const response = await api.get(`/api/tenants/pg/${pgId}/paginated?${params}`);
-    console.log('API Response:', response.data);
     
+    // Debug log
+    console.log('API Response:', response.data);
+
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Failed to fetch students');
+    }
+
     return {
-      data: response.data.data,
+      data: response.data.data || [],  // Ensure data is always an array
+      rooms: response.data.rooms || [], // Include rooms data
       total: response.data.total,
       currentPage: response.data.currentPage,
       totalPages: response.data.totalPages
@@ -300,5 +306,31 @@ export const getStudentsWithPagination = async (pgId: number, page: number = 1, 
       throw new Error('INVALID_TOKEN');
     }
     throw error;
+  }
+};
+
+export const getAvailableRooms = async (pgId: number): Promise<AvailableRoom[]> => {
+  try {
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+
+    const response = await api.get(`/api/tenants/pg/${pgId}/available-rooms`);
+    
+    // Debug log
+    console.log('Available rooms response:', response.data);
+
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Failed to fetch available rooms');
+    }
+
+    return response.data.rooms;
+  } catch (error: any) {
+    console.error('Error fetching available rooms:', error);
+    if (error.response?.status === 401) {
+      throw new Error('Your session has expired. Please login again.');
+    }
+    throw new Error('Unable to load available rooms. Please try again.');
   }
 }; 
