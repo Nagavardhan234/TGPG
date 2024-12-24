@@ -56,6 +56,13 @@ export interface PaginatedResponse {
   totalPages: number;
 }
 
+export class TokenExpiredError extends Error {
+  constructor() {
+    super('INVALID_TOKEN');
+    this.name = 'TokenExpiredError';
+  }
+}
+
 export const getStudents = async (pgId: number) => {
   try {
     const token = await AsyncStorage.getItem('token');
@@ -268,16 +275,23 @@ export const validatePhoneUnique = async (pgId: number, phone: string, excludeId
   }
 };
 
-export const getStudentsWithPagination = async (pgId: number, page: number = 1, limit: number = 10, search?: string) => {
+export const getStudentsWithPagination = async (
+  pgId: number, 
+  page: number = 1, 
+  limit: number = 10, 
+  search?: string,
+  status: string = 'ALL'
+) => {
   try {
     const token = await AsyncStorage.getItem('token');
     if (!token) {
-      throw new Error('No authentication token found');
+      throw new TokenExpiredError();
     }
 
     const params = new URLSearchParams({
       page: page.toString(),
-      limit: limit.toString()
+      limit: limit.toString(),
+      status: status
     });
     
     if (search) {
@@ -286,24 +300,15 @@ export const getStudentsWithPagination = async (pgId: number, page: number = 1, 
 
     const response = await api.get(`/api/tenants/pg/${pgId}/paginated?${params}`);
     
-    // Debug log
-    console.log('API Response:', response.data);
-
     if (!response.data.success) {
       throw new Error(response.data.message || 'Failed to fetch students');
     }
 
-    return {
-      data: response.data.data || [],  // Ensure data is always an array
-      rooms: response.data.rooms || [], // Include rooms data
-      total: response.data.total,
-      currentPage: response.data.currentPage,
-      totalPages: response.data.totalPages
-    };
+    return response.data;
   } catch (error) {
     console.error('Error fetching paginated students:', error);
-    if (error.response?.status === 401) {
-      throw new Error('INVALID_TOKEN');
+    if (error.response?.status === 401 || error.message === 'INVALID_TOKEN') {
+      throw new TokenExpiredError();
     }
     throw error;
   }

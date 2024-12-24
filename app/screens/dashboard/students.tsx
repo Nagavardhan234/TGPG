@@ -31,6 +31,7 @@ import * as Sharing from 'expo-sharing';
 import XLSX from 'xlsx';
 import { ExtendedTheme } from '@/app/types/theme';
 import * as DocumentPicker from 'expo-document-picker';
+import { TokenExpiredError } from '@/app/services/student.service';
 
 interface FormData {
   name: string;
@@ -129,7 +130,7 @@ export default function StudentManagement() {
 
   const [filterName, setFilterName] = useState('');
   const [filterRoom, setFilterRoom] = useState('');
-  const [sortField, setSortField] = useState<'name' | 'room'>('name');
+  const [sortField, setSortField] = useState<'name' | 'room' | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const [importModalVisible, setImportModalVisible] = useState(false);
@@ -236,20 +237,45 @@ export default function StudentManagement() {
     return true;
   };
 
-  const loadStudents = async (pageNum = page, search = searchQuery) => {
+  const handleTokenExpiration = async () => {
+    try {
+      // Clear all auth related data
+      await AsyncStorage.multiRemove(['token', 'user', 'pg']);
+      
+      // Show message to user
+      showMessage({
+        message: 'Session Expired',
+        description: 'Please login again to continue',
+        type: 'warning',
+      });
+
+      // Redirect to login
+      router.replace('/login');
+    } catch (error) {
+      console.error('Error handling token expiration:', error);
+    }
+  };
+
+  const loadStudents = async (pageNum = page, search = searchQuery, status = filterStatus) => {
     try {
       setLoading(true);
       const pgData = await AsyncStorage.getItem('pg');
       if (!pgData) throw new Error('PG data not found');
       
       const { PGID } = JSON.parse(pgData);
-      const response = await getStudentsWithPagination(PGID, pageNum, 10, search);
+      const response = await getStudentsWithPagination(PGID, pageNum, 10, search, status);
       
       setStudents(response.data);
       setTotalPages(response.totalPages);
       setPage(response.currentPage);
     } catch (error) {
       console.error('Error loading students:', error);
+      
+      if (error instanceof TokenExpiredError) {
+        await handleTokenExpiration();
+        return;
+      }
+
       setError({
         message: error instanceof Error ? error.message : 'Failed to load students',
         type: 'error'
@@ -418,7 +444,11 @@ export default function StudentManagement() {
       });
       setIsEditMode(false);
       setSelectedStudent(null);
-    } catch (error: any) {
+    } catch (error) {
+      if (error instanceof TokenExpiredError) {
+        await handleTokenExpiration();
+        return;
+      }
       console.error('Error updating student:', error);
       setError({
         message: error.message || 'Failed to update student',
@@ -439,6 +469,10 @@ export default function StudentManagement() {
       });
       loadStudents(); // Refresh the list
     } catch (error) {
+      if (error instanceof TokenExpiredError) {
+        await handleTokenExpiration();
+        return;
+      }
       setError({
         message: error.message || 'Failed to delete student',
         type: 'error'
@@ -661,6 +695,39 @@ export default function StudentManagement() {
     }, 500));
   };
 
+  // Add sorting function
+  const handleSort = (field: 'name' | 'room') => {
+    if (sortField === field) {
+      // If clicking the same field, toggle direction
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      // If clicking new field, set it with ascending direction
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Sort the students array
+  const sortedStudents = useMemo(() => {
+    if (!sortField) return students;
+
+    return [...students].sort((a, b) => {
+      let compareA, compareB;
+      
+      if (sortField === 'name') {
+        compareA = a.FullName.toLowerCase();
+        compareB = b.FullName.toLowerCase();
+      } else {
+        compareA = parseInt(a.Room_No);
+        compareB = parseInt(b.Room_No);
+      }
+
+      if (compareA < compareB) return sortDirection === 'asc' ? -1 : 1;
+      if (compareA > compareB) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [students, sortField, sortDirection]);
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Portal>
@@ -868,85 +935,31 @@ export default function StudentManagement() {
       </Portal>
 
       <View style={styles.header}>
-        <Title style={[styles.title, { color: theme.colors.text }]}>
-          Student Management
-        </Title>
-        
+        <Title style={styles.title}>Student Management</Title>
         <View style={styles.searchContainer}>
           <Searchbar
-            placeholder="Search students..."
+            placeholder="Search by name, phone or room"
             onChangeText={handleSearch}
             value={searchQuery}
-            style={[styles.searchBar, { backgroundColor: theme.colors.surfaceVariant }]}
+            style={styles.searchBar}
           />
-          {!isSmallScreen && (
-          <TextInput
-            placeholder="Room No."
-            value={filterRoom}
-            onChangeText={setFilterRoom}
-            mode="outlined"
-            keyboardType="numeric"
-              style={styles.roomSearch}
+          <SegmentedButtons
+            value={filterStatus}
+            onValueChange={(value) => {
+              setFilterStatus(value as typeof filterStatus);
+              loadStudents(1, searchQuery, value);  // Pass status to loadStudents
+            }}
+            buttons={[
+              { value: 'ALL', label: 'All' },
+              { value: 'ACTIVE', label: 'Active' },
+              { value: 'INACTIVE', label: 'Inactive' },
+              { value: 'MOVED_OUT', label: 'Moved Out' }
+            ]}
           />
-          )}
-          <View style={styles.actionButtons}>
-            <IconButton
-              icon="refresh"
-              mode="contained-tonal"
-              onPress={handleRefresh}
-              loading={refreshing}
-            />
-            <IconButton
-              icon="sort"
-              mode="contained-tonal"
-              onPress={() => setFilterVisible(true)}
-            />
-            <IconButton
-              icon="microsoft-excel"
-              mode="contained-tonal"
-              onPress={exportToExcel}
-            />
-          </View>
         </View>
       </View>
 
-      <View style={styles.filterContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <Chip
-            selected={filterStatus === 'ALL'}
-            onPress={() => setFilterStatus('ALL')}
-            style={styles.filterChip}
-            elevation={2}
-          >
-            All
-          </Chip>
-          <Chip
-            selected={filterStatus === 'ACTIVE'}
-            onPress={() => setFilterStatus('ACTIVE')}
-            style={styles.filterChip}
-            elevation={2}
-          >
-            Active
-          </Chip>
-          <Chip
-            selected={filterStatus === 'INACTIVE'}
-            onPress={() => setFilterStatus('INACTIVE')}
-            style={styles.filterChip}
-            elevation={2}
-          >
-            Inactive
-          </Chip>
-          <Chip
-            selected={filterStatus === 'MOVED_OUT'}
-            onPress={() => setFilterStatus('MOVED_OUT')}
-            style={styles.filterChip}
-            elevation={2}
-          >
-            Moved Out
-          </Chip>
-        </ScrollView>
-      </View>
-
+     
       <ScrollView 
         style={styles.tableContainer}
         onScroll={({ nativeEvent }) => {
@@ -965,10 +978,18 @@ export default function StudentManagement() {
       >
         <DataTable>
           <DataTable.Header style={[styles.tableHeader, { backgroundColor: theme.colors.surfaceVariant }]}>
-            <DataTable.Title style={styles.nameColumn}>
+            <DataTable.Title 
+              style={styles.nameColumn}
+              sortDirection={sortField === 'name' ? sortDirection : 'none'}
+              onPress={() => handleSort('name')}
+            >
               <Text style={[styles.headerText, { color: theme.colors.onSurface }]}>Name</Text>
             </DataTable.Title>
-            <DataTable.Title style={styles.roomColumn}>
+            <DataTable.Title 
+              style={styles.roomColumn}
+              sortDirection={sortField === 'room' ? sortDirection : 'none'}
+              onPress={() => handleSort('room')}
+            >
               <Text style={[styles.headerText, { color: theme.colors.onSurface }]}>Room</Text>
             </DataTable.Title>
             <DataTable.Title style={styles.actionColumn}>
@@ -976,7 +997,7 @@ export default function StudentManagement() {
             </DataTable.Title>
           </DataTable.Header>
 
-          {students.map((student) => (
+          {sortedStudents.map((student) => (
             <DataTable.Row 
               key={student.TenantID}
               style={[styles.tableRow, { backgroundColor: theme.colors.surface }]}
