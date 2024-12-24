@@ -243,13 +243,17 @@ export default function StudentManagement() {
       const { PGID } = JSON.parse(pgData);
       const response = await getStudentsWithPagination(PGID, pageNum, 10, search);
       
+      // Debug logs
+      console.log('Response from service:', response);
+      console.log('Student data sample:', response.data[0]);
+      
       setStudents(response.data);
       setTotalPages(response.totalPages);
       setPage(response.currentPage);
     } catch (error) {
       console.error('Error loading students:', error);
       setError({
-        message: error.message || 'Failed to load students',
+        message: error instanceof Error ? error.message : 'Failed to load students',
         type: 'error'
       });
     } finally {
@@ -973,6 +977,7 @@ export default function StudentManagement() {
               <DataTable.Cell style={styles.roomColumn}>
                 <View style={styles.roomBadge}>
                   <Text style={[styles.roomText, { color: theme.colors.onSurface }]}>
+                    {console.log('Room_No value:', student.Room_No)}
                     {student.Room_No || '-'}
                   </Text>
                 </View>

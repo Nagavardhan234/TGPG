@@ -1,12 +1,17 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, ActivityIndicator, Text } from 'react-native';
-import { Card, Title, Paragraph, Button, FAB, Chip, Searchbar, Portal, Dialog } from 'react-native-paper';
+import { Card, Title, Paragraph, Button, FAB, Chip, Searchbar, Portal, Dialog, TextInput, Switch } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getRoomStats, RoomStatsResponse, deleteRoom } from '@/app/services/dashboard.service';
+import { getRoomStats, RoomStatsResponse, deleteRoom, addRoom } from '@/app/services/dashboard.service';
 import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/app/context/AuthContext';
 import { ErrorNotification } from '@/app/components/ErrorNotification';
+
+interface AddRoomForm {
+  roomNumber: string;
+  status: 'active' | 'maintenance';
+}
 
 export default function RoomManagement() {
   const { theme, isDarkMode } = useTheme();
@@ -22,6 +27,13 @@ export default function RoomManagement() {
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<RoomStats | null>(null);
   const [deleteError, setDeleteError] = useState('');
+  const [addRoomVisible, setAddRoomVisible] = useState(false);
+  const [addRoomForm, setAddRoomForm] = useState<AddRoomForm>({
+    roomNumber: '',
+    status: 'active'
+  });
+  const [addRoomError, setAddRoomError] = useState('');
+  const [totalRooms, setTotalRooms] = useState(0);
 
   // Load room statistics
   const loadRoomStats = useCallback(async () => {
@@ -121,6 +133,55 @@ export default function RoomManagement() {
     }
   };
 
+  // Add this function to validate room number
+  const validateRoomNumber = (value: string) => {
+    const numValue = parseInt(value);
+    if (!value || isNaN(numValue)) {
+      return 'Room number is required';
+    }
+    if (numValue < 1) {
+      return 'Room number must be greater than 0';
+    }
+    if (rooms.some(room => room.room_number === value)) {
+      return 'Room number already exists';
+    }
+    return '';
+  };
+
+  // Add room handler
+  const handleAddRoom = async () => {
+    try {
+      if (!pg?.PGID) return;
+
+      // Validate room number
+      const error = validateRoomNumber(addRoomForm.roomNumber);
+      if (error) {
+        setAddRoomError(error);
+        return;
+      }
+
+      setLoading(true);
+      const response = await addRoom(pg.PGID, {
+        roomNumber: addRoomForm.roomNumber,
+        status: addRoomForm.status
+      });
+
+      if (response.success) {
+        // Refresh room list
+        await loadRoomStats();
+        setAddRoomVisible(false);
+        setAddRoomForm({ roomNumber: '', status: 'active' });
+        setErrorMessage('Room added successfully');
+        setShowError(false);
+      }
+    } catch (error) {
+      console.error('Error adding room:', error);
+      setAddRoomError(error instanceof Error ? error.message : 'Failed to add room');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: isDarkMode ? '#121212' : theme.colors.background }]}>
       <ErrorNotification
@@ -196,7 +257,7 @@ export default function RoomManagement() {
         style={[styles.fab, { 
           backgroundColor: isDarkMode ? '#FF6F61' : '#FFB4A9',
         }]}
-        onPress={() => {}}
+        onPress={() => setAddRoomVisible(true)}
       />
 
       <Portal>
@@ -216,6 +277,63 @@ export default function RoomManagement() {
               disabled={!!deleteError || loading}
             >
               Delete
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog visible={addRoomVisible} onDismiss={() => {
+          setAddRoomVisible(false);
+          setAddRoomForm({ roomNumber: '', status: 'active' });
+          setAddRoomError('');
+        }}>
+          <Dialog.Title>Add New Room</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              label="Room Number"
+              value={addRoomForm.roomNumber}
+              onChangeText={(value) => {
+                setAddRoomForm(prev => ({ ...prev, roomNumber: value }));
+                setAddRoomError('');
+              }}
+              mode="outlined"
+              keyboardType="numeric"
+              error={!!addRoomError}
+              style={{ marginBottom: 8 }}
+            />
+            {addRoomError ? (
+              <Text style={{ color: theme.colors.error, marginBottom: 8 }}>
+                {addRoomError}
+              </Text>
+            ) : null}
+
+            <View style={styles.switchContainer}>
+              <Text>Maintenance Mode</Text>
+              <Switch
+                value={addRoomForm.status === 'maintenance'}
+                onValueChange={(value) => 
+                  setAddRoomForm(prev => ({
+                    ...prev,
+                    status: value ? 'maintenance' : 'active'
+                  }))
+                }
+              />
+            </View>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button 
+              onPress={() => {
+                setAddRoomVisible(false);
+                setAddRoomForm({ roomNumber: '', status: 'active' });
+                setAddRoomError('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onPress={handleAddRoom}
+              disabled={loading}
+            >
+              Add Room
             </Button>
           </Dialog.Actions>
         </Dialog>
@@ -286,5 +404,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  switchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 16,
   },
 }); 

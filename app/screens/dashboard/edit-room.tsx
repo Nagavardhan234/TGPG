@@ -135,7 +135,7 @@ export default function EditRoom() {
 
         // Update all occupants to new room number
         const updatePromises = students.map(async (student) => {
-          await updateOccupantRoom(pg.PGID, student.current_room, {
+          await updateOccupantRoom(pg.PGID, initialRoom.room_number, {
             newRoomNumber: newRoomNumber,
             studentId: student.student_id
           });

@@ -207,3 +207,24 @@ export const deleteRoom = async (pgId: number, roomNumber: string): Promise<{ su
     throw error;
   }
 }; 
+
+export interface AddRoomRequest {
+  roomNumber: string;
+  status: 'active' | 'maintenance';
+}
+
+export const addRoom = async (pgId: number, data: AddRoomRequest): Promise<{ success: boolean; message: string }> => {
+  try {
+    const response = await api.post(
+      `${API_URL}/api/dashboard/room/${pgId}`,
+      data
+    );
+
+    return response.data;
+  } catch (error) {
+    if (error.response?.data?.message) {
+      throw new Error(error.response.data.message);
+    }
+    throw error;
+  }
+}; 

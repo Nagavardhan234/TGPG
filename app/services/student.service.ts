@@ -8,15 +8,13 @@ export interface Student {
   FullName: string;
   Phone: string;
   Email: string | null;
+  Room_No: string;
   MoveInDate: string;
   MoveOutDate: string | null;
   Status: 'ACTIVE' | 'INACTIVE' | 'MOVED_OUT';
-  Rent: number;
+  Monthly_Rent: number;
   GuardianNumber: string | null;
   GuardianName: string | null;
-  Monthly_Rent: string | null;
-  Password: string | null;
-  Room_No: number | null;
 }
 
 export interface StudentForm {
@@ -68,19 +66,18 @@ export const addStudent = async (pgId: number, formData: StudentForm) => {
       throw new Error('No authentication token found');
     }
 
-    await validateRoomCapacity(pgId, formData.roomNo);
-    
+    // Keep existing validation flow
     await validatePhoneUnique(pgId, formData.phone);
 
     const response = await api.post(`/api/tenants/pg/${pgId}/add`, {
       FullName: formData.name,
       Phone: formData.phone,
       Email: formData.email || null,
-      Monthly_Rent: parseInt(formData.monthlyRent),
+      Monthly_Rent: parseInt(formData.monthlyRent),  // Keep the parsing as it was
       GuardianName: formData.guardianName || null,
       GuardianNumber: formData.guardianPhone || null,
       Password: formData.password,
-      Room_No: parseInt(formData.roomNo.toString()),
+      Room_No: parseInt(formData.roomNo.toString()),  // Keep the existing format
       MoveInDate: formData.joinDate,
       Status: 'ACTIVE'
     });
@@ -229,16 +226,26 @@ export const validateRoomCapacity = async (pgId: number, roomNo: number) => {
       throw new Error('No authentication token found');
     }
 
+    // Get room stats directly from tenant controller
     const response = await api.get(`/api/tenants/pg/${pgId}/room/${roomNo}`);
-    const { capacity, occupiedCount } = response.data.data;
     
+    // If room doesn't exist, it will be created during addStudent
+    if (response.data.error === 'NOT_FOUND') {
+      return true;  // Allow the addStudent to handle room creation
+    }
+
+    const { capacity, occupiedCount } = response.data.data;
     if (occupiedCount >= capacity) {
-      throw new Error(`Room ${roomNo} has reached its maximum capacity of ${capacity} students`);
+      throw new Error(`Room ${roomNo} is full. Maximum capacity is ${capacity} students.`);
+    }
+    
+    return true;
+  } catch (error: any) {
+    // Only throw capacity error, let addStudent handle room creation
+    if (error.response?.data?.error !== 'NOT_FOUND') {
+      throw error;
     }
     return true;
-  } catch (error) {
-    console.error('Error validating room capacity:', error);
-    throw error;
   }
 };
 
@@ -279,6 +286,7 @@ export const getStudentsWithPagination = async (pgId: number, page: number = 1, 
     }
 
     const response = await api.get(`/api/tenants/pg/${pgId}/paginated?${params}`);
+    console.log('API Response:', response.data);
     
     return {
       data: response.data.data,
