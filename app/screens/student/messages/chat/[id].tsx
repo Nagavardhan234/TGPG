@@ -254,7 +254,8 @@ export default function ChatScreen() {
     <StudentDashboardLayout title="Chat">
       <KeyboardAvoidingView 
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
       >
         <ScrollView
           ref={scrollViewRef}
@@ -296,6 +297,10 @@ export default function ChatScreen() {
               value={message}
               onChangeText={setMessage}
               style={styles.input}
+              multiline={false}
+              blurOnSubmit={false}
+              returnKeyType="send"
+              enablesReturnKeyAutomatically={true}
               right={
                 <TextInput.Icon 
                   icon={isRecording ? "stop" : "microphone"}
@@ -395,11 +400,12 @@ const styles = StyleSheet.create({
     padding: 8,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,0,0,0.1)',
+    minHeight: 56,
   },
   input: {
     flex: 1,
-    marginHorizontal: 8,
-    backgroundColor: 'transparent',
+    paddingVertical: 8,
+    fontSize: 16,
   },
   attachMenu: {
     margin: 20,
