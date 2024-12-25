@@ -38,7 +38,7 @@ export default function Index() {
   }
 
   if (shouldRedirectToLogin) {
-    return <Redirect href="/login" />;
+    return <Redirect href="/screens/LoginScreen" />;
   }
 
   return null;
