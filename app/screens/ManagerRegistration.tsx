@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Image, TouchableOpacity, Switch, Modal, ActivityIndicator, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
+import { View, StyleSheet, ScrollView, Image, TouchableOpacity, Switch, Modal, ActivityIndicator } from 'react-native';
 import {PortalProvider} from 'react-native-portal'
 import { 
   Text, 
+  TextInput, 
   Button, 
   Surface, 
   MD3Colors, 
@@ -21,7 +22,6 @@ import { showMessage } from 'react-native-flash-message';
 import { router } from 'expo-router';
 import { getAmenities, Amenity } from '../services/amenity.service';
 import ValidationModal from '../components/ValidationModal';
-import { ValidationInput } from '../components/ValidationInput';
 
 type Step = {
   title: string;
@@ -288,6 +288,100 @@ const validatePassword = (password: string): { isValid: boolean; message: string
   return { isValid: true, message: '' };
 };
 
+// Add this component for modern field validation
+const ValidationInput = ({ 
+  label, 
+  value, 
+  onChangeText, 
+  error, 
+  icon,
+  keyboardType = 'default',
+  secureTextEntry = false,
+  multiline = false,
+  numberOfLines = 1,
+  style = {},
+  right,
+}: { 
+  label: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  error?: string;
+  icon?: string;
+  keyboardType?: 'default' | 'email-address' | 'numeric' | 'phone-pad';
+  secureTextEntry?: boolean;
+  multiline?: boolean;
+  numberOfLines?: number;
+  style?: any;
+  right?: React.ReactNode;
+}) => {
+  const { theme } = useTheme();
+  const [isFocused, setIsFocused] = useState(false);
+
+  // Map common icons to Material Community Icons
+  const getIconName = (iconName: string): string => {
+    const iconMap: { [key: string]: string } = {
+      'account': 'account',
+      'email': 'email',
+      'phone': 'phone',
+      'lock': 'lock',
+      'home': 'home',
+      'map-marker': 'map-marker',
+      'city': 'city',
+      'state': 'map',
+      'postal-code': 'pound',
+      'currency': 'currency-inr',
+      'description': 'text',
+      'bank': 'bank',
+      'at': 'at',
+    };
+    return iconMap[iconName] || iconName;
+  };
+
+  return (
+    <View style={styles.inputContainer}>
+      <TextInput
+        label={label}
+        value={value}
+        onChangeText={onChangeText}
+        mode="outlined"
+        error={!!error}
+        keyboardType={keyboardType}
+        secureTextEntry={secureTextEntry}
+        multiline={multiline}
+        numberOfLines={numberOfLines}
+        style={[
+          styles.input, 
+          style,
+          error && styles.inputError
+        ]}
+        left={icon ? <TextInput.Icon icon={getIconName(icon)} /> : undefined}
+        right={right}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        outlineStyle={{
+          borderColor: error 
+            ? theme.colors.error 
+            : isFocused 
+              ? theme.colors.primary 
+              : theme.colors.outline,
+        }}
+      />
+      {error && (
+        <View style={styles.fieldErrorContainer}>
+          <IconButton
+            icon="alert-circle"
+            size={16}
+            iconColor={theme.colors.error}
+          />
+          <Text style={[styles.fieldErrorText, { color: theme.colors.error }]}>
+            {error}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
 // Add this component near other component definitions
 const SuccessModal = ({ visible, onDismiss }: { visible: boolean; onDismiss: () => void }) => {
   const { theme, isDarkMode } = useTheme();
@@ -446,98 +540,6 @@ const ValidationPopup = ({
     </View>
   );
 };
-
-interface StyleProps {
-  container: any;
-  content: any;
-  input: any;
-  inputError: any;
-  stepIndicator: any;
-  stepIndicatorContainer: any;
-  stepItem: any;
-  stepCircle: any;
-  stepTitle: any;
-  stepSubtitle: any;
-  progressBar: any;
-  progress: any;
-  formContainer: any;
-  buttonContainer: any;
-  button: any;
-  nextButton: any;
-  profileSection: any;
-  imageUpload: any;
-  imageContainer: any;
-  profileImage: any;
-  placeholderImage: any;
-  editButton: any;
-  uploadText: any;
-  infoSection: any;
-  sectionTitle: any;
-  inputGroup: any;
-  inputRow: any;
-  otpContainer: any;
-  otpText: any;
-  otpInputRow: any;
-  otpInput: any;
-  verifyButton: any;
-  passwordRequirements: any;
-  requirementTitle: any;
-  requirementText: any;
-  amenitiesGrid: any;
-  amenityCard: any;
-  amenityLabel: any;
-  detailsCard: any;
-  imagePreviewContainer: any;
-  imagePreview: any;
-  uploadButton: any;
-  paymentMethodCard: any;
-  sectionHeader: any;
-  infoButton: any;
-  chargesCard: any;
-  chargeRow: any;
-  chargeInfo: any;
-  chargeTitle: any;
-  chargeDescription: any;
-  chargeNote: any;
-  summarySection: any;
-  summaryHeader: any;
-  summaryHeaderText: any;
-  summaryName: any;
-  summarySubtext: any;
-  summaryTitle: any;
-  summaryRow: any;
-  summaryLabel: any;
-  summaryValue: any;
-  termsContainer: any;
-  submitButton: any;
-  loadingOverlay: any;
-  loadingText: any;
-  modalContainer: any;
-  modalTitle: any;
-  exampleCard: any;
-  exampleTitle: any;
-  exampleText: any;
-  exampleSubtitle: any;
-  divider: any;
-  successModalContainer: any;
-  successModalContent: any;
-  successModalIcon: any;
-  successModalTitle: any;
-  successModalMessage: any;
-  successModalButton: any;
-  duplicateModalContainer: any;
-  duplicateModalContent: any;
-  duplicateModalIcon: any;
-  duplicateModalTitle: any;
-  duplicateModalMessage: any;
-  duplicateModalButton: any;
-  errorContainer: any;
-  errorContent: any;
-  errorMessage: any;
-  roomTypeAccordion: any;
-  roomTypeHeader: any;
-  roomTypeDetails: any;
-}
 
 export default function ManagerRegistration() {
   const { theme, isDarkMode } = useTheme();
@@ -946,8 +948,8 @@ export default function ManagerRegistration() {
         onChangeText={text => handleFieldChange('phone', text)}
         error={validationErrors.find(error => error.field === 'phone')?.message}
         icon="phone"
-        keyboardType="number-pad"
-        style={[styles.input, { flex: 1 }]}
+        keyboardType="phone-pad"
+            style={[styles.input, { flex: 1 }]}
         right={
           <TextInput.Icon 
             icon={showOTP ? "check-circle" : "send"}
@@ -1101,7 +1103,7 @@ export default function ManagerRegistration() {
         onChangeText={text => setPgDetails(prev => ({ ...prev, pincode: text }))}
         error={validationErrors.find(error => error.field === 'pincode')?.message}
         icon="postal-code"
-        keyboardType="number-pad"
+        keyboardType="numeric"
         style={styles.input}
       />
 
@@ -1165,7 +1167,7 @@ export default function ManagerRegistration() {
             onChangeText={text => setPgDetails(prev => ({ ...prev, totalRooms: text }))}
             error={validationErrors.find(error => error.field === 'totalRooms')?.message}
             icon="door"
-            keyboardType="number-pad"
+            keyboardType="numeric"
             style={styles.input}
           />
           <ValidationInput
@@ -1174,7 +1176,7 @@ export default function ManagerRegistration() {
             onChangeText={text => setPgDetails(prev => ({ ...prev, totalTenants: text }))}
             error={validationErrors.find(error => error.field === 'totalTenants')?.message}
             icon="account-group"
-            keyboardType="number-pad"
+            keyboardType="numeric"
             style={styles.input}
           />
           <ValidationInput
@@ -1183,7 +1185,7 @@ export default function ManagerRegistration() {
             onChangeText={text => setPgDetails(prev => ({ ...prev, costPerBed: text }))}
             error={validationErrors.find(error => error.field === 'costPerBed')?.message}
             icon="currency-inr"
-            keyboardType="number-pad"
+            keyboardType="numeric"
             style={styles.input}
           />
         </View>
@@ -1281,7 +1283,6 @@ export default function ManagerRegistration() {
             }))}
             error={validationErrors.find(error => error.field === 'accountNumber')?.message}
             icon="numeric"
-            keyboardType="number-pad"
             style={styles.input}
           />
           <ValidationInput
@@ -1557,15 +1558,18 @@ export default function ManagerRegistration() {
   );
 
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={{ flex: 1 }}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
-    >
+    <View style={styles.rootContainer}>
+      <View style={styles.stickyHeader}>
+        <ValidationPopup 
+          errors={validationErrors} 
+          onDismiss={() => setValidationErrors([])} 
+        />
+      </View>
+      
       <ScrollView 
-        style={styles.container}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ flexGrow: 1 }}
+        style={[styles.scrollView, { backgroundColor: theme.colors.background }]}
+        contentContainerStyle={styles.content}
+        stickyHeaderIndices={[0]}
       >
         <View style={[styles.stepIndicatorContainer, { backgroundColor: theme.colors.background }]}>
           {renderStepIndicator()}
@@ -1621,40 +1625,28 @@ export default function ManagerRegistration() {
           <Text style={styles.loadingText}>Creating your account...</Text>
         </View>
       )}
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
-const styles = StyleSheet.create<StyleProps>({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'transparent',
   },
   content: {
-    paddingBottom: 24,
-  },
-  input: {
-    width: '100%',
-    marginVertical: 4,
-    paddingVertical: 8,
-  },
-  inputError: {
-    borderColor: 'red',
+    padding: 20,
   },
   stepIndicator: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 32,
-  },
-  stepIndicatorContainer: {
-    paddingTop: 16,
-    paddingHorizontal: 20,
+    position: 'relative',
     paddingBottom: 20,
   },
   stepItem: {
-    alignItems: 'center',
     flex: 1,
+    alignItems: 'center',
   },
   stepCircle: {
     width: 48,
@@ -1665,15 +1657,14 @@ const styles = StyleSheet.create<StyleProps>({
     marginBottom: 8,
   },
   stepTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 4,
   },
   stepSubtitle: {
-    fontSize: 12,
+    fontSize: 10,
     textAlign: 'center',
-    opacity: 0.7,
   },
   progressBar: {
     position: 'absolute',
@@ -1681,36 +1672,212 @@ const styles = StyleSheet.create<StyleProps>({
     left: 0,
     right: 0,
     height: 4,
+    borderRadius: 2,
   },
   progress: {
-    height: '100%',
+    height: 4,
+    borderRadius: 2,
   },
   formContainer: {
     padding: 16,
     gap: 16,
+    width: '100%',
+  },
+  imageUpload: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  uploadButton: {
+    marginTop: 8,
+  },
+  input: {
+    backgroundColor: 'transparent',
+    marginBottom: 4,
+    minWidth: 150,
+    flex: 1,
   },
   buttonContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 16,
-    paddingHorizontal: 16,
-    paddingBottom: 16,
+    justifyContent: 'flex-end',
+    gap: 12,
+    marginTop: 24,
   },
   button: {
     minWidth: 100,
   },
   nextButton: {
     flex: 1,
-    marginLeft: 16,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  amenitiesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  roomTypeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  imagePreviewContainer: {
+    flexDirection: 'row',
+    marginVertical: 8,
+  },
+  imagePreview: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  amenityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    borderWidth: 2,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  amenityLabel: {
+    marginLeft: 8,
+  },
+  roomTypeAccordion: {
+    marginBottom: 8,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  roomTypeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 16,
+  },
+  roomTypeDetails: {
+    padding: 16,
+    gap: 12,
+  },
+  summaryCard: {
+    padding: 16,
+    borderWidth: 2,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  termsContainer: {
+    marginTop: 16,
+  },
+  subTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 16,
+    marginBottom: 8,
+    color: '#666',
+  },
+  extraCharges: {
+    gap: 8,
+    marginBottom: 16,
+  },
+  roomDetailsCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderWidth: 2,
+    borderRadius: 8,
+  },
+  paymentMethodCard: {
+    padding: 16,
+    borderRadius: 12,
+    gap: 16,
+    marginTop: 16,
+  },
+  chargesCard: {
+    padding: 16,
+    borderRadius: 12,
+    gap: 16,
+  },
+  chargeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  chargeInfo: {
+    flex: 1,
+    marginRight: 16,
+  },
+  chargeTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  chargeDescription: {
+    fontSize: 14,
+    color: '#666',
+  },
+  modalContainer: {
+    margin: 20,
+    padding: 20,
+    borderRadius: 12,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  exampleCard: {
+    padding: 16,
+    marginVertical: 16,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  exampleTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  exampleSubtitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  exampleText: {
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    marginVertical: 12,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  summaryLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  summaryValue: {
+    fontSize: 14,
+    color: '#666',
+  },
+  detailsCard: {
+    padding: 16,
+    borderRadius: 12,
+    gap: 16,
   },
   profileSection: {
     padding: 20,
     borderRadius: 16,
     alignItems: 'center',
     marginBottom: 16,
-  },
-  imageUpload: {
-    alignItems: 'center',
   },
   imageContainer: {
     position: 'relative',
@@ -1747,11 +1914,6 @@ const styles = StyleSheet.create<StyleProps>({
     borderRadius: 16,
     marginBottom: 16,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
   inputGroup: {
     width: '100%',
     gap: 12,
@@ -1762,6 +1924,15 @@ const styles = StyleSheet.create<StyleProps>({
     marginBottom: 12,
     width: '100%',
     flexWrap: 'wrap',
+  },
+  sectionTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  infoIcon: {
+    margin: 0,
+    padding: 0,
   },
   otpContainer: {
     padding: 16,
@@ -1785,97 +1956,6 @@ const styles = StyleSheet.create<StyleProps>({
   verifyButton: {
     marginTop: 8,
   },
-  passwordRequirements: {
-    marginTop: 8,
-    padding: 12,
-    borderRadius: 8,
-  },
-  requirementTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  requirementText: {
-    fontSize: 12,
-    marginBottom: 4,
-    opacity: 0.7,
-  },
-  amenitiesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  amenityCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    borderRadius: 8,
-  },
-  amenityLabel: {
-    marginLeft: 8,
-  },
-  detailsCard: {
-    padding: 16,
-    borderRadius: 12,
-    gap: 16,
-  },
-  imagePreviewContainer: {
-    flexDirection: 'row',
-    marginVertical: 8,
-  },
-  imagePreview: {
-    width: 100,
-    height: 100,
-    borderRadius: 8,
-    marginRight: 8,
-  },
-  uploadButton: {
-    marginTop: 8,
-  },
-  paymentMethodCard: {
-    padding: 16,
-    borderRadius: 12,
-    gap: 16,
-    marginTop: 16,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  infoButton: {
-    margin: 0,
-    padding: 0,
-  },
-  chargesCard: {
-    padding: 16,
-    borderRadius: 12,
-    gap: 16,
-  },
-  chargeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  chargeInfo: {
-    flex: 1,
-    marginRight: 16,
-  },
-  chargeTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  chargeDescription: {
-    fontSize: 14,
-    opacity: 0.7,
-  },
-  chargeNote: {
-    fontSize: 14,
-    opacity: 0.7,
-    marginTop: 8,
-  },
   summarySection: {
     padding: 16,
     borderRadius: 16,
@@ -1896,78 +1976,208 @@ const styles = StyleSheet.create<StyleProps>({
   },
   summarySubtext: {
     fontSize: 14,
-    opacity: 0.7,
+    color: '#666',
   },
   summaryTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 16,
   },
-  summaryRow: {
+  chargeNote: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 8,
+  },
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
-  summaryLabel: {
+  infoButton: {
+    margin: 0,
+    padding: 0,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  loadingText: {
+    color: 'white',
+    marginTop: 12,
     fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  summaryValue: {
-    fontSize: 14,
-    opacity: 0.7,
-  },
-  termsContainer: {
-    marginTop: 16,
   },
   submitButton: {
     marginTop: 24,
     paddingVertical: 8,
   },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  errorText: {
+    fontSize: 12,
+    color: 'red',
+  },
+  validationErrorText: {
+    fontSize: 14,
+    color: 'red',
+    marginLeft: 8,
+  },
+  modalWrapper: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
-  loadingText: {
-    color: 'white',
-    marginTop: 12,
+  modalContent: {
+    padding: 24,
+    borderRadius: 16,
+    width: '90%',
+    maxWidth: 340,
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
-  modalContainer: {
-    margin: 20,
-    padding: 20,
-    borderRadius: 12,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+  modalIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 16,
   },
-  exampleCard: {
-    padding: 16,
-    marginVertical: 16,
-    borderRadius: 8,
-  },
-  exampleTitle: {
-    fontSize: 16,
+  modalHeaderTitle: {
+    fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 8,
+    textAlign: 'center',
   },
-  exampleText: {
-    fontSize: 14,
-    marginBottom: 4,
+  modalMessage: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 24,
   },
-  exampleSubtitle: {
+  modalActions: {
+    width: '100%',
+  },
+  modalButton: {
+    borderRadius: 8,
+  },
+  modalButtonContent: {
+    paddingVertical: 8,
+  },
+  inputContainer: {
+    marginBottom: 16,
+    width: '100%',
+  },
+  errorContainer: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    right: 20,
+    zIndex: 1000,
+  },
+  errorContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+  },
+  errorMessage: {
+    flex: 1,
+    marginHorizontal: 8,
     fontSize: 14,
+  },
+  errorIcon: {
+    margin: 0,
+    padding: 0,
+    marginRight: 4,
+  },
+  errorText: {
+    fontSize: 12,
+    flex: 1,
+    flexWrap: 'wrap',
+  },
+  inputError: {
+    borderColor: 'rgba(255, 59, 48, 0.5)',
+  },
+  fieldErrorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    paddingHorizontal: 8,
+    backgroundColor: 'rgba(255, 59, 48, 0.08)',
+    borderRadius: 8,
+    padding: 4,
+  },
+  fieldErrorText: {
+    fontSize: 12,
+    flex: 1,
+    marginLeft: 4,
+  },
+  validationErrorText: {
+    fontSize: 14,
+    color: 'red',
+    marginLeft: 8,
+  },
+  duplicateModalContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    padding: 16,
+    zIndex: 1000,
+  },
+  duplicateModalContent: {
+    padding: 24,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  duplicateModalIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  duplicateModalTitle: {
+    fontSize: 20,
     fontWeight: 'bold',
-    marginTop: 12,
-    marginBottom: 4,
+    marginBottom: 8,
+    textAlign: 'center',
   },
-  divider: {
-    height: 1,
-    backgroundColor: 'rgba(0,0,0,0.1)',
-    marginVertical: 12,
+  duplicateModalMessage: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 24,
+  },
+  duplicateModalButton: {
+    minWidth: 120,
   },
   successModalContainer: {
     position: 'absolute',
@@ -1977,14 +2187,24 @@ const styles = StyleSheet.create<StyleProps>({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 1000,
   },
   successModalContent: {
     padding: 24,
     borderRadius: 16,
+    alignItems: 'center',
     width: '90%',
     maxWidth: 340,
-    alignItems: 'center',
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   successModalIcon: {
     width: 64,
@@ -2004,70 +2224,60 @@ const styles = StyleSheet.create<StyleProps>({
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 24,
+    lineHeight: 24,
   },
   successModalButton: {
     minWidth: 200,
     borderRadius: 8,
   },
-  duplicateModalContainer: {
+  rootContainer: {
+    flex: 1,
+    position: 'relative',
+  },
+  stickyHeader: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    padding: 16,
+    zIndex: 1000,
+    elevation: 1000,
   },
-  duplicateModalContent: {
-    padding: 24,
-    borderRadius: 16,
-    alignItems: 'center',
-  },
-  duplicateModalIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
+  stepIndicatorContainer: {
+    paddingTop: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
     marginBottom: 16,
   },
-  duplicateModalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    textAlign: 'center',
+  scrollView: {
+    flex: 1,
   },
-  duplicateModalMessage: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  duplicateModalButton: {
-    minWidth: 120,
+  content: {
+    paddingBottom: 40,
   },
   errorContainer: {
-    padding: 16,
-    marginBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 8,
   },
   errorContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    padding: 16,
     borderRadius: 8,
+    borderLeftWidth: 4,
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
   errorMessage: {
     flex: 1,
-    marginLeft: 8,
-  },
-  roomTypeAccordion: {
-    marginBottom: 8,
-    borderRadius: 12,
-  },
-  roomTypeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-  },
-  roomTypeDetails: {
-    padding: 16,
-    gap: 12,
+    marginHorizontal: 8,
+    fontSize: 14,
+    lineHeight: 20,
   },
 });
