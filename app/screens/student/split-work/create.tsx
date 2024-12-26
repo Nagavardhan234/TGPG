@@ -17,6 +17,7 @@ import { StudentDashboardLayout } from '@/app/components/layouts';
 import { router } from 'expo-router';
 import { useTheme } from '@/app/context/ThemeContext';
 import { taskService } from '@/app/services/taskService';
+import { socketService } from '@/app/services/socketService';
 import { TASK_TYPES, TASK_ICONS } from '@/app/config/constants';
 
 interface RoomMember {
@@ -37,6 +38,7 @@ export default function CreateTaskScreen() {
   const [selectedMembers, setSelectedMembers] = useState<RoomMember[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMembers, setLoadingMembers] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadRoomMembers();
@@ -55,22 +57,32 @@ export default function CreateTaskScreen() {
     }
   };
 
-  const handleCreateTask = async () => {
+  const handleSubmit = async () => {
+    if (!taskHeading.trim() || !taskDescription.trim()) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
     try {
       setLoading(true);
-      const taskData = {
+      // First ensure socket is connected
+      await socketService.connect();
+      
+      const response = await taskService.createTask({
         taskHeading,
         taskDescription,
         logoId: selectedLogo,
-        assignedTenants: selectedMembers.map(member => member.TenantID)
-      };
+        assignedTenants: selectedMembers.map(m => m.TenantID)
+      });
 
-      const response = await taskService.createTask(taskData);
       if (response.success) {
+        // Emit a socket event to notify about the new task
+        socketService.subscribeToTaskUpdates(() => {});
         router.back();
       }
     } catch (error) {
       console.error('Error creating task:', error);
+      setError('Failed to create task');
     } finally {
       setLoading(false);
     }
@@ -153,7 +165,7 @@ export default function CreateTaskScreen() {
             style={styles.membersButton}
           >
             {selectedMembers.length === 0 
-              ? 'Select Members (Optional)' 
+              ? 'Select Members to Share Task (Optional)' 
               : `${selectedMembers.length} Member${selectedMembers.length === 1 ? '' : 's'} Selected`}
           </Button>
 
@@ -180,7 +192,7 @@ export default function CreateTaskScreen() {
 
           <Button
             mode="contained"
-            onPress={handleCreateTask}
+            onPress={handleSubmit}
             style={styles.createButton}
             loading={loading}
             disabled={!taskHeading.trim() || !taskDescription.trim() || loading}

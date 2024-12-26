@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { 
   Surface, 
@@ -16,11 +16,12 @@ import {
   ProgressBar
 } from 'react-native-paper';
 import { StudentDashboardLayout } from '@/app/components/layouts';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/app/context/ThemeContext';
 import { useStudentAuth } from '@/app/context/StudentAuthContext';
 import { taskService } from '@/app/services/taskService';
 import { TASK_STATUS, TASK_ICONS } from '@/app/config/constants';
+import { socketService } from '@/app/services/socketService';
 
 interface Task {
   TaskID: number;
@@ -64,12 +65,6 @@ export default function SplitWorkScreen() {
     completed: 0
   });
 
-  useEffect(() => {
-    if (isAuthenticated && student) {
-      loadTasks();
-    }
-  }, [isAuthenticated, student]);
-
   const loadTasks = async () => {
     try {
       setLoading(true);
@@ -92,6 +87,48 @@ export default function SplitWorkScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Load tasks and setup socket on mount
+  useEffect(() => {
+    if (!isAuthenticated || !student) return;
+
+    const setup = async () => {
+      await setupSocket();
+      await loadTasks();
+    };
+
+    setup();
+
+    return () => {
+      socketService.unsubscribeFromTaskUpdates();
+      socketService.leaveRoom();
+      socketService.disconnect();
+    };
+  }, [isAuthenticated, student]);
+
+  // Handle focus events to refresh data
+  useFocusEffect(
+    useCallback(() => {
+      if (isAuthenticated && student) {
+        setupSocket();
+        loadTasks();
+      }
+    }, [isAuthenticated, student])
+  );
+
+  const setupSocket = async () => {
+    if (!student) return;
+    
+    await socketService.connect();
+    socketService.joinRoom(student.Room_No.toString());
+    socketService.subscribeToTaskUpdates(() => {
+      loadTasks();
+    });
+  };
+
+  const handleTabChange = (tab: 'all' | 'mine') => {
+    setSelectedTab(tab);
   };
 
   const handleShowDetails = async (task: Task) => {
@@ -276,14 +313,14 @@ export default function SplitWorkScreen() {
         <View style={styles.header}>
           <Button
             mode={selectedTab === 'all' ? 'contained' : 'outlined'}
-            onPress={() => setSelectedTab('all')}
+            onPress={() => handleTabChange('all')}
             style={styles.tabButton}
           >
             All Tasks ({stats.total})
           </Button>
           <Button
             mode={selectedTab === 'mine' ? 'contained' : 'outlined'}
-            onPress={() => setSelectedTab('mine')}
+            onPress={() => handleTabChange('mine')}
             style={styles.tabButton}
           >
             My Tasks ({stats.mine})

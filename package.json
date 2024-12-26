@@ -70,6 +70,7 @@
     "react-native-video": "^6.8.2",
     "react-native-web": "~0.19.13",
     "react-native-webview": "13.12.2",
+    "socket.io-client": "^4.8.1",
     "victory-native": "^41.12.1",
     "victory-pie": "^37.3.2",
     "xlsx": "^0.18.5"

@@ -10,7 +10,8 @@ import {
   Modal,
   List,
   useTheme as usePaperTheme,
-  MD3Colors
+  MD3Colors,
+  ActivityIndicator
 } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import { useStudentAuth } from '@/app/context/StudentAuthContext';
@@ -75,18 +76,32 @@ const studentMenuItems = [
 export default function StudentDashboardLayout({ children, title, subtitle, headerRight }: Props) {
   const { theme, toggleTheme } = useTheme();
   const paperTheme = usePaperTheme();
-  const { student, isAuthenticated } = useStudentAuth();
+  const { student, isAuthenticated, logout } = useStudentAuth();
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
   const [expandedMenu, setExpandedMenu] = React.useState<string | null>(null);
+  const [isInitialized, setIsInitialized] = React.useState(false);
 
   useEffect(() => {
-    if (!isAuthenticated || !student) {
+    // Wait for next tick to ensure root layout is mounted
+    const timer = setTimeout(() => {
+      setIsInitialized(true);
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (isInitialized && (!isAuthenticated || !student)) {
       router.replace('/screens/student/login');
     }
-  }, [isAuthenticated, student]);
+  }, [isInitialized, isAuthenticated, student]);
 
   if (!isAuthenticated || !student) {
-    return null;
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
   }
 
   const dynamicStyles = {
