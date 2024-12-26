@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { 
   Text, 
@@ -75,9 +75,19 @@ const studentMenuItems = [
 export default function StudentDashboardLayout({ children, title, subtitle, headerRight }: Props) {
   const { theme, toggleTheme } = useTheme();
   const paperTheme = usePaperTheme();
-  const { student, logout } = useStudentAuth();
+  const { student, isAuthenticated } = useStudentAuth();
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
   const [expandedMenu, setExpandedMenu] = React.useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isAuthenticated || !student) {
+      router.replace('/screens/student/login');
+    }
+  }, [isAuthenticated, student]);
+
+  if (!isAuthenticated || !student) {
+    return null;
+  }
 
   const dynamicStyles = {
     container: {

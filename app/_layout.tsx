@@ -41,6 +41,20 @@ function AppContent() {
             gestureEnabled: false,
           }} 
         />
+        <Stack.Screen 
+          name="screens/student/split-work" 
+          options={{
+            headerShown: false,
+            gestureEnabled: false,
+          }} 
+        />
+        <Stack.Screen 
+          name="screens/student/split-work/create" 
+          options={{
+            headerShown: false,
+            gestureEnabled: false,
+          }} 
+        />
       </Stack>
     </PaperProvider>
   );
@@ -75,6 +89,8 @@ export const routeMap = {
   'screens/dashboard/settings': 'dashboard/settings',
   'screens/dashboard/notifications': 'dashboard/notifications',
   'screens/student/dashboard': 'student/dashboard',
+  'screens/student/split-work': 'student/split-work',
+  'screens/student/split-work/create': 'student/split-work/create',
 } as const;
 
 export type RouteMap = typeof routeMap;

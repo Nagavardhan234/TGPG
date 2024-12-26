@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { 
   Surface, 
@@ -8,183 +8,189 @@ import {
   Chip,
   Avatar,
   FAB,
-  ProgressBar,
-  Badge,
+  Portal,
+  Modal,
+  List,
   Divider,
-  SegmentedButtons
+  ActivityIndicator,
+  ProgressBar
 } from 'react-native-paper';
 import { StudentDashboardLayout } from '@/app/components/layouts';
 import { router } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/app/context/ThemeContext';
-import { useTheme as usePaperTheme } from 'react-native-paper';
+import { useStudentAuth } from '@/app/context/StudentAuthContext';
+import { taskService } from '@/app/services/taskService';
+import { TASK_STATUS, TASK_ICONS } from '@/app/config/constants';
 
 interface Task {
-  id: number;
-  title: string;
-  description: string;
-  deadline: string;
-  type: 'cleaning' | 'cooking' | 'maintenance';
-  status: 'pending' | 'in_progress' | 'completed';
-  priority: 'high' | 'medium' | 'low';
-  assignee: {
-    id: number;
-    name: string;
-  };
+  TaskID: number;
+  TaskHeading: string;
+  TaskDescription: string;
+  ExpiryDate: string;
+  CreatedDate: string;
+  LogoID: number;
+  CreatorName: string;
+  MyStatus: typeof TASK_STATUS[keyof typeof TASK_STATUS] | null;
+  AssignedCount: number;
+  CompletedCount: number;
 }
 
-const dummyTasks: Task[] = [
-  {
-    id: 1,
-    title: "Vacuum Living Room",
-    description: "Vacuum under furniture and around corners",
-    deadline: "2024-03-20T17:00:00",
-    type: "cleaning",
-    status: "pending",
-    priority: "high",
-    assignee: { id: 1, name: "John" }
-  },
-  {
-    id: 2,
-    title: "Cook Dinner",
-    description: "Prepare dinner for roommates",
-    deadline: "2024-03-20T20:00:00",
-    type: "cooking",
-    status: "in_progress",
-    priority: "medium",
-    assignee: { id: 2, name: "You" }
-  }
-];
+interface TaskDetails {
+  TenantID: number;
+  FullName: string;
+  Status: string;
+  AssignedDate: string;
+  CompletedDate: string | null;
+}
 
-// Use the same updated withOpacity function
-const withOpacity = (color: string | undefined, opacity: number) => {
-  if (!color) return `rgba(0, 0, 0, ${opacity})`;
-  
-  try {
-    // For rgb/rgba colors
-    if (color.startsWith('rgb')) {
-      const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
-      if (rgbaMatch) {
-        const [_, r, g, b] = rgbaMatch;
-        return `rgba(${r}, ${g}, ${b}, ${opacity})`;
-      }
-    }
-    
-    // For hex colors
-    if (color.startsWith('#')) {
-      const hex = color.replace('#', '');
-      const r = parseInt(hex.substring(0, 2), 16);
-      const g = parseInt(hex.substring(2, 4), 16);
-      const b = parseInt(hex.substring(4, 6), 16);
-      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
-    }
-    
-    return `rgba(0, 0, 0, ${opacity})`;
-  } catch {
-    return `rgba(0, 0, 0, ${opacity})`;
-  }
-};
+interface TaskStats {
+  total: number;
+  mine: number;
+  completed: number;
+}
 
 export default function SplitWorkScreen() {
   const { theme } = useTheme();
-  const paperTheme = usePaperTheme();
-  const [tasks, setTasks] = useState<Task[]>(dummyTasks);
+  const { isAuthenticated, student } = useStudentAuth();
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [taskDetails, setTaskDetails] = useState<TaskDetails[]>([]);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [selectedTab, setSelectedTab] = useState<'all' | 'mine'>('all');
+  const [stats, setStats] = useState<TaskStats>({
+    total: 0,
+    mine: 0,
+    completed: 0
+  });
 
-  // Move getPriorityColor inside component to access theme
-  const getPriorityColor = (priority: 'high' | 'medium' | 'low') => {
-    switch (priority) {
-      case 'high':
-        return withOpacity(theme?.colors?.error || '#FF0000', 0.12);
-      case 'medium':
-        return withOpacity(theme?.colors?.warning || '#FFA500', 0.12);
-      case 'low':
-        return withOpacity(theme?.colors?.success || '#4CAF50', 0.12);
-      default:
-        return 'rgba(0, 0, 0, 0.12)';
+  useEffect(() => {
+    if (isAuthenticated && student) {
+      loadTasks();
+    }
+  }, [isAuthenticated, student]);
+
+  const loadTasks = async () => {
+    try {
+      setLoading(true);
+      const response = await taskService.getRoomTasks();
+      if (response.success) {
+        setTasks(response.data);
+        
+        // Calculate stats
+        const myTasks = response.data.filter((task: Task) => task.MyStatus);
+        const completedTasks = myTasks.filter((task: Task) => task.MyStatus === TASK_STATUS.COMPLETED);
+        
+        setStats({
+          total: response.data.length,
+          mine: myTasks.length,
+          completed: completedTasks.length
+        });
+      }
+    } catch (error) {
+      console.error('Error loading tasks:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const dynamicStyles = {
-    container: {
-      flex: 1,
-      backgroundColor: paperTheme.dark ? '#121212' : theme?.colors?.background,
-    },
-    statsCard: {
-      backgroundColor: paperTheme.dark ? '#1E1E1E' : theme?.colors?.surface,
-      borderColor: paperTheme.dark ? '#2C2C2C' : undefined,
-      borderWidth: paperTheme.dark ? 1 : 0,
-    },
-    taskCard: {
-      backgroundColor: paperTheme.dark ? '#1E1E1E' : theme?.colors?.surface,
-      borderColor: paperTheme.dark ? '#2C2C2C' : undefined,
-      borderWidth: paperTheme.dark ? 1 : 0,
+  const handleShowDetails = async (task: Task) => {
+    try {
+      const response = await taskService.getTaskDetails(task.TaskID);
+      if (response.success) {
+        setSelectedTask(task);
+        setTaskDetails(response.data);
+        setShowDetailsModal(true);
+      }
+    } catch (error) {
+      console.error('Error loading task details:', error);
+    }
+  };
+
+  const handleStartTask = async (taskId: number) => {
+    try {
+      const response = await taskService.startTask(taskId);
+      if (response.success) {
+        loadTasks();
+      }
+    } catch (error) {
+      console.error('Error starting task:', error);
+    }
+  };
+
+  const handleCompleteTask = async (taskId: number) => {
+    try {
+      const response = await taskService.completeTask(taskId);
+      if (response.success) {
+        loadTasks();
+      }
+    } catch (error) {
+      console.error('Error completing task:', error);
     }
   };
 
   const renderTask = (task: Task) => {
+    const expiryHours = Math.max(0, Math.round((new Date(task.ExpiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60)));
+    const expiryText = expiryHours === 0 ? 'Expiring soon' : `Expires in ${expiryHours}h`;
+
     return (
       <Surface 
-        key={task.id}
-        style={[styles.taskCard, dynamicStyles.taskCard]}
+        key={task.TaskID}
+        style={[styles.taskCard, { backgroundColor: theme?.colors?.surface }]}
+        elevation={2}
       >
         <View style={styles.taskHeader}>
           <View style={styles.taskHeaderLeft}>
             <IconButton
-              icon={task.type === 'cleaning' ? 'broom' : task.type === 'cooking' ? 'food' : 'tools'}
+              icon={TASK_ICONS[task.LogoID] || TASK_ICONS[8]}
+              size={24}
               iconColor={theme?.colors?.primary}
-              style={[
-                styles.taskIcon, 
-                { backgroundColor: withOpacity(theme?.colors?.primary, 0.12) }
-              ]}
+              style={[styles.taskIcon, { backgroundColor: `${theme?.colors?.primary}20` }]}
             />
-            <View>
+            <View style={styles.taskInfo}>
               <Text style={[styles.taskTitle, { color: theme?.colors?.onSurface }]}>
-                {task.title}
+                {task.TaskHeading}
               </Text>
               <Text style={{ color: theme?.colors?.onSurfaceVariant }}>
-                {task.description}
+                {task.TaskDescription}
               </Text>
             </View>
           </View>
-          <Chip 
-            style={[
-              styles.priorityChip,
-              { backgroundColor: getPriorityColor(task.priority) }
-            ]}
-          >
-            {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+          <Chip style={[styles.creatorChip, { backgroundColor: `${theme?.colors?.primary}20` }]}>
+            {task.CreatorName}
           </Chip>
         </View>
 
         <Divider style={styles.divider} />
 
         <View style={styles.taskFooter}>
-          <View style={styles.taskInfo}>
-            <Avatar.Text
-              size={24}
-              label={task.assignee.name.substring(0, 2)}
-              style={{ 
-                backgroundColor: withOpacity(theme?.colors?.primary, 0.12) 
-              }}
-            />
+          <View style={styles.taskStats}>
             <Text style={{ color: theme?.colors?.onSurfaceVariant }}>
-              Due {new Date(task.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {task.CompletedCount}/{task.AssignedCount} completed
+            </Text>
+            <Text style={{ color: theme?.colors?.onSurfaceVariant }}>
+              {expiryText}
             </Text>
           </View>
           <View style={styles.taskActions}>
-            {task.status === 'pending' && (
+            <Button 
+              mode="outlined"
+              onPress={() => handleShowDetails(task)}
+            >
+              Info
+            </Button>
+            {task.MyStatus === TASK_STATUS.PENDING && (
               <Button 
-                mode="contained-tonal"
-                onPress={() => {}}
+                mode="contained"
+                onPress={() => handleStartTask(task.TaskID)}
               >
                 Start
               </Button>
             )}
-            {task.status === 'in_progress' && (
+            {task.MyStatus === TASK_STATUS.ACTIVE && (
               <Button 
                 mode="contained"
-                onPress={() => {}}
+                onPress={() => handleCompleteTask(task.TaskID)}
               >
                 Complete
               </Button>
@@ -195,47 +201,110 @@ export default function SplitWorkScreen() {
     );
   };
 
+  const renderStats = () => {
+    const progressValue = stats.mine > 0 ? stats.completed / stats.mine : 0;
+    const showProgress = stats.mine > 0;
+
+    return (
+      <Surface style={[styles.statsCard, { backgroundColor: theme?.colors?.surface }]} elevation={2}>
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <Text style={[styles.statValue, { color: theme?.colors?.primary }]}>
+              {stats.total}
+            </Text>
+            <Text style={[styles.statLabel, { color: theme?.colors?.onSurfaceVariant }]}>
+              Total Tasks
+            </Text>
+          </View>
+          <View style={styles.statItem}>
+            <Text style={[styles.statValue, { color: theme?.colors?.primary }]}>
+              {stats.mine}
+            </Text>
+            <Text style={[styles.statLabel, { color: theme?.colors?.onSurfaceVariant }]}>
+              My Tasks
+            </Text>
+          </View>
+          <View style={styles.statItem}>
+            <Text style={[styles.statValue, { color: theme?.colors?.primary }]}>
+              {stats.completed}
+            </Text>
+            <Text style={[styles.statLabel, { color: theme?.colors?.onSurfaceVariant }]}>
+              Completed
+            </Text>
+          </View>
+        </View>
+        {showProgress && (
+          <View style={styles.progressContainer}>
+            <ProgressBar 
+              progress={progressValue}
+              color={theme?.colors?.primary}
+              style={styles.progressBar}
+            />
+            <Text style={[styles.progressLabel, { color: theme?.colors?.onSurfaceVariant }]}>
+              {Math.round(progressValue * 100)}% Complete
+            </Text>
+          </View>
+        )}
+      </Surface>
+    );
+  };
+
+  const renderEmptyState = () => (
+    <View style={styles.emptyContainer}>
+      <IconButton
+        icon="check-circle-outline"
+        size={48}
+        iconColor={theme?.colors?.primary}
+        style={[styles.emptyIcon, { backgroundColor: `${theme?.colors?.primary}20` }]}
+      />
+      <Text style={[styles.emptyTitle, { color: theme?.colors?.onSurface }]}>
+        No Tasks Available
+      </Text>
+      <Text style={[styles.emptyDescription, { color: theme?.colors?.onSurfaceVariant }]}>
+        {selectedTab === 'all' 
+          ? 'Create a new task to get started with room management'
+          : 'You have no assigned tasks at the moment'}
+      </Text>
+    </View>
+  );
+
   return (
     <StudentDashboardLayout title="Split Work">
-      <View style={dynamicStyles.container}>
-        <Surface style={[styles.statsCard, dynamicStyles.statsCard]}>
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: theme?.colors?.primary }]}>5</Text>
-              <Text style={styles.statLabel}>Total Tasks</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: theme?.colors?.primary }]}>2</Text>
-              <Text style={styles.statLabel}>Your Tasks</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: theme?.colors?.error }]}>1</Text>
-              <Text style={styles.statLabel}>Overdue</Text>
-            </View>
-          </View>
-          <ProgressBar 
-            progress={0.6} 
-            color={theme?.colors?.primary}
-            style={styles.progressBar}
-          />
-        </Surface>
+      <View style={styles.container}>
+        {renderStats()}
 
-        <View style={styles.tabContainer}>
-          <SegmentedButtons
-            value={selectedTab}
-            onValueChange={value => setSelectedTab(value as 'all' | 'mine')}
-            buttons={[
-              { value: 'all', label: 'All Tasks' },
-              { value: 'mine', label: 'My Tasks' }
-            ]}
-          />
+        <View style={styles.header}>
+          <Button
+            mode={selectedTab === 'all' ? 'contained' : 'outlined'}
+            onPress={() => setSelectedTab('all')}
+            style={styles.tabButton}
+          >
+            All Tasks ({stats.total})
+          </Button>
+          <Button
+            mode={selectedTab === 'mine' ? 'contained' : 'outlined'}
+            onPress={() => setSelectedTab('mine')}
+            style={styles.tabButton}
+          >
+            My Tasks ({stats.mine})
+          </Button>
         </View>
 
-        <ScrollView style={styles.taskList}>
-          {tasks
-            .filter(task => selectedTab === 'all' || task.assignee.name === 'You')
-            .map(renderTask)}
-        </ScrollView>
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" />
+          </View>
+        ) : (
+          <ScrollView style={styles.taskList}>
+            {tasks.filter(task => selectedTab === 'all' || task.MyStatus).length > 0 ? (
+              tasks
+                .filter(task => selectedTab === 'all' || task.MyStatus)
+                .map(renderTask)
+            ) : (
+              renderEmptyState()
+            )}
+          </ScrollView>
+        )}
 
         <FAB
           icon="plus"
@@ -243,6 +312,53 @@ export default function SplitWorkScreen() {
           style={[styles.fab, { backgroundColor: theme?.colors?.primary }]}
           onPress={() => router.push('/screens/student/split-work/create')}
         />
+
+        <Portal>
+          <Modal
+            visible={showDetailsModal}
+            onDismiss={() => setShowDetailsModal(false)}
+            contentContainerStyle={[
+              styles.modal,
+              { backgroundColor: theme?.colors?.surface }
+            ]}
+          >
+            <Text style={[styles.modalTitle, { color: theme?.colors?.primary }]}>
+              Task Details
+            </Text>
+            {selectedTask && (
+              <>
+                <Text style={[styles.modalSubtitle, { color: theme?.colors?.onSurface }]}>
+                  {selectedTask.TaskHeading}
+                </Text>
+                <Text style={[styles.modalDescription, { color: theme?.colors?.onSurfaceVariant }]}>
+                  {selectedTask.TaskDescription}
+                </Text>
+                <Divider style={styles.modalDivider} />
+                <Text style={[styles.modalSubtitle, { color: theme?.colors?.onSurface }]}>
+                  Assigned Members
+                </Text>
+                <List.Section>
+                  {taskDetails.map((member, index) => (
+                    <React.Fragment key={member.TenantID}>
+                      <List.Item
+                        title={member.FullName}
+                        description={`Status: ${member.Status}`}
+                        left={() => (
+                          <Avatar.Text
+                            size={40}
+                            label={member.FullName.substring(0, 2)}
+                            style={{ backgroundColor: `${theme?.colors?.primary}20` }}
+                          />
+                        )}
+                      />
+                      {index < taskDetails.length - 1 && <Divider />}
+                    </React.Fragment>
+                  ))}
+                </List.Section>
+              </>
+            )}
+          </Modal>
+        </Portal>
       </View>
     </StudentDashboardLayout>
   );
@@ -255,8 +371,7 @@ const styles = StyleSheet.create({
   statsCard: {
     margin: 16,
     padding: 16,
-    borderRadius: 20,
-    elevation: 4,
+    borderRadius: 12,
   },
   statsRow: {
     flexDirection: 'row',
@@ -272,23 +387,59 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 12,
-    opacity: 0.7,
+    marginTop: 4,
+  },
+  progressContainer: {
+    gap: 8,
   },
   progressBar: {
-    height: 6,
-    borderRadius: 3,
+    height: 8,
+    borderRadius: 4,
   },
-  tabContainer: {
+  progressLabel: {
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  header: {
+    flexDirection: 'row',
     paddingHorizontal: 16,
+    paddingBottom: 16,
+    gap: 8,
+  },
+  tabButton: {
+    flex: 1,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+  },
+  emptyIcon: {
     marginBottom: 16,
+    borderRadius: 32,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  emptyDescription: {
+    fontSize: 14,
+    textAlign: 'center',
+    opacity: 0.7,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   taskList: {
-    paddingHorizontal: 16,
+    padding: 16,
   },
   taskCard: {
-    borderRadius: 16,
+    borderRadius: 12,
     marginBottom: 12,
-    elevation: 2,
     overflow: 'hidden',
   },
   taskHeader: {
@@ -299,19 +450,22 @@ const styles = StyleSheet.create({
   },
   taskHeaderLeft: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    alignItems: 'flex-start',
     flex: 1,
+    gap: 12,
   },
   taskIcon: {
-    borderRadius: 12,
+    borderRadius: 8,
+  },
+  taskInfo: {
+    flex: 1,
   },
   taskTitle: {
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 4,
   },
-  priorityChip: {
+  creatorChip: {
     height: 24,
   },
   divider: {
@@ -323,10 +477,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
   },
-  taskInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  taskStats: {
+    gap: 4,
   },
   taskActions: {
     flexDirection: 'row',
@@ -337,5 +489,27 @@ const styles = StyleSheet.create({
     right: 16,
     bottom: 16,
     borderRadius: 28,
+  },
+  modal: {
+    margin: 20,
+    padding: 20,
+    borderRadius: 12,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  modalSubtitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  modalDescription: {
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  modalDivider: {
+    marginVertical: 16,
   },
 }); 

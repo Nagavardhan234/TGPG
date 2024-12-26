@@ -1,220 +1,258 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { 
-  Surface, 
-  Text, 
   TextInput, 
   Button, 
-  IconButton, 
-  SegmentedButtons,
-  Chip,
+  IconButton,
+  Surface,
+  Text,
   Portal,
   Modal,
   List,
+  Avatar,
   Divider,
-  Avatar
+  ActivityIndicator
 } from 'react-native-paper';
 import { StudentDashboardLayout } from '@/app/components/layouts';
 import { router } from 'expo-router';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { useTheme } from '@/app/context/ThemeContext';
+import { taskService } from '@/app/services/taskService';
+import { TASK_TYPES, TASK_ICONS } from '@/app/config/constants';
 
-interface Roommate {
-  id: number;
-  name: string;
-  room: string;
+interface RoomMember {
+  TenantID: number;
+  FullName: string;
+  Email: string;
+  Phone: string;
 }
-
-const dummyRoommates: Roommate[] = [
-  { id: 1, name: "John Doe", room: "301" },
-  { id: 2, name: "Mike Smith", room: "301" },
-  { id: 3, name: "Sarah Wilson", room: "301" }
-];
 
 export default function CreateTaskScreen() {
   const { theme } = useTheme();
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    type: 'cleaning' as 'cleaning' | 'cooking' | 'maintenance',
-    priority: 'medium' as 'high' | 'medium' | 'low',
-    deadline: new Date(),
-    assignee: null as Roommate | null
-  });
+  const [taskHeading, setTaskHeading] = useState('');
+  const [taskDescription, setTaskDescription] = useState('');
+  const [selectedLogo, setSelectedLogo] = useState<number>(TASK_TYPES.OTHER);
+  const [showLogoModal, setShowLogoModal] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [roomMembers, setRoomMembers] = useState<RoomMember[]>([]);
+  const [selectedMembers, setSelectedMembers] = useState<RoomMember[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingMembers, setLoadingMembers] = useState(true);
 
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
-  const [showAssigneeModal, setShowAssigneeModal] = useState(false);
+  useEffect(() => {
+    loadRoomMembers();
+  }, []);
 
-  const taskTypes = [
-    { value: 'cleaning', label: 'Cleaning', icon: 'broom' },
-    { value: 'cooking', label: 'Cooking', icon: 'food' },
-    { value: 'maintenance', label: 'Maintenance', icon: 'tools' }
-  ];
+  const loadRoomMembers = async () => {
+    try {
+      const response = await taskService.getRoomMembers();
+      if (response.success) {
+        setRoomMembers(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading room members:', error);
+    } finally {
+      setLoadingMembers(false);
+    }
+  };
 
-  const priorityColors = {
-    high: theme?.colors?.error,
-    medium: theme?.colors?.warning,
-    low: theme?.colors?.success
+  const handleCreateTask = async () => {
+    try {
+      setLoading(true);
+      const taskData = {
+        taskHeading,
+        taskDescription,
+        logoId: selectedLogo,
+        assignedTenants: selectedMembers.map(member => member.TenantID)
+      };
+
+      const response = await taskService.createTask(taskData);
+      if (response.success) {
+        router.back();
+      }
+    } catch (error) {
+      console.error('Error creating task:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleMemberSelection = (member: RoomMember) => {
+    if (selectedMembers.some(m => m.TenantID === member.TenantID)) {
+      setSelectedMembers(selectedMembers.filter(m => m.TenantID !== member.TenantID));
+    } else {
+      setSelectedMembers([...selectedMembers, member]);
+    }
+  };
+
+  const renderLogoOption = (logoId: number) => {
+    const isSelected = selectedLogo === logoId;
+    return (
+      <Surface
+        key={logoId}
+        style={[
+          styles.logoOption,
+          {
+            backgroundColor: isSelected 
+              ? `${theme?.colors?.primary}20`
+              : theme?.colors?.surface
+          }
+        ]}
+        elevation={1}
+      >
+        <IconButton
+          icon={TASK_ICONS[logoId]}
+          size={32}
+          iconColor={isSelected ? theme?.colors?.primary : theme?.colors?.onSurface}
+          onPress={() => {
+            setSelectedLogo(logoId);
+            setShowLogoModal(false);
+          }}
+        />
+      </Surface>
+    );
   };
 
   return (
     <StudentDashboardLayout title="Create Task">
       <ScrollView style={styles.container}>
-        <Surface style={[styles.section, { backgroundColor: theme?.colors?.surface }]}>
-          {/* Task Type Selection */}
-          <Text style={[styles.label, { color: theme?.colors?.primary }]}>Task Type</Text>
-          <SegmentedButtons
-            value={formData.type}
-            onValueChange={value => setFormData({ ...formData, type: value as typeof formData.type })}
-            buttons={taskTypes.map(type => ({
-              value: type.value,
-              label: type.label,
-              icon: type.icon
-            }))}
-            style={styles.segmentedButtons}
-          />
+        <View style={styles.content}>
+          <Surface style={[styles.logoPreview, { backgroundColor: theme?.colors?.surface }]} elevation={1}>
+            <IconButton
+              icon={TASK_ICONS[selectedLogo]}
+              size={48}
+              iconColor={theme?.colors?.primary}
+              style={{ backgroundColor: `${theme?.colors?.primary}20` }}
+              onPress={() => setShowLogoModal(true)}
+            />
+            <Text style={[styles.logoHint, { color: theme?.colors?.onSurfaceVariant }]}>
+              Tap to change logo
+            </Text>
+          </Surface>
 
-          {/* Basic Details */}
           <TextInput
+            mode="outlined"
             label="Task Title"
-            value={formData.title}
-            onChangeText={title => setFormData({ ...formData, title })}
-            mode="outlined"
+            value={taskHeading}
+            onChangeText={setTaskHeading}
             style={styles.input}
           />
 
           <TextInput
-            label="Description"
-            value={formData.description}
-            onChangeText={description => setFormData({ ...formData, description })}
             mode="outlined"
+            label="Task Description"
+            value={taskDescription}
+            onChangeText={setTaskDescription}
             multiline
-            numberOfLines={3}
+            numberOfLines={4}
             style={styles.input}
           />
 
-          {/* Priority Selection */}
-          <Text style={[styles.label, { color: theme?.colors?.primary }]}>Priority</Text>
-          <View style={styles.priorityContainer}>
-            {(['high', 'medium', 'low'] as const).map(priority => (
-              <Chip
-                key={priority}
-                selected={formData.priority === priority}
-                onPress={() => setFormData({ ...formData, priority })}
-                style={[
-                  styles.priorityChip,
-                  { 
-                    backgroundColor: formData.priority === priority ? 
-                      priorityColors[priority] + '20' : undefined 
-                  }
-                ]}
-              >
-                {priority.charAt(0).toUpperCase() + priority.slice(1)}
-              </Chip>
-            ))}
-          </View>
-
-          {/* Deadline Selection */}
-          <Text style={[styles.label, { color: theme?.colors?.primary }]}>Deadline</Text>
-          <View style={styles.dateTimeContainer}>
-            <Button 
-              mode="outlined"
-              icon="calendar"
-              onPress={() => setShowDatePicker(true)}
-              style={styles.dateTimeButton}
-            >
-              {formData.deadline.toLocaleDateString()}
-            </Button>
-            <Button 
-              mode="outlined"
-              icon="clock"
-              onPress={() => setShowTimePicker(true)}
-              style={styles.dateTimeButton}
-            >
-              {formData.deadline.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </Button>
-          </View>
-
-          {/* Assignee Selection */}
-          <Text style={[styles.label, { color: theme?.colors?.primary }]}>Assign To</Text>
-          <Button 
+          <Button
             mode="outlined"
-            icon="account"
-            onPress={() => setShowAssigneeModal(true)}
-            style={styles.assigneeButton}
+            onPress={() => setShowMembersModal(true)}
+            style={styles.membersButton}
           >
-            {formData.assignee?.name || 'Select Roommate'}
+            {selectedMembers.length === 0 
+              ? 'Select Members (Optional)' 
+              : `${selectedMembers.length} Member${selectedMembers.length === 1 ? '' : 's'} Selected`}
           </Button>
 
-          <Button 
+          {selectedMembers.length > 0 && (
+            <View style={styles.selectedMembers}>
+              <Text style={[styles.sectionTitle, { color: theme?.colors?.onSurface }]}>
+                Selected Members
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {selectedMembers.map(member => (
+                  <Avatar.Text
+                    key={member.TenantID}
+                    size={40}
+                    label={member.FullName.substring(0, 2)}
+                    style={[
+                      styles.memberAvatar,
+                      { backgroundColor: `${theme?.colors?.primary}20` }
+                    ]}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          <Button
             mode="contained"
-            onPress={() => router.back()}
-            style={styles.submitButton}
+            onPress={handleCreateTask}
+            style={styles.createButton}
+            loading={loading}
+            disabled={!taskHeading.trim() || !taskDescription.trim() || loading}
           >
             Create Task
           </Button>
-        </Surface>
-      </ScrollView>
+        </View>
 
-      {/* Assignee Modal */}
-      <Portal>
-        <Modal
-          visible={showAssigneeModal}
-          onDismiss={() => setShowAssigneeModal(false)}
-          contentContainerStyle={[
-            styles.modal,
-            { backgroundColor: theme?.colors?.surface }
-          ]}
-        >
-          <Text style={[styles.modalTitle, { color: theme?.colors?.primary }]}>
-            Select Assignee
-          </Text>
-          <List.Section>
-            {dummyRoommates.map((roommate, index) => (
-              <React.Fragment key={roommate.id}>
-                <List.Item
-                  title={roommate.name}
-                  description={`Room ${roommate.room}`}
-                  left={() => (
-                    <Avatar.Text
-                      size={40}
-                      label={roommate.name.substring(0, 2)}
-                      style={{ backgroundColor: theme?.colors?.primary + '20' }}
+        <Portal>
+          <Modal
+            visible={showLogoModal}
+            onDismiss={() => setShowLogoModal(false)}
+            contentContainerStyle={[
+              styles.modal,
+              { backgroundColor: theme?.colors?.surface }
+            ]}
+          >
+            <Text style={[styles.modalTitle, { color: theme?.colors?.primary }]}>
+              Select Task Logo
+            </Text>
+            <View style={styles.logoGrid}>
+              {Object.values(TASK_TYPES).map(logoId => renderLogoOption(logoId))}
+            </View>
+          </Modal>
+
+          <Modal
+            visible={showMembersModal}
+            onDismiss={() => setShowMembersModal(false)}
+            contentContainerStyle={[
+              styles.modal,
+              { backgroundColor: theme?.colors?.surface }
+            ]}
+          >
+            <Text style={[styles.modalTitle, { color: theme?.colors?.primary }]}>
+              Select Members
+            </Text>
+            {loadingMembers ? (
+              <ActivityIndicator style={styles.loadingIndicator} />
+            ) : (
+              <List.Section>
+                {roomMembers.map((member, index) => (
+                  <React.Fragment key={member.TenantID}>
+                    <List.Item
+                      title={member.FullName}
+                      description={member.Email}
+                      left={() => (
+                        <Avatar.Text
+                          size={40}
+                          label={member.FullName.substring(0, 2)}
+                          style={{ backgroundColor: `${theme?.colors?.primary}20` }}
+                        />
+                      )}
+                      right={() => (
+                        <IconButton
+                          icon={selectedMembers.some(m => m.TenantID === member.TenantID)
+                            ? 'checkbox-marked-circle'
+                            : 'checkbox-blank-circle-outline'
+                          }
+                          iconColor={theme?.colors?.primary}
+                          onPress={() => toggleMemberSelection(member)}
+                        />
+                      )}
+                      onPress={() => toggleMemberSelection(member)}
                     />
-                  )}
-                  onPress={() => {
-                    setFormData({ ...formData, assignee: roommate });
-                    setShowAssigneeModal(false);
-                  }}
-                />
-                {index < dummyRoommates.length - 1 && <Divider />}
-              </React.Fragment>
-            ))}
-          </List.Section>
-        </Modal>
-      </Portal>
-
-      {/* Date & Time Pickers */}
-      {showDatePicker && (
-        <DateTimePicker
-          value={formData.deadline}
-          mode="date"
-          onChange={(event, date) => {
-            setShowDatePicker(false);
-            date && setFormData({ ...formData, deadline: date });
-          }}
-        />
-      )}
-      {showTimePicker && (
-        <DateTimePicker
-          value={formData.deadline}
-          mode="time"
-          onChange={(event, time) => {
-            setShowTimePicker(false);
-            time && setFormData({ ...formData, deadline: time });
-          }}
-        />
-      )}
+                    {index < roomMembers.length - 1 && <Divider />}
+                  </React.Fragment>
+                ))}
+              </List.Section>
+            )}
+          </Modal>
+        </Portal>
+      </ScrollView>
     </StudentDashboardLayout>
   );
 }
@@ -223,52 +261,61 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  section: {
-    margin: 16,
+  content: {
     padding: 16,
-    borderRadius: 20,
-    elevation: 4,
   },
-  label: {
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  segmentedButtons: {
+  logoPreview: {
+    alignItems: 'center',
+    padding: 24,
+    borderRadius: 12,
     marginBottom: 24,
+  },
+  logoHint: {
+    marginTop: 8,
+    fontSize: 12,
   },
   input: {
     marginBottom: 16,
   },
-  priorityContainer: {
-    flexDirection: 'row',
-    gap: 12,
+  membersButton: {
+    marginBottom: 16,
+  },
+  selectedMembers: {
     marginBottom: 24,
   },
-  priorityChip: {
-    minWidth: 80,
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
   },
-  dateTimeContainer: {
-    flexDirection: 'row',
-    gap: 12,
+  memberAvatar: {
+    marginRight: 8,
+  },
+  createButton: {
     marginBottom: 24,
-  },
-  dateTimeButton: {
-    flex: 1,
-  },
-  assigneeButton: {
-    marginBottom: 24,
-  },
-  submitButton: {
-    marginTop: 8,
   },
   modal: {
     margin: 20,
     padding: 20,
     borderRadius: 12,
+    maxHeight: '80%',
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 16,
+  },
+  logoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    justifyContent: 'center',
+  },
+  logoOption: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  loadingIndicator: {
+    marginVertical: 20,
   },
 }); 
