@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
-import { Button, Text, RadioButton, Surface, Avatar, IconButton } from 'react-native-paper';
+import { TextInput, Button, Text, RadioButton, Surface, Avatar, IconButton } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import { useAuth } from '@/app/context/AuthContext';
 import { useStudentAuth } from '@/app/context/StudentAuthContext';
@@ -10,7 +10,6 @@ import { ErrorNotification } from '@/app/components/ErrorNotification';
 import { router } from 'expo-router';
 import { Video } from 'expo-av';
 import { RouteMap } from '@/app/_layout';
-import { ValidationInput } from '@/app/components/ValidationInput';
 
 type UserType = 'manager' | 'student';
 
@@ -118,22 +117,24 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.formContainer}>
-          <ValidationInput
+          <TextInput
             label="Phone Number"
             value={phone}
             onChangeText={setPhone}
+            mode="outlined"
             keyboardType="phone-pad"
             style={styles.input}
-            icon={<IconButton icon="phone" size={24} />}
+            left={<TextInput.Icon icon="phone" />}
           />
 
-          <ValidationInput
+          <TextInput
             label="Password"
             value={password}
             onChangeText={setPassword}
+            mode="outlined"
             secureTextEntry
             style={styles.input}
-            icon={<IconButton icon="lock" size={24} />}
+            left={<TextInput.Icon icon="lock" />}
           />
 
           <Button
