@@ -159,16 +159,66 @@ export default function SplitWorkScreen() {
     try {
       const response = await taskService.completeTask(taskId);
       if (response.success) {
-        loadTasks();
+        // Update the local task state immediately
+        setTasks(prevTasks => prevTasks.map(task => {
+          if (task.TaskID === taskId) {
+            return {
+              ...task,
+              MyStatus: TASK_STATUS.COMPLETED,
+              CompletedCount: task.CompletedCount + 1
+            };
+          }
+          return task;
+        }));
+
+        // Update stats
+        setStats(prevStats => ({
+          ...prevStats,
+          completed: prevStats.completed + 1
+        }));
+
+        // Refresh the task list to ensure consistency
+        await loadTasks();
       }
     } catch (error) {
       console.error('Error completing task:', error);
+      // You might want to show an error notification here
     }
   };
 
   const renderTask = (task: Task) => {
     const expiryHours = Math.max(0, Math.round((new Date(task.ExpiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60)));
     const expiryText = expiryHours === 0 ? 'Expiring soon' : `Expires in ${expiryHours}h`;
+
+    const renderActionButton = () => {
+      if (task.MyStatus === TASK_STATUS.COMPLETED) {
+        return null; // No action button for completed tasks
+      }
+
+      if (task.MyStatus === TASK_STATUS.PENDING) {
+        return (
+          <Button 
+            mode="contained"
+            onPress={() => handleStartTask(task.TaskID)}
+          >
+            Start
+          </Button>
+        );
+      }
+
+      if (task.MyStatus === TASK_STATUS.ACTIVE) {
+        return (
+          <Button 
+            mode="contained"
+            onPress={() => handleCompleteTask(task.TaskID)}
+          >
+            Complete
+          </Button>
+        );
+      }
+
+      return null;
+    };
 
     return (
       <Surface 
@@ -216,22 +266,7 @@ export default function SplitWorkScreen() {
             >
               Info
             </Button>
-            {task.MyStatus === TASK_STATUS.PENDING && (
-              <Button 
-                mode="contained"
-                onPress={() => handleStartTask(task.TaskID)}
-              >
-                Start
-              </Button>
-            )}
-            {task.MyStatus === TASK_STATUS.ACTIVE && (
-              <Button 
-                mode="contained"
-                onPress={() => handleCompleteTask(task.TaskID)}
-              >
-                Complete
-              </Button>
-            )}
+            {renderActionButton()}
           </View>
         </View>
       </Surface>
@@ -272,14 +307,19 @@ export default function SplitWorkScreen() {
         </View>
         {showProgress && (
           <View style={styles.progressContainer}>
-            <ProgressBar 
+            <View style={styles.progressRow}>
+              <Text style={[styles.progressText, { color: theme?.colors?.onSurfaceVariant }]}>
+                Progress
+              </Text>
+              <Text style={[styles.progressText, { color: theme?.colors?.onSurfaceVariant }]}>
+                {Math.round(progressValue * 100)}%
+              </Text>
+            </View>
+            <ProgressBar
               progress={progressValue}
               color={theme?.colors?.primary}
               style={styles.progressBar}
             />
-            <Text style={[styles.progressLabel, { color: theme?.colors?.onSurfaceVariant }]}>
-              {Math.round(progressValue * 100)}% Complete
-            </Text>
           </View>
         )}
       </Surface>
@@ -427,15 +467,23 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   progressContainer: {
-    gap: 8,
+    marginTop: 16,
+    width: '100%',
+    paddingHorizontal: 16,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  progressText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   progressBar: {
     height: 8,
     borderRadius: 4,
-  },
-  progressLabel: {
-    fontSize: 12,
-    textAlign: 'center',
   },
   header: {
     flexDirection: 'row',
