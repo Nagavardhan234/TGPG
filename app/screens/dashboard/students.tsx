@@ -106,7 +106,7 @@ export default function StudentManagement() {
     order: 'asc'
   });
 
-  const [filterStatus, setFilterStatus] = useState<'ALL' | 'ACTIVE' | 'INACTIVE' | 'MOVED_OUT'>('ALL');
+  const [filterStatus, setFilterStatus] = useState('ACTIVE');
   const [sortBy, setSortBy] = useState<'name' | 'room' | 'date'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 

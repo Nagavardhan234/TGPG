@@ -279,6 +279,39 @@ export default function EditRoom() {
               style={styles.searchInput}
               placeholder="Search by name or phone"
             />
+
+            <View style={[styles.infoContainer, {
+              backgroundColor: isDarkMode 
+                ? 'rgba(103, 80, 164, 0.08)' 
+                : 'rgba(103, 80, 164, 0.05)',
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginTop: 8,
+              marginBottom: 16,
+            }]}>
+              <Text style={[styles.infoText, { 
+                color: isDarkMode 
+                  ? 'rgba(255, 255, 255, 0.8)' 
+                  : theme.colors.primary,
+                flex: 1,
+                marginRight: 12,
+              }]}>
+                💡 Add new tenants from Student Management
+              </Text>
+              <Button 
+                mode="contained-tonal"
+                onPress={() => {
+                  router.push({
+                    pathname: '/screens/dashboard/students',
+                    params: { action: 'add' }
+                  });
+                }}
+                style={styles.managementButton}
+              >
+                Add Tenants
+              </Button>
+            </View>
           </Card.Content>
         </Card>
 
@@ -386,5 +419,16 @@ const styles = StyleSheet.create({
   roomNumberInput: {
     flex: 1,
     marginBottom: 16,
+  },
+  infoContainer: {
+    borderRadius: 8,
+    padding: 12,
+  },
+  infoText: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  managementButton: {
+    marginLeft: 8,
   },
 }); 

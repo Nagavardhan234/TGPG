@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, ActivityIndicator, Text } from 'react-native';
-import { Card, Title, Paragraph, Button, FAB, Chip, Searchbar, Portal, Dialog, TextInput, Switch } from 'react-native-paper';
+import { Card, Title, Paragraph, Button, FAB, Chip, Searchbar, Portal, Dialog, TextInput, Switch, IconButton, Tooltip } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getRoomStats, RoomStatsResponse, deleteRoom, addRoom } from '@/app/services/dashboard.service';
@@ -281,7 +281,20 @@ export default function RoomManagement() {
           setAddRoomForm({ roomNumber: '' });
           setAddRoomError('');
         }}>
-          <Dialog.Title>Add New Room</Dialog.Title>
+          <Dialog.Title>
+            <View style={styles.dialogTitleContainer}>
+              <Text>Add New Room</Text>
+              <Tooltip title="Student Assignment">
+                <IconButton
+                  icon="information"
+                  size={20}
+                  iconColor={theme.colors.primary}
+                  onPress={() => {}}
+                  style={styles.infoIcon}
+                />
+              </Tooltip>
+            </View>
+          </Dialog.Title>
           <Dialog.Content>
             <TextInput
               label="Room Number"
@@ -300,6 +313,37 @@ export default function RoomManagement() {
                 {addRoomError}
               </Text>
             ) : null}
+            <View style={[styles.infoContainer, {
+              backgroundColor: isDarkMode 
+                ? 'rgba(103, 80, 164, 0.08)' 
+                : 'rgba(103, 80, 164, 0.05)',
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }]}>
+              <Text style={[styles.infoText, { 
+                color: isDarkMode 
+                  ? 'rgba(255, 255, 255, 0.8)' 
+                  : theme.colors.primary,
+                flex: 1,
+                marginRight: 12,
+              }]}>
+                💡 Add new tenants from Student Management
+              </Text>
+              <Button 
+                mode="contained-tonal"
+                onPress={() => {
+                  setAddRoomVisible(false);
+                  router.push({
+                    pathname: '/screens/dashboard/students',
+                    params: { action: 'add' }
+                  });
+                }}
+                style={styles.managementButton}
+              >
+                Add Tenants
+              </Button>
+            </View>
           </Dialog.Content>
           <Dialog.Actions>
             <Button 
@@ -386,5 +430,26 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  dialogTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingRight: 8,
+  },
+  infoIcon: {
+    margin: 0,
+  },
+  infoContainer: {
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 16,
+  },
+  infoText: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  managementButton: {
+    marginLeft: 8,
   },
 }); 
