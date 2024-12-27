@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Animated } from 'react-native';
+import { View, StyleSheet, Animated, Dimensions } from 'react-native';
 import { Text, Surface } from 'react-native-paper';
 import Svg, { Circle, Defs, LinearGradient, Stop, Filter, FeGaussianBlur, FeOffset, FeComposite } from 'react-native-svg';
 import { useTheme } from '@/app/context/ThemeContext';
@@ -54,12 +54,23 @@ export const ModernPieChart: React.FC<ModernPieChartProps> = ({
 }) => {
   const { theme, isDarkMode } = useTheme();
   const animatedValue = useRef(new Animated.Value(0)).current;
-  const [currentColors, setCurrentColors] = useState(getProgressColor(0));
+  const uniqueId = useRef(`grad-${Math.random().toString(36).substr(2, 9)}`).current;
+  const [currentColors, setCurrentColors] = useState(() => {
+    const percentage = (data.value / data.total) * 100;
+    return getProgressColor(percentage);
+  });
 
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
   const strokeDashoffset = circumference - (data.value / data.total) * circumference;
 
+  // Force update colors on mount and data change
+  useEffect(() => {
+    const percentage = (data.value / data.total) * 100;
+    setCurrentColors(getProgressColor(percentage));
+  }, [data.value, data.total]);
+
+  // Handle animation
   useEffect(() => {
     Animated.timing(animatedValue, {
       toValue: data.value / data.total,
@@ -68,28 +79,28 @@ export const ModernPieChart: React.FC<ModernPieChartProps> = ({
     }).start(() => {
       onComplete?.();
     });
-  }, [data]);
+  }, [data.value, data.total, duration]);
 
-  useEffect(() => {
-    const percentage = (data.value / data.total) * 100;
-    const colors = getProgressColor(percentage);
-    setCurrentColors(colors);
-  }, [data]);
+  // Calculate responsive dimensions
+  const containerSize = Math.min(size, Dimensions.get('window').width * 0.9);
+  const percentageFontSize = containerSize * 0.15;
+  const labelFontSize = containerSize * 0.06;
 
-  // Calculate responsive font sizes
-  const percentageFontSize = size * 0.15;
-  const labelFontSize = size * 0.06;
+  // Inline styles for gradient colors
+  const gradientStyle = {
+    stroke: `url(#${uniqueId})`,
+  };
 
   return (
     <Surface style={[styles.container, { 
-      width: size, 
-      height: size+50,
+      width: containerSize, 
+      height: containerSize + containerSize * 0.2,
       backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.03)' : '#FFFFFF',
-      padding: size * 0.05,
+      padding: containerSize * 0.05,
     }]}>
-      <Svg width={size} height={size}>
+      <Svg width={containerSize} height={containerSize}>
         <Defs>
-          <LinearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <LinearGradient id={uniqueId} x1="0%" y1="0%" x2="100%" y2="100%">
             <Stop offset="0%" stopColor={currentColors.start} stopOpacity="1" />
             <Stop offset="100%" stopColor={currentColors.end} stopOpacity="1" />
           </LinearGradient>
@@ -97,8 +108,8 @@ export const ModernPieChart: React.FC<ModernPieChartProps> = ({
 
         {/* Track Circle */}
         <Circle
-          cx={size / 2}
-          cy={size / 2}
+          cx={containerSize / 2}
+          cy={containerSize / 2}
           r={radius}
           stroke={isDarkMode ? 'rgba(255, 255, 255, 0.1)' : theme.colors.surfaceVariant}
           strokeWidth={strokeWidth}
@@ -107,20 +118,20 @@ export const ModernPieChart: React.FC<ModernPieChartProps> = ({
 
         {/* Progress Circle */}
         <Circle
-          cx={size / 2}
-          cy={size / 2}
+          cx={containerSize / 2}
+          cy={containerSize / 2}
           r={radius}
-          stroke="url(#grad)"
+          style={gradientStyle}
           strokeWidth={strokeWidth}
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}
           strokeLinecap="round"
           fill="none"
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          transform={`rotate(-90 ${containerSize / 2} ${containerSize / 2})`}
         />
       </Svg>
 
-      <View style={[styles.content, { padding: size * 0.1 }]}>
+      <View style={[styles.content, { padding: containerSize * 0.1 }]}>
         <MotiView
           from={{ opacity: 0, scale: 0.5 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -151,8 +162,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-    aspectRatio: 1,
-    height: 270,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
