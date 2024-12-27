@@ -64,6 +64,8 @@ export default function SplitWorkScreen() {
     mine: 0,
     completed: 0
   });
+  const [scrollViewRef, setScrollViewRef] = useState(null);
+  const [scrollPosition, setScrollPosition] = useState(0);
 
   const loadTasks = async () => {
     try {
@@ -148,7 +150,15 @@ export default function SplitWorkScreen() {
     try {
       const response = await taskService.startTask(taskId);
       if (response.success) {
-        loadTasks();
+        setTasks(prevTasks => prevTasks.map(task => {
+          if (task.TaskID === taskId) {
+            return {
+              ...task,
+              MyStatus: TASK_STATUS.ACTIVE
+            };
+          }
+          return task;
+        }));
       }
     } catch (error) {
       console.error('Error starting task:', error);
@@ -159,7 +169,6 @@ export default function SplitWorkScreen() {
     try {
       const response = await taskService.completeTask(taskId);
       if (response.success) {
-        // Update the local task state immediately
         setTasks(prevTasks => prevTasks.map(task => {
           if (task.TaskID === taskId) {
             return {
@@ -176,13 +185,9 @@ export default function SplitWorkScreen() {
           ...prevStats,
           completed: prevStats.completed + 1
         }));
-
-        // Refresh the task list to ensure consistency
-        await loadTasks();
       }
     } catch (error) {
       console.error('Error completing task:', error);
-      // You might want to show an error notification here
     }
   };
 
@@ -191,6 +196,10 @@ export default function SplitWorkScreen() {
     const expiryText = expiryHours === 0 ? 'Expiring soon' : `Expires in ${expiryHours}h`;
 
     const renderActionButton = () => {
+      if (selectedTab === 'all') {
+        return null;
+      }
+
       if (task.MyStatus === TASK_STATUS.COMPLETED) {
         return null; // No action button for completed tasks
       }
@@ -309,17 +318,28 @@ export default function SplitWorkScreen() {
           <View style={styles.progressContainer}>
             <View style={styles.progressRow}>
               <Text style={[styles.progressText, { color: theme?.colors?.onSurfaceVariant }]}>
-                Progress
+                Task Completion
               </Text>
-              <Text style={[styles.progressText, { color: theme?.colors?.onSurfaceVariant }]}>
-                {Math.round(progressValue * 100)}%
-              </Text>
+              <View style={[
+                styles.progressPercentageContainer,
+                { backgroundColor: `${theme?.colors?.primary}15` }
+              ]}>
+                <Text style={[styles.progressPercentage, { color: theme?.colors?.primary }]}>
+                  {Math.round(progressValue * 100)}%
+                </Text>
+              </View>
             </View>
-            <ProgressBar
-              progress={progressValue}
-              color={theme?.colors?.primary}
-              style={styles.progressBar}
-            />
+            <View style={styles.progressBarContainer}>
+              <View style={[
+                styles.progressBackground,
+                { backgroundColor: `${theme?.colors?.primary}10` }
+              ]} />
+              <ProgressBar
+                progress={progressValue}
+                color={theme?.colors?.primary}
+                style={styles.progressBar}
+              />
+            </View>
           </View>
         )}
       </Surface>
@@ -372,7 +392,11 @@ export default function SplitWorkScreen() {
             <ActivityIndicator size="large" />
           </View>
         ) : (
-          <ScrollView style={styles.taskList}>
+          <ScrollView
+            style={styles.taskList}
+            contentContainerStyle={styles.taskListContent}
+            showsVerticalScrollIndicator={false}
+          >
             {tasks.filter(task => selectedTab === 'all' || task.MyStatus).length > 0 ? (
               tasks
                 .filter(task => selectedTab === 'all' || task.MyStatus)
@@ -467,7 +491,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   progressContainer: {
-    marginTop: 16,
+    marginTop: 24,
     width: '100%',
     paddingHorizontal: 16,
   },
@@ -475,15 +499,45 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   progressText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  progressPercentageContainer: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  progressPercentage: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
+  },
+  progressBarContainer: {
+    position: 'relative',
+    height: 12,
+    borderRadius: 6,
+    overflow: 'hidden',
   },
   progressBar: {
-    height: 8,
-    borderRadius: 4,
+    height: '100%',
+    borderRadius: 6,
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1,
+  },
+  progressBackground: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 6,
+    zIndex: 0,
   },
   header: {
     flexDirection: 'row',
@@ -520,7 +574,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   taskList: {
+    flex: 1,
+  },
+  taskListContent: {
     padding: 16,
+    paddingBottom: 80, // Add padding for FAB
   },
   taskCard: {
     borderRadius: 12,
