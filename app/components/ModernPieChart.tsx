@@ -60,9 +60,23 @@ export const ModernPieChart: React.FC<ModernPieChartProps> = ({
     return getProgressColor(percentage);
   });
 
-  const radius = (size - strokeWidth) / 2;
+  // Calculate responsive dimensions based on screen size
+  const screenWidth = Dimensions.get('window').width;
+  const screenHeight = Dimensions.get('window').height;
+  const baseSize = Math.min(screenWidth, screenHeight) * 0.35; // Reduced size
+  const containerSize = Math.min(size, baseSize);
+  const cardPadding = containerSize * 0.12; // Increased padding
+  
+  // Calculate SVG and progress bar dimensions
+  const svgSize = containerSize - (cardPadding * 1.2); // Larger SVG relative to container
+  const actualStrokeWidth = svgSize * 0.06; // Thinner stroke for more elegant look
+  const radius = (svgSize - actualStrokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
   const strokeDashoffset = circumference - (data.value / data.total) * circumference;
+
+  // Calculate font sizes based on container size - significantly reduced
+  const percentageFontSize = svgSize * 0.18; // Smaller percentage
+  const labelFontSize = svgSize * 0.07; // Smaller label
 
   // Force update colors on mount and data change
   useEffect(() => {
@@ -81,75 +95,77 @@ export const ModernPieChart: React.FC<ModernPieChartProps> = ({
     });
   }, [data.value, data.total, duration]);
 
-  // Calculate responsive dimensions
-  const containerSize = Math.min(size, Dimensions.get('window').width * 0.9);
-  const percentageFontSize = containerSize * 0.15;
-  const labelFontSize = containerSize * 0.06;
-
-  // Inline styles for gradient colors
-  const gradientStyle = {
-    stroke: `url(#${uniqueId})`,
-  };
-
   return (
     <Surface style={[styles.container, { 
-      width: containerSize, 
-      height: containerSize + containerSize * 0.2,
-      backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.03)' : '#FFFFFF',
-      padding: containerSize * 0.05,
+      width: containerSize + cardPadding * 2,
+      height: containerSize + cardPadding * 2,
+      backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : '#FFFFFF',
+      margin: containerSize * 0.03,
+      padding: cardPadding,
+      borderRadius: Math.min(25, (containerSize + cardPadding * 2) * 0.12),
+      elevation: isDarkMode ? 4 : 2, // Reduced elevation for subtler shadow
     }]}>
-      <Svg width={containerSize} height={containerSize}>
-        <Defs>
-          <LinearGradient id={uniqueId} x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor={currentColors.start} stopOpacity="1" />
-            <Stop offset="100%" stopColor={currentColors.end} stopOpacity="1" />
-          </LinearGradient>
-        </Defs>
+      <View style={styles.svgContainer}>
+        <Svg width={svgSize} height={svgSize}>
+          <Defs>
+            <LinearGradient id={uniqueId} x1="0%" y1="0%" x2="100%" y2="100%">
+              <Stop offset="0%" stopColor={currentColors.start} stopOpacity="1" />
+              <Stop offset="100%" stopColor={currentColors.end} stopOpacity="1" />
+            </LinearGradient>
+          </Defs>
 
-        {/* Track Circle */}
-        <Circle
-          cx={containerSize / 2}
-          cy={containerSize / 2}
-          r={radius}
-          stroke={isDarkMode ? 'rgba(255, 255, 255, 0.1)' : theme.colors.surfaceVariant}
-          strokeWidth={strokeWidth}
-          fill="none"
-        />
+          {/* Track Circle */}
+          <Circle
+            cx={svgSize / 2}
+            cy={svgSize / 2}
+            r={radius}
+            stroke={isDarkMode ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.05)'}
+            strokeWidth={actualStrokeWidth}
+            fill="none"
+          />
 
-        {/* Progress Circle */}
-        <Circle
-          cx={containerSize / 2}
-          cy={containerSize / 2}
-          r={radius}
-          style={gradientStyle}
-          strokeWidth={strokeWidth}
-          strokeDasharray={circumference}
-          strokeDashoffset={strokeDashoffset}
-          strokeLinecap="round"
-          fill="none"
-          transform={`rotate(-90 ${containerSize / 2} ${containerSize / 2})`}
-        />
-      </Svg>
+          {/* Progress Circle */}
+          <Circle
+            cx={svgSize / 2}
+            cy={svgSize / 2}
+            r={radius}
+            stroke={`url(#${uniqueId})`}
+            strokeWidth={actualStrokeWidth}
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+            fill="none"
+            transform={`rotate(-90 ${svgSize / 2} ${svgSize / 2})`}
+          />
+        </Svg>
 
-      <View style={[styles.content, { padding: containerSize * 0.1 }]}>
-        <MotiView
-          from={{ opacity: 0, scale: 0.5 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ type: 'spring', duration: 1000 }}
-        >
-          <Text style={[styles.percentage, { 
-            fontSize: percentageFontSize,
-            color: isDarkMode ? '#FFFFFF' : theme.colors.text,
-          }]}>
-            {Math.round(data.value / data.total * 100)}%
-          </Text>
-          <Text style={[styles.label, { 
-            fontSize: labelFontSize,
-            color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : theme.colors.textSecondary
-          }]}>
-            {data.label}
-          </Text>
-        </MotiView>
+        <View style={styles.content}>
+          <MotiView
+            from={{ opacity: 0, scale: 0.5 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ 
+              type: 'spring',
+              duration: 800,
+              damping: 20,
+              stiffness: 200
+            }}
+            style={styles.textContainer}
+          >
+            <Text style={[styles.percentage, { 
+              fontSize: percentageFontSize,
+              color: isDarkMode ? '#FFFFFF' : theme.colors.text,
+            }]}>
+              {Math.round(data.value / data.total * 100)}%
+            </Text>
+            <Text style={[styles.label, { 
+              fontSize: labelFontSize,
+              color: isDarkMode ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.6)',
+              marginTop: cardPadding * 0.2,
+            }]}>
+              {data.label}
+            </Text>
+          </MotiView>
+        </View>
       </View>
     </Surface>
   );
@@ -157,8 +173,6 @@ export const ModernPieChart: React.FC<ModernPieChartProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 20,
-    elevation: 4,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -170,6 +184,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
   },
+  svgContainer: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    height: '100%',
+  },
   content: {
     position: 'absolute',
     alignItems: 'center',
@@ -177,17 +198,20 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  textContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   percentage: {
-    fontWeight: '600',
+    fontWeight: '600', // Slightly reduced weight
     textAlign: 'center',
-    letterSpacing: 1,
     includeFontPadding: false,
     lineHeight: undefined,
   },
   label: {
     textAlign: 'center',
-    marginTop: '2%',
-    opacity: 0.8,
+    opacity: 1, // Full opacity with rgba color instead
+    fontWeight: '400', // Lighter weight for better contrast
     includeFontPadding: false,
     lineHeight: undefined,
   },
