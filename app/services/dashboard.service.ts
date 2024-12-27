@@ -64,13 +64,14 @@ export interface RoomStatsResponse {
 
 export const getRoomStats = async (pgId: number): Promise<RoomStatsResponse> => {
   try {
-    const response = await fetch(`${API_URL}/api/dashboard/rooms/${pgId}`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch room stats');
-    }
-    const data = await response.json();
-    console.log('Room stats response:', data);
-    return data;
+    const token = await AsyncStorage.getItem('token');
+    const response = await api.get(`${API_URL}/api/dashboard/rooms/${pgId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    console.log('Room stats response:', response.data);
+    return response.data;
   } catch (error) {
     console.error('Error fetching room stats:', error);
     throw error;

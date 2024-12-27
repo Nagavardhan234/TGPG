@@ -10,7 +10,6 @@ import { ErrorNotification } from '@/app/components/ErrorNotification';
 
 interface AddRoomForm {
   roomNumber: string;
-  status: 'active' | 'maintenance';
 }
 
 export default function RoomManagement() {
@@ -30,7 +29,6 @@ export default function RoomManagement() {
   const [addRoomVisible, setAddRoomVisible] = useState(false);
   const [addRoomForm, setAddRoomForm] = useState<AddRoomForm>({
     roomNumber: '',
-    status: 'active'
   });
   const [addRoomError, setAddRoomError] = useState('');
   const [totalRooms, setTotalRooms] = useState(0);
@@ -54,6 +52,7 @@ export default function RoomManagement() {
           room_filled_status: room.room_filled_status || 0,
         }));
         setRooms(formattedRooms);
+        setTotalRooms(formattedRooms.length);
       }
     } catch (error) {
       console.error('Error loading room stats:', error);
@@ -89,7 +88,6 @@ export default function RoomManagement() {
       if (filter === 'all') return matchesSearch;
       if (filter === 'occupied') return matchesSearch && room.room_filled_status === 1;
       if (filter === 'vacant') return matchesSearch && room.room_filled_status === 0;
-      if (filter === 'maintenance') return matchesSearch && room.room_filled_status === 2;
 
       return matchesSearch;
     });
@@ -163,14 +161,12 @@ export default function RoomManagement() {
       setLoading(true);
       const response = await addRoom(pg.PGID, {
         roomNumber: addRoomForm.roomNumber,
-        status: addRoomForm.status
       });
 
       if (response.success) {
-        // Refresh room list
         await loadRoomStats();
         setAddRoomVisible(false);
-        setAddRoomForm({ roomNumber: '', status: 'active' });
+        setAddRoomForm({ roomNumber: '' });
         setErrorMessage('Room added successfully');
         setShowError(false);
       }
@@ -206,7 +202,6 @@ export default function RoomManagement() {
         <Chip selected={filter === 'all'} onPress={() => setFilter('all')} style={styles.chip}>All</Chip>
         <Chip selected={filter === 'occupied'} onPress={() => setFilter('occupied')} style={styles.chip}>Occupied</Chip>
         <Chip selected={filter === 'vacant'} onPress={() => setFilter('vacant')} style={styles.chip}>Vacant</Chip>
-        <Chip selected={filter === 'maintenance'} onPress={() => setFilter('maintenance')} style={styles.chip}>Maintenance</Chip>
       </View>
 
       {loading ? (
@@ -283,7 +278,7 @@ export default function RoomManagement() {
 
         <Dialog visible={addRoomVisible} onDismiss={() => {
           setAddRoomVisible(false);
-          setAddRoomForm({ roomNumber: '', status: 'active' });
+          setAddRoomForm({ roomNumber: '' });
           setAddRoomError('');
         }}>
           <Dialog.Title>Add New Room</Dialog.Title>
@@ -305,25 +300,12 @@ export default function RoomManagement() {
                 {addRoomError}
               </Text>
             ) : null}
-
-            <View style={styles.switchContainer}>
-              <Text>Maintenance Mode</Text>
-              <Switch
-                value={addRoomForm.status === 'maintenance'}
-                onValueChange={(value) => 
-                  setAddRoomForm(prev => ({
-                    ...prev,
-                    status: value ? 'maintenance' : 'active'
-                  }))
-                }
-              />
-            </View>
           </Dialog.Content>
           <Dialog.Actions>
             <Button 
               onPress={() => {
                 setAddRoomVisible(false);
-                setAddRoomForm({ roomNumber: '', status: 'active' });
+                setAddRoomForm({ roomNumber: '' });
                 setAddRoomError('');
               }}
             >
@@ -404,11 +386,5 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  switchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 16,
   },
 }); 
