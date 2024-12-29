@@ -3,7 +3,7 @@ import { BASE_URL } from '../constants/endpoints';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const api = axios.create({
-  baseURL: 'http://localhost:3000',
+  baseURL: BASE_URL,
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
@@ -13,7 +13,7 @@ const api = axios.create({
 // Add request interceptor to include token
 api.interceptors.request.use(
   async (config) => {
-    const token = await AsyncStorage.getItem('token');
+    const token = await AsyncStorage.getItem('student_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -30,7 +30,7 @@ api.interceptors.response.use(
   async (error) => {
     if (error.response?.status === 401 && error.response?.data?.error === 'INVALID_TOKEN') {
       // Clear stored token
-      await AsyncStorage.removeItem('token');
+      await AsyncStorage.removeItem('student_token');
       // You could also redirect to login here if needed
     }
     return Promise.reject(error);

@@ -42,7 +42,14 @@ export const loginStudent = async (credentials: { phone: string; password: strin
 
     // Store token and user data in AsyncStorage
     await AsyncStorage.setItem('student_token', response.data.token);
-    await AsyncStorage.setItem('student_data', JSON.stringify(response.data.user));
+    await AsyncStorage.setItem('student', JSON.stringify({
+      TenantID: response.data.user.id,
+      FullName: response.data.user.name,
+      Email: response.data.user.email,
+      Phone: response.data.user.phone,
+      Room_No: response.data.user.roomNo.toString(),
+      PGID: response.data.user.pgId
+    }));
 
     // Set token in axios headers
     api.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
@@ -50,7 +57,14 @@ export const loginStudent = async (credentials: { phone: string; password: strin
     return {
       success: true,
       token: response.data.token,
-      student: response.data.user
+      student: {
+        TenantID: response.data.user.id,
+        FullName: response.data.user.name,
+        Email: response.data.user.email,
+        Phone: response.data.user.phone,
+        Room_No: response.data.user.roomNo.toString(),
+        PGID: response.data.user.pgId
+      }
     };
   } catch (error: any) {
     console.error('Student login error:', error.response?.data || error.message);
