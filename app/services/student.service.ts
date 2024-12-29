@@ -126,20 +126,20 @@ export const addStudent = async (studentData: {
 
 export const updateStudent = async (studentId: number, updates: Partial<Student>): Promise<ApiResponse<void>> => {
   try {
-    const managerData = await AsyncStorage.getItem('manager');
-    if (!managerData) {
-      throw new Error('Manager data not found');
+    const pgData = await AsyncStorage.getItem('pg');
+    if (!pgData) {
+      throw new Error('PG data not found');
     }
 
-    const manager = JSON.parse(managerData);
-    if (!manager.pgId) {
-      throw new Error('No PG associated with this manager');
+    const pg = JSON.parse(pgData);
+    if (!pg.PGID) {
+      throw new Error('Invalid PG data');
     }
 
-    const response = await api.put<ApiResponse<void>>(
-      `${ENDPOINTS.STUDENTS}/pg/${manager.pgId}/student/${studentId}`,
-      updates
-    );
+    const response = await api.put<ApiResponse<void>>(`${ENDPOINTS.UPDATE_STUDENT}/${studentId}`, {
+      ...updates,
+      PGID: pg.PGID
+    });
 
     if (!response.data.success) {
       throw new Error(response.data.message || 'Failed to update student');
@@ -148,6 +148,11 @@ export const updateStudent = async (studentId: number, updates: Partial<Student>
     return response.data;
   } catch (error) {
     console.error('Error updating student:', error);
+    if (error instanceof Error) {
+      if (error.message.includes('token')) {
+        throw new TokenExpiredError();
+      }
+    }
     throw error;
   }
 };
@@ -313,6 +318,24 @@ export const deleteStudent = async (studentId: number, deleteType: 'SOFT' | 'HAR
       if (error.message.includes('token')) {
         throw new TokenExpiredError();
       }
+    }
+    throw error;
+  }
+};
+
+export const getStudentDetails = async (studentId: number): Promise<ApiResponse<Student>> => {
+  try {
+    const response = await api.get<ApiResponse<Student>>(`${ENDPOINTS.STUDENT_DETAILS}/${studentId}`);
+
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Failed to fetch student details');
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching student details:', error);
+    if (error instanceof Error && error.message.includes('token')) {
+      throw new TokenExpiredError();
     }
     throw error;
   }

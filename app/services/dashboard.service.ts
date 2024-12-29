@@ -129,29 +129,40 @@ export interface RoomUpdateRequest {
 }
 
 export const updateRoomNumber = async (
-  pgId: number, 
-  currentRoom: string, 
-  updateData: RoomUpdateRequest
+  pgId: number,
+  currentRoomNumber: string,
+  newRoomNumber: string
 ): Promise<void> => {
-  const token = await AsyncStorage.getItem('token');
-  const response = await fetch(
-    `${API_URL}/api/dashboard/rooms/${pgId}/${currentRoom}`,
-    {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(updateData)
+  try {
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
+      throw new Error('Authentication token not found');
     }
-  );
 
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.message || 'Failed to update room number');
+    const response = await api.put(
+      `${API_URL}/api/dashboard/rooms/${pgId}/${currentRoomNumber}`,
+      {
+        room_number: newRoomNumber
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      }
+    );
+
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Failed to update room number');
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error('Error in updateRoomNumber:', error);
+    if (error.response?.data?.message) {
+      throw new Error(error.response.data.message);
+    }
+    throw error;
   }
-
-  return response.json();
 }; 
 
 export interface RoomDetails {

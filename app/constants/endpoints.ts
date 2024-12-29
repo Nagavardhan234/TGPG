@@ -21,7 +21,11 @@ export const ENDPOINTS = {
   TASK_DETAILS: '/api/tasks/details',
   TASK_MEMBERS: '/api/tasks/members',
   TASK_START: '/api/tasks/start',
-  TASK_COMPLETE: '/api/tasks/complete'
+  TASK_COMPLETE: '/api/tasks/complete',
+  UPDATE_ROOM: '/api/dashboard/rooms',
+  UPDATE_ROOM_DETAILS: '/api/dashboard/room/:pgId/:roomNumber',
+  UPDATE_ROOM_NUMBER: '/api/dashboard/rooms/:pgId/:roomNumber',
+  ROOMS: '/api/rooms'
 };
 
 export const BASE_URL = 'http://localhost:3000';

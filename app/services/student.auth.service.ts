@@ -8,6 +8,12 @@ interface StudentResponse {
   email: string;
   phone: string;
   roomNo: number;
+  pgId: number;
+  status: string;
+  moveInDate: string;
+  monthlyRent: number;
+  guardianName: string;
+  guardianNumber: string;
 }
 
 interface LoginResponse {
@@ -34,23 +40,17 @@ export const loginStudent = async (credentials: { phone: string; password: strin
       throw new Error('Authentication failed: Missing token');
     }
 
-    // Store token in AsyncStorage
+    // Store token and user data in AsyncStorage
     await AsyncStorage.setItem('student_token', response.data.token);
+    await AsyncStorage.setItem('student_data', JSON.stringify(response.data.user));
 
     // Set token in axios headers
     api.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
 
-    // Return the response data
     return {
       success: true,
       token: response.data.token,
-      student: {
-        id: response.data.user.id,
-        name: response.data.user.name,
-        email: response.data.user.email,
-        phone: response.data.user.phone,
-        roomNo: response.data.user.roomNo
-      }
+      student: response.data.user
     };
   } catch (error: any) {
     console.error('Student login error:', error.response?.data || error.message);

@@ -16,7 +16,7 @@ import {
 } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import { useAuth } from '@/app/context/AuthContext';
-import { getRoomOccupants, RoomOccupant, updateRoomDetails, updateOccupantRoom, RoomDetails } from '@/app/services/dashboard.service';
+import { getRoomOccupants, RoomOccupant, updateRoomDetails, updateOccupantRoom, RoomDetails, updateRoomNumber } from '@/app/services/dashboard.service';
 import { ErrorNotification } from '@/app/components/ErrorNotification';
 
 export default function EditRoom() {
@@ -35,6 +35,7 @@ export default function EditRoom() {
 
   const [roomDetails, setRoomDetails] = useState({
     active_tenants: initialRoom?.active_tenants || 0,
+    capacity: initialRoom?.capacity || '0'
   });
 
   const [occupantSearch, setOccupantSearch] = useState('');
@@ -128,10 +129,7 @@ export default function EditRoom() {
 
       // First update room number if changed
       if (newRoomNumber !== initialRoom?.room_number) {
-        await updateRoomDetails(pg.PGID, initialRoom.room_number, {
-          room_number: newRoomNumber,
-          active_tenants: roomDetails.active_tenants,
-        });
+        await updateRoomNumber(pg.PGID, initialRoom.room_number, newRoomNumber);
 
         // Update all occupants to new room number
         const updatePromises = students.map(async (student) => {
@@ -160,9 +158,9 @@ export default function EditRoom() {
       setErrorMessage('Changes saved successfully');
       setShowError(false);
 
-      // Navigate back after a short delay
+      // Navigate to rooms page after a short delay
       setTimeout(() => {
-        router.back();
+        router.push('/screens/dashboard/rooms');
       }, 1000);
 
     } catch (error) {
