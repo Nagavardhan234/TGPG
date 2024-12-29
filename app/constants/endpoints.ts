@@ -18,10 +18,10 @@ export const ENDPOINTS = {
   // Task related endpoints
   TASK_CREATE: '/api/tasks/create',
   TASK_LIST: '/api/tasks/room',
-  TASK_DETAILS: '/api/tasks/details',
+  TASK_DETAILS: '/api/tasks/details/:taskId',
   TASK_MEMBERS: '/api/tasks/members',
-  TASK_START: '/api/tasks/start',
-  TASK_COMPLETE: '/api/tasks/complete',
+  TASK_START: '/api/tasks/:taskId/start',
+  TASK_COMPLETE: '/api/tasks/:taskId/complete',
   UPDATE_ROOM: '/api/dashboard/rooms',
   UPDATE_ROOM_DETAILS: '/api/dashboard/room/:pgId/:roomNumber',
   UPDATE_ROOM_NUMBER: '/api/dashboard/rooms/:pgId/:roomNumber',

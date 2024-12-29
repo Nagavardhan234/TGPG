@@ -14,6 +14,7 @@ interface StudentResponse {
   monthlyRent: number;
   guardianName: string;
   guardianNumber: string;
+  roomNumber?: string;
 }
 
 interface LoginResponse {
@@ -47,8 +48,10 @@ export const loginStudent = async (credentials: { phone: string; password: strin
       FullName: response.data.user.name,
       Email: response.data.user.email,
       Phone: response.data.user.phone,
-      Room_No: response.data.user.roomNo.toString(),
-      PGID: response.data.user.pgId
+      Room_No: response.data.user.roomNo,
+      RoomNumber: response.data.user.roomNumber || response.data.user.roomNo.toString(),
+      PGID: response.data.user.pgId,
+      Status: response.data.user.status || 'ACTIVE'
     }));
 
     // Set token in axios headers
@@ -62,8 +65,10 @@ export const loginStudent = async (credentials: { phone: string; password: strin
         FullName: response.data.user.name,
         Email: response.data.user.email,
         Phone: response.data.user.phone,
-        Room_No: response.data.user.roomNo.toString(),
-        PGID: response.data.user.pgId
+        Room_No: response.data.user.roomNo,
+        RoomNumber: response.data.user.roomNumber || response.data.user.roomNo.toString(),
+        PGID: response.data.user.pgId,
+        Status: response.data.user.status || 'ACTIVE'
       }
     };
   } catch (error: any) {
