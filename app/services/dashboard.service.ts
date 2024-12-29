@@ -34,11 +34,28 @@ interface ApiResponse<T> {
 
 export const getDashboardStats = async (managerId: number): Promise<DashboardStats> => {
   try {
-    const response = await api.get<ApiResponse<DashboardStats>>(`${ENDPOINTS.DASHBOARD_STATS}/${managerId}`);
-    return response.data.data;
+    // First check if we have manager data
+    const managerData = await AsyncStorage.getItem('manager');
+    if (!managerData) {
+      throw new Error('Manager data not found');
+    }
+
+    const manager = JSON.parse(managerData);
+    if (!manager.id) {
+      throw new Error('Invalid manager data');
+    }
+
+    // Now fetch dashboard stats with manager ID
+    const response = await api.get<ApiResponse<DashboardStats>>(`${ENDPOINTS.DASHBOARD_STATS}/${manager.id}`);
     console.log('Dashboard Stats:', response.data.data);
+    
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Failed to fetch dashboard stats');
+    }
+    
+    return response.data.data;
   } catch (error) {
-    console.error('Error fetching dashboard stats:', error);
+    console.error('Error in getDashboardStats:', error);
     throw error;
   }
 }; 

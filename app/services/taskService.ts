@@ -1,114 +1,117 @@
-import axios from 'axios';
-import { API_BASE_URL, STORAGE_KEYS } from '../config/constants';
+import api from '@/app/config/axios.config';
+import { ENDPOINTS } from '@/app/constants/endpoints';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { TokenExpiredError } from './student.service';
 
-const TASK_API = `${API_BASE_URL}/api/tasks`;
+export interface Task {
+    TaskID: number;
+    TaskHeading: string;
+    TaskDescription: string;
+    ExpiryDate: string;
+    CreatedDate: string;
+    LogoID: number;
+    CreatorName: string;
+    MyStatus: string | null;
+    AssignedCount: number;
+    CompletedCount: number;
+}
 
-interface TaskData {
+export interface TaskMember {
+    TenantID: number;
+    FullName: string;
+    Email: string;
+    Phone: string;
+    Status: string;
+}
+
+interface ApiResponse<T> {
+    success: boolean;
+    data: T;
+    message?: string;
+    error?: string;
+}
+
+export interface TaskData {
     taskHeading: string;
     taskDescription: string;
     logoId: number;
     assignedTenants: number[];
 }
 
-interface TaskDetails {
-    TenantID: number;
-    FullName: string;
-    Status: string;
-    AssignedDate: string;
-    CompletedDate: string | null;
-}
-
-// Helper function to get auth token
-const getAuthHeader = async () => {
+// Get all tasks for the student's room
+export const getRoomTasks = async (): Promise<ApiResponse<Task[]>> => {
     try {
-        const token = await AsyncStorage.getItem(STORAGE_KEYS.STUDENT_TOKEN);
-        if (!token) {
-            throw new Error('No authentication token found. Please log in again.');
+        const response = await api.get(ENDPOINTS.TASK_LIST);
+        return response.data;
+    } catch (error: any) {
+        if (error.response?.status === 401) {
+            throw new TokenExpiredError();
         }
-
-        return {
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            }
-        };
-    } catch (error) {
-        console.error('Error getting auth token:', error);
-        throw error;
+        throw error.response?.data || error;
     }
 };
 
-export const taskService = {
-    // Get all tasks for the student's room
-    getRoomTasks: async () => {
-        try {
-            const config = await getAuthHeader();
-            const response = await axios.get(`${TASK_API}/room`, config);
-            return response.data;
-        } catch (error: any) {
-            console.error('Task fetch error:', error.response?.data || error.message);
-            throw error.response?.data || error.message;
+// Get task details (assigned users)
+export const getTaskDetails = async (taskId: number): Promise<ApiResponse<TaskMember[]>> => {
+    try {
+        const response = await api.get(`${ENDPOINTS.TASK_DETAILS}/${taskId}`);
+        return response.data;
+    } catch (error: any) {
+        if (error.response?.status === 401) {
+            throw new TokenExpiredError();
         }
-    },
+        throw error.response?.data || error;
+    }
+};
 
-    // Get task details (assigned users)
-    getTaskDetails: async (taskId: number) => {
-        try {
-            const config = await getAuthHeader();
-            const response = await axios.get(`${TASK_API}/details/${taskId}`, config);
-            return response.data;
-        } catch (error: any) {
-            console.error('Task details fetch error:', error.response?.data || error.message);
-            throw error.response?.data || error.message;
+// Get room members for task assignment
+export const getRoomMembers = async (): Promise<ApiResponse<TaskMember[]>> => {
+    try {
+        const response = await api.get(ENDPOINTS.TASK_MEMBERS);
+        return response.data;
+    } catch (error: any) {
+        if (error.response?.status === 401) {
+            throw new TokenExpiredError();
         }
-    },
+        throw error.response?.data || error;
+    }
+};
 
-    // Get room members for task assignment
-    getRoomMembers: async () => {
-        try {
-            const config = await getAuthHeader();
-            const response = await axios.get(`${TASK_API}/members`, config);
-            return response.data;
-        } catch (error: any) {
-            console.error('Room members fetch error:', error.response?.data || error.message);
-            throw error.response?.data || error.message;
+// Create a new task
+export const createTask = async (taskData: TaskData): Promise<ApiResponse<Task>> => {
+    try {
+        const response = await api.post(ENDPOINTS.TASK_CREATE, taskData);
+        return response.data;
+    } catch (error: any) {
+        if (error.response?.status === 401) {
+            throw new TokenExpiredError();
         }
-    },
+        throw error.response?.data || error;
+    }
+};
 
-    // Create a new task
-    createTask: async (taskData: TaskData) => {
-        try {
-            const config = await getAuthHeader();
-            const response = await axios.post(`${TASK_API}/create`, taskData, config);
-            return response.data;
-        } catch (error: any) {
-            console.error('Task creation error:', error.response?.data || error.message);
-            throw error.response?.data || error.message;
+// Start a task
+export const startTask = async (taskId: number): Promise<ApiResponse<void>> => {
+    try {
+        const response = await api.post(`${ENDPOINTS.TASK_START}/${taskId}`);
+        return response.data;
+    } catch (error: any) {
+        if (error.response?.status === 401) {
+            throw new TokenExpiredError();
         }
-    },
+        throw error.response?.data || error;
+    }
+};
 
-    // Start a task
-    startTask: async (taskId: number) => {
-        try {
-            const config = await getAuthHeader();
-            const response = await axios.post(`${TASK_API}/${taskId}/start`, {}, config);
-            return response.data;
-        } catch (error: any) {
-            console.error('Task start error:', error.response?.data || error.message);
-            throw error.response?.data || error.message;
+// Complete a task
+export const completeTask = async (taskId: number): Promise<ApiResponse<void>> => {
+    try {
+        const response = await api.post(`${ENDPOINTS.TASK_COMPLETE}/${taskId}`);
+        return response.data;
+    } catch (error: any) {
+        if (error.response?.status === 401) {
+            throw new TokenExpiredError();
         }
-    },
-
-    // Complete a task
-    completeTask: async (taskId: number) => {
-        try {
-            const config = await getAuthHeader();
-            const response = await axios.post(`${TASK_API}/${taskId}/complete`, {}, config);
-            return response.data;
-        } catch (error: any) {
-            console.error('Task completion error:', error.response?.data || error.message);
-            throw error.response?.data || error.message;
-        }
+        throw error.response?.data || error;
     }
 }; 

@@ -66,6 +66,7 @@ export default function SplitWorkScreen() {
   });
   const [scrollViewRef, setScrollViewRef] = useState(null);
   const [scrollPosition, setScrollPosition] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   const loadTasks = async () => {
     try {
@@ -120,7 +121,10 @@ export default function SplitWorkScreen() {
   );
 
   const setupSocket = async () => {
-    if (!student) return;
+    if (!student || !student.Room_No) {
+      console.warn('Student or room number is not available');
+      return;
+    }
     
     await socketService.connect();
     socketService.joinRoom(student.Room_No.toString());
@@ -411,7 +415,15 @@ export default function SplitWorkScreen() {
           icon="plus"
           label="New Task"
           style={[styles.fab, { backgroundColor: theme?.colors?.primary }]}
-          onPress={() => router.push('/screens/student/split-work/create')}
+          onPress={() => {
+            try {
+              router.push('/screens/student/split-work/create');
+            } catch (error) {
+              console.error('Navigation error:', error);
+              // Show error message if navigation fails
+              setError('Failed to navigate to create task screen');
+            }
+          }}
         />
 
         <Portal>

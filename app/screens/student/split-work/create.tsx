@@ -16,19 +16,24 @@ import {
 import { StudentDashboardLayout } from '@/app/components/layouts';
 import { router } from 'expo-router';
 import { useTheme } from '@/app/context/ThemeContext';
-import { taskService } from '@/app/services/taskService';
+import { useStudentAuth } from '@/app/context/StudentAuthContext';
+import * as taskService from '@/app/services/taskService';
 import { socketService } from '@/app/services/socketService';
 import { TASK_TYPES, TASK_ICONS } from '@/app/config/constants';
+import { TokenExpiredError } from '@/app/services/student.service';
+import { showMessage } from 'react-native-flash-message';
 
 interface RoomMember {
   TenantID: number;
   FullName: string;
   Email: string;
   Phone: string;
+  Status: string;
 }
 
 export default function CreateTaskScreen() {
   const { theme } = useTheme();
+  const { student } = useStudentAuth();
   const [taskHeading, setTaskHeading] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
   const [selectedLogo, setSelectedLogo] = useState<number>(TASK_TYPES.OTHER);
@@ -46,12 +51,28 @@ export default function CreateTaskScreen() {
 
   const loadRoomMembers = async () => {
     try {
+      setLoadingMembers(true);
+      setError(null);
+      
       const response = await taskService.getRoomMembers();
+      
       if (response.success) {
         setRoomMembers(response.data);
+      } else {
+        setError(response.message || 'Failed to load room members');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading room members:', error);
+      if (error instanceof TokenExpiredError) {
+        showMessage({
+          message: 'Session Expired',
+          description: 'Please login again to continue',
+          type: 'warning',
+        });
+        router.replace('/login');
+      } else {
+        setError(error.message || 'Failed to load room members. Please try again.');
+      }
     } finally {
       setLoadingMembers(false);
     }
@@ -65,12 +86,14 @@ export default function CreateTaskScreen() {
 
     try {
       setLoading(true);
+      setError(null);
+      
       // First ensure socket is connected
       await socketService.connect();
       
       const response = await taskService.createTask({
-        taskHeading,
-        taskDescription,
+        taskHeading: taskHeading.trim(),
+        taskDescription: taskDescription.trim(),
         logoId: selectedLogo,
         assignedTenants: selectedMembers.map(m => m.TenantID)
       });
@@ -78,11 +101,31 @@ export default function CreateTaskScreen() {
       if (response.success) {
         // Emit a socket event to notify about the new task
         socketService.subscribeToTaskUpdates(() => {});
+        showMessage({
+          message: 'Success',
+          description: 'Task created successfully',
+          type: 'success',
+        });
         router.back();
+      } else {
+        if (response.error === 'INACTIVE_STUDENT') {
+          setError('You must be an active student to create tasks. Please contact your manager if you believe this is an error.');
+        } else {
+          setError(response.message || 'Failed to create task');
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating task:', error);
-      setError('Failed to create task');
+      if (error instanceof TokenExpiredError) {
+        showMessage({
+          message: 'Session Expired',
+          description: 'Please login again to continue',
+          type: 'warning',
+        });
+        router.replace('/login');
+      } else {
+        setError(error.message || 'Failed to create task. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -122,6 +165,65 @@ export default function CreateTaskScreen() {
         />
       </Surface>
     );
+  };
+
+  const renderMembersList = () => {
+    if (loadingMembers) {
+      return (
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color={theme?.colors?.primary} />
+          <Text style={{ marginTop: 10 }}>Loading room members...</Text>
+        </View>
+      );
+    }
+
+    if (error) {
+      return (
+        <View style={styles.centerContent}>
+          <Text style={{ color: theme?.colors?.error, textAlign: 'center', marginBottom: 10 }}>
+            {error}
+          </Text>
+          <Button mode="contained" onPress={loadRoomMembers}>
+            Retry
+          </Button>
+        </View>
+      );
+    }
+
+    if (roomMembers.length === 0) {
+      return (
+        <View style={styles.centerContent}>
+          <Text style={{ textAlign: 'center' }}>
+            No other students found in your room.
+          </Text>
+        </View>
+      );
+    }
+
+    return roomMembers.map((member) => (
+      <React.Fragment key={member.TenantID}>
+        <List.Item
+          title={member.FullName}
+          description={member.Phone}
+          left={() => (
+            <Avatar.Text
+              size={40}
+              label={member.FullName.split(' ').map(n => n[0]).join('')}
+              style={{ backgroundColor: theme?.colors?.primary }}
+            />
+          )}
+          right={() => (
+            <IconButton
+              icon={selectedMembers.some(m => m.TenantID === member.TenantID) ? 'check-circle' : 'checkbox-blank-circle-outline'}
+              iconColor={selectedMembers.some(m => m.TenantID === member.TenantID) ? theme?.colors?.primary : theme?.colors?.onSurfaceVariant}
+              onPress={() => toggleMemberSelection(member)}
+            />
+          )}
+          onPress={() => toggleMemberSelection(member)}
+        />
+        <Divider />
+      </React.Fragment>
+    ));
   };
 
   return (
@@ -229,39 +331,7 @@ export default function CreateTaskScreen() {
             <Text style={[styles.modalTitle, { color: theme?.colors?.primary }]}>
               Select Members
             </Text>
-            {loadingMembers ? (
-              <ActivityIndicator style={styles.loadingIndicator} />
-            ) : (
-              <List.Section>
-                {roomMembers.map((member, index) => (
-                  <React.Fragment key={member.TenantID}>
-                    <List.Item
-                      title={member.FullName}
-                      description={member.Email}
-                      left={() => (
-                        <Avatar.Text
-                          size={40}
-                          label={member.FullName.substring(0, 2)}
-                          style={{ backgroundColor: `${theme?.colors?.primary}20` }}
-                        />
-                      )}
-                      right={() => (
-                        <IconButton
-                          icon={selectedMembers.some(m => m.TenantID === member.TenantID)
-                            ? 'checkbox-marked-circle'
-                            : 'checkbox-blank-circle-outline'
-                          }
-                          iconColor={theme?.colors?.primary}
-                          onPress={() => toggleMemberSelection(member)}
-                        />
-                      )}
-                      onPress={() => toggleMemberSelection(member)}
-                    />
-                    {index < roomMembers.length - 1 && <Divider />}
-                  </React.Fragment>
-                ))}
-              </List.Section>
-            )}
+            {renderMembersList()}
           </Modal>
         </Portal>
       </ScrollView>
@@ -329,5 +399,10 @@ const styles = StyleSheet.create({
   },
   loadingIndicator: {
     marginVertical: 20,
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 }); 

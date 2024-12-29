@@ -8,6 +8,7 @@ import { LineChart } from 'react-native-chart-kit';
 import { router } from 'expo-router';
 import { getDashboardStats, DashboardStats } from '@/app/services/dashboard.service';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import api from '@/app/services/api';
 
 export default function DashboardHome() {
   const { theme, isDarkMode } = useTheme();
@@ -71,23 +72,30 @@ export default function DashboardHome() {
       const managerData = await AsyncStorage.getItem('manager');
       const pgData = await AsyncStorage.getItem('pg');
       
-      if (managerData) {
-        const manager = JSON.parse(managerData);
-        setManagerName(manager.fullName || 'Manager');
-      }
-
-      if (!pgData) {
-        console.warn('No PG data found in storage');
-        setPgName('Your PG');
+      if (!managerData) {
+        console.error('No manager data found');
+        router.replace('/auth/login');
         return;
       }
 
-      try {
-        const pg = JSON.parse(pgData);
-        setPgName(pg.PGName || 'Your PG');
-      } catch (parseError) {
-        console.error('Error parsing PG data:', parseError);
-        setPgName('Your PG');
+      const manager = JSON.parse(managerData);
+      setManagerName(manager.fullName || 'Manager');
+
+      if (!pgData && manager.pgId) {
+        // Store PG ID from manager data
+        await AsyncStorage.setItem('pg', JSON.stringify({ PGID: manager.pgId }));
+        setPgName('Your PG'); // Default name until we get more details
+      } else if (pgData) {
+        try {
+          const pg = JSON.parse(pgData);
+          setPgName(pg.PGName || 'Your PG');
+        } catch (parseError) {
+          console.error('Error parsing PG data:', parseError);
+          setPgName('Your PG');
+        }
+      } else {
+        console.error('No PG associated with this manager');
+        setPgName('No PG Found');
       }
     } catch (error) {
       console.error('Error loading manager/PG data:', error);
@@ -101,20 +109,56 @@ export default function DashboardHome() {
       setLoading(true);
       setError(null);
       
+      // First check manager data
       const managerData = await AsyncStorage.getItem('manager');
       if (!managerData) {
-        setError('Manager data not found');
+        console.error('No manager data found');
+        setError('Please login again');
+        router.replace('/auth/login');
         return;
       }
 
-      const { id } = JSON.parse(managerData);
-      const dashboardStats = await getDashboardStats(id);
-      console.log(dashboardStats);
-      setStats(dashboardStats);
+      // Parse manager data
+      const manager = JSON.parse(managerData);
+      if (!manager.id) {
+        setError('Invalid manager data');
+        return;
+      }
+      
+      try {
+        // Fetch dashboard stats using manager ID
+        const dashboardStats = await getDashboardStats(manager.id);
+        if (!dashboardStats) {
+          setError('No dashboard data available');
+          return;
+        }
+        
+        setStats(dashboardStats);
 
-    } catch (error: any) {
-      console.error('Error loading dashboard data:', error);
-      setError(error?.response?.data?.message || 'Failed to load dashboard data');
+        // Animate the stats if needed
+        if (dashboardStats.students) {
+          Animated.parallel([
+            Animated.timing(availableStudentsAnim, {
+              toValue: dashboardStats.students.available || 0,
+              duration: 1000,
+              useNativeDriver: false
+            }),
+            Animated.timing(unavailableStudentsAnim, {
+              toValue: dashboardStats.students.occupied || 0,
+              duration: 1000,
+              useNativeDriver: false
+            })
+          ]).start();
+        }
+      } catch (error: any) {
+        console.error('Error loading dashboard data:', error);
+        const errorMessage = error?.response?.data?.message || error?.message || 'Failed to load dashboard data';
+        setError(errorMessage);
+        
+        if (errorMessage.includes('unauthorized') || errorMessage.includes('token')) {
+          router.replace('/auth/login');
+        }
+      }
     } finally {
       setLoading(false);
     }

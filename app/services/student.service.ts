@@ -1,305 +1,224 @@
-import api from '../config/axios.config';
+import api from '@/app/config/axios.config';
+import { ENDPOINTS } from '@/app/constants/endpoints';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ENDPOINTS } from '../constants/endpoints';
 
 export interface Student {
   TenantID: number;
-  PGID: number;
   FullName: string;
+  Email: string;
   Phone: string;
-  Email: string | null;
-  Room_No: string;
+  Room_No: number;
+  Status: string;
   MoveInDate: string;
-  MoveOutDate: string | null;
-  Status: 'ACTIVE' | 'INACTIVE' | 'MOVED_OUT';
   Monthly_Rent: number;
-  GuardianNumber: string | null;
-  GuardianName: string | null;
-  Password?: string;
+  GuardianName: string;
+  GuardianNumber: string;
 }
 
-export interface StudentForm {
-  name: string;
-  phone: string;
-  email?: string;
-  monthlyRent: string;
-  guardianName: string;
-  guardianPhone: string;
-  password: string;
-  roomNo: number;
-  joinDate: string;
-  status?: 'ACTIVE' | 'INACTIVE' | 'MOVED_OUT';
+export interface Room {
+  roomId: number;
+  roomNumber: number;
+  capacity: number;
+  occupiedCount: number;
 }
 
-export interface ExcelStudent {
-  'Full Name': string;
-  'Phone': string;
-  'Room No': string | number;
-  'Monthly Rent': string | number;
-  'Email'?: string;
-  'Guardian Name'?: string;
-  'Guardian Phone'?: string;
-  'Password': string;
-}
-
-export interface RoomInfo {
-  RoomNumber: string;
-  OccupiedCount: number;
-  MaxCapacity: number;
-}
-
-export interface PaginatedResponse {
-  data: Student[];
-  rooms: RoomInfo[];
-  total: number;
-  currentPage: number;
-  totalPages: number;
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+  pagination?: {
+    currentPage: number;
+    totalPages: number;
+    totalItems: number;
+    itemsPerPage: number;
+  };
 }
 
 export class TokenExpiredError extends Error {
-  constructor() {
-    super('INVALID_TOKEN');
+  constructor(message: string = 'Token has expired') {
+    super(message);
     this.name = 'TokenExpiredError';
   }
 }
 
-export const getStudents = async (pgId: number) => {
+export const getStudents = async (): Promise<ApiResponse<Student[]>> => {
   try {
-    const token = await AsyncStorage.getItem('token');
-    if (!token) {
-      throw new Error('No authentication token found');
+    const pgData = await AsyncStorage.getItem('pg');
+    if (!pgData) {
+      throw new Error('PG data not found');
     }
 
-    const response = await api.get(`/api/tenants/pg/${pgId}`);
-    return response.data.data;
+    const pg = JSON.parse(pgData);
+    if (!pg.PGID) {
+      throw new Error('Invalid PG data');
+    }
+
+    const url = `${ENDPOINTS.STUDENT_LIST}/${pg.PGID}`;
+    console.log('Fetching students from:', url);
+
+    const response = await api.get<ApiResponse<Student[]>>(url);
+    console.log('Response:', response.data);
+
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Failed to fetch students');
+    }
+
+    return response.data;
   } catch (error) {
-    console.error('Error fetching students:', error);
-    if (error.response?.status === 401) {
-      throw new Error('INVALID_TOKEN');
+    console.error('Error details:', error);
+    
+    if (error.response) {
+      console.error('Response data:', error.response.data);
+      console.error('Response status:', error.response.status);
+      console.error('Response headers:', error.response.headers);
+    } else if (error.request) {
+      console.error('No response received:', error.request);
+    } else {
+      console.error('Error setting up request:', error.message);
+    }
+
+    if (error instanceof Error) {
+      if (error.message.includes('token')) {
+        throw new TokenExpiredError();
+      }
     }
     throw error;
   }
 };
 
-export const addStudent = async (pgId: number, formData: StudentForm) => {
+export const addStudent = async (studentData: {
+  name: string;
+  phone: string;
+  email: string;
+  moveInDate: string;
+  monthlyRent: number;
+  guardianName: string;
+  guardianPhone: string;
+  password: string;
+  roomNo: number;
+}): Promise<ApiResponse<{ studentId: number }>> => {
   try {
-    const token = await AsyncStorage.getItem('token');
-    if (!token) {
-      throw new Error('No authentication token found');
+    const managerData = await AsyncStorage.getItem('manager');
+    if (!managerData) {
+      throw new Error('Manager data not found');
     }
 
-    // Keep existing validation flow
-    await validatePhoneUnique(pgId, formData.phone);
+    const manager = JSON.parse(managerData);
+    if (!manager.pgId) {
+      throw new Error('No PG associated with this manager');
+    }
 
-    const response = await api.post(`/api/tenants/pg/${pgId}/add`, {
-      FullName: formData.name,
-      Phone: formData.phone,
-      Email: formData.email || null,
-      Monthly_Rent: parseInt(formData.monthlyRent),  // Keep the parsing as it was
-      GuardianName: formData.guardianName || null,
-      GuardianNumber: formData.guardianPhone || null,
-      Password: formData.password,
-      Room_No: parseInt(formData.roomNo.toString()),  // Keep the existing format
-      MoveInDate: formData.joinDate,
-      Status: 'ACTIVE'
-    });
+    const response = await api.post<ApiResponse<{ studentId: number }>>(
+      `${ENDPOINTS.STUDENTS}/pg/${manager.pgId}`,
+      studentData
+    );
 
     if (!response.data.success) {
       throw new Error(response.data.message || 'Failed to add student');
     }
 
     return response.data;
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error adding student:', error);
-    if (error.response?.status === 401) {
-      throw new Error('INVALID_TOKEN');
-    }
     throw error;
   }
 };
 
-export const updateStudent = async (pgId: number, tenantId: number, formData: StudentForm) => {
+export const updateStudent = async (studentId: number, updates: Partial<Student>): Promise<ApiResponse<void>> => {
   try {
-    const token = await AsyncStorage.getItem('token');
-    if (!token) {
-      throw new Error('No authentication token found');
+    const managerData = await AsyncStorage.getItem('manager');
+    if (!managerData) {
+      throw new Error('Manager data not found');
     }
 
-    // Fix the endpoint URL
-    const response = await api.put(`/api/tenants/pg/${pgId}/update/${tenantId}`, {
-      FullName: formData.name,
-      Phone: formData.phone,
-      Email: formData.email || null,
-      Monthly_Rent: parseFloat(formData.monthlyRent),
-      GuardianName: formData.guardianName || null,
-      GuardianNumber: formData.guardianPhone || null,
-      Password: formData.password || undefined,
-      Room_No: formData.roomNo,
-      MoveInDate: formData.joinDate,
-      Status: formData.status || 'ACTIVE'
-    });
+    const manager = JSON.parse(managerData);
+    if (!manager.pgId) {
+      throw new Error('No PG associated with this manager');
+    }
+
+    const response = await api.put<ApiResponse<void>>(
+      `${ENDPOINTS.STUDENTS}/pg/${manager.pgId}/student/${studentId}`,
+      updates
+    );
 
     if (!response.data.success) {
       throw new Error(response.data.message || 'Failed to update student');
     }
 
-    return response.data.data;
+    return response.data;
   } catch (error) {
     console.error('Error updating student:', error);
-    if (error.response?.status === 401) {
-      throw new Error('INVALID_TOKEN');
-    }
     throw error;
   }
 };
 
-export const getDefaultRent = async (pgId: number): Promise<number> => {
+export const getDefaultRent = async (): Promise<number> => {
   try {
-    const response = await api.get<{ success: boolean; data: { rent: number } }>(
-      `${ENDPOINTS.PGS}/${pgId}/rent`
+    const pgData = await AsyncStorage.getItem('pg');
+    if (!pgData) {
+      throw new Error('PG data not found');
+    }
+
+    const pg = JSON.parse(pgData);
+    if (!pg.PGID) {
+      throw new Error('Invalid PG data');
+    }
+
+    const response = await api.get<ApiResponse<{ defaultRent: number }>>(
+      `${ENDPOINTS.STUDENTS}/pg/${pg.PGID}/default-rent`
     );
-    return response.data.data.rent;
+
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Failed to fetch default rent');
+    }
+
+    return response.data.data.defaultRent;
   } catch (error) {
     console.error('Error fetching default rent:', error);
-    throw error;
-  }
-};
-
-export const deleteStudent = async (studentId: number, deleteType: 'SOFT' | 'HARD') => {
-  try {
-    const [token, pgData] = await Promise.all([
-      AsyncStorage.getItem('token'),
-      AsyncStorage.getItem('pg')
-    ]);
-
-    if (!token || !pgData) {
-      throw new Error('Authentication data missing');
+    if (error instanceof Error && error.message.includes('token')) {
+      throw new TokenExpiredError();
     }
-
-    const { PGID } = JSON.parse(pgData);
-
-    const response = await api.delete(`/api/students/pg/${PGID}/student/${studentId}`, {
-      data: { deleteType }
-    });
-    
-    if (!response.data.success) {
-      throw new Error(response.data.message || 'Failed to delete student');
-    }
-    
-    return response.data;
-  } catch (error: any) {
-    console.error('Error deleting student:', error);
-    if (error.response?.status === 403) {
-      throw new Error('You do not have access to this PG');
-    }
-    if (error.response?.status === 401) {
-      throw new Error('INVALID_TOKEN');
-    }
-    throw new Error(error.response?.data?.message || error.message || 'Failed to delete student');
-  }
-};
-
-export const importStudentsFromExcel = async (pgId: number, students: ExcelStudent[]) => {
-  try {
-    const token = await AsyncStorage.getItem('token');
-    if (!token) {
-      throw new Error('No authentication token found');
-    }
-
-    const response = await api.post(
-      `/api/students/pg/${pgId}/bulk`,
-      { students }
-    );
-
-    if (!response.data.success) {
-      throw new Error(response.data.message || 'Failed to import students');
-    }
-
-    return response.data;
-  } catch (error: any) {
-    console.error('Error importing students:', error);
-    if (error.response?.status === 401) {
-      throw new Error('INVALID_TOKEN');
-    }
-    throw new Error(error.response?.data?.message || error.message || 'Failed to import students');
-  }
-};
-
-export const validateRoomCapacity = async (pgId: number, roomNo: number) => {
-  try {
-    const token = await AsyncStorage.getItem('token');
-    if (!token) {
-      throw new Error('No authentication token found');
-    }
-
-    // Get room stats directly from tenant controller
-    const response = await api.get(`/api/tenants/pg/${pgId}/room/${roomNo}`);
-    
-    // If room doesn't exist, it will be created during addStudent
-    if (response.data.error === 'NOT_FOUND') {
-      return true;  // Allow the addStudent to handle room creation
-    }
-
-    const { capacity, occupiedCount } = response.data.data;
-    if (occupiedCount >= capacity) {
-      throw new Error(`Room ${roomNo} is full. Maximum capacity is ${capacity} students.`);
-    }
-    
-    return true;
-  } catch (error: any) {
-    // Only throw capacity error, let addStudent handle room creation
-    if (error.response?.data?.error !== 'NOT_FOUND') {
-      throw error;
-    }
-    return true;
-  }
-};
-
-export const validatePhoneUnique = async (pgId: number, phone: string, excludeId?: number) => {
-  try {
-    const token = await AsyncStorage.getItem('token');
-    if (!token) {
-      throw new Error('No authentication token found');
-    }
-
-    const response = await api.get(`/api/tenants/pg/${pgId}/check-phone/${phone}`);
-    const exists = response.data.data.exists;
-    
-    if (exists && (!excludeId || response.data.data.tenantId !== excludeId)) {
-      throw new Error('Phone number already exists');
-    }
-    return true;
-  } catch (error) {
-    console.error('Error validating phone:', error);
     throw error;
   }
 };
 
 export const getStudentsWithPagination = async (
-  pgId: number, 
-  page: number = 1, 
-  limit: number = 10, 
+  page: number = 1,
+  limit: number = 10,
   search?: string,
   status: string = 'ALL'
-) => {
+): Promise<ApiResponse<Student[]>> => {
   try {
-    const token = await AsyncStorage.getItem('token');
-    if (!token) {
-      throw new TokenExpiredError();
+    console.log('Fetching paginated students:', { page, limit, search, status });
+    
+    const pgData = await AsyncStorage.getItem('pg');
+    if (!pgData) {
+      throw new Error('PG data not found');
     }
 
-    const params = new URLSearchParams({
-      page: page.toString(),
-      limit: limit.toString(),
-      status: status
+    const pg = JSON.parse(pgData);
+    if (!pg.PGID) {
+      throw new Error('Invalid PG data');
+    }
+
+    const url = `${ENDPOINTS.STUDENT_LIST}/${pg.PGID}/paginated`;
+    console.log('Making request to:', url);
+
+    const response = await api.get<ApiResponse<Student[]>>(url, {
+      params: {
+        page,
+        limit,
+        search: search?.trim() || '',
+        status: status || 'ALL'
+      },
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
     });
-    
-    if (search) {
-      params.append('search', search);
-    }
 
-    const response = await api.get(`/api/tenants/pg/${pgId}/paginated?${params}`);
-    
+    console.log('Response from server:', response.data);
+
     if (!response.data.success) {
       throw new Error(response.data.message || 'Failed to fetch students');
     }
@@ -307,35 +226,94 @@ export const getStudentsWithPagination = async (
     return response.data;
   } catch (error) {
     console.error('Error fetching paginated students:', error);
-    if (error.response?.status === 401 || error.message === 'INVALID_TOKEN') {
+    if (error instanceof Error) {
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack
+      });
+      
+      // Check for network errors
+      if (error.message === 'Network Error') {
+        throw new Error('Unable to connect to server. Please check your connection.');
+      }
+      
+      if (error.message.includes('token')) {
+        throw new TokenExpiredError();
+      }
+    }
+    throw error;
+  }
+};
+
+export const getAvailableRooms = async (): Promise<Room[]> => {
+  try {
+    const pgData = await AsyncStorage.getItem('pg');
+    if (!pgData) {
+      throw new Error('PG data not found');
+    }
+
+    const pg = JSON.parse(pgData);
+    if (!pg.PGID) {
+      throw new Error('Invalid PG data');
+    }
+
+    const response = await api.get<ApiResponse<Room[]>>(
+      `${ENDPOINTS.STUDENT_LIST}/${pg.PGID}/available-rooms`
+    );
+
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Failed to fetch available rooms');
+    }
+
+    return response.data.data;
+  } catch (error) {
+    console.error('Error fetching available rooms:', error);
+    if (error instanceof Error && error.message.includes('token')) {
       throw new TokenExpiredError();
     }
     throw error;
   }
 };
 
-export const getAvailableRooms = async (pgId: number): Promise<AvailableRoom[]> => {
+export const deleteStudent = async (studentId: number, deleteType: 'SOFT' | 'HARD' = 'SOFT'): Promise<ApiResponse<void>> => {
   try {
-    const token = await AsyncStorage.getItem('token');
-    if (!token) {
-      throw new Error('No authentication token found');
+    console.log('Deleting student:', { studentId, deleteType });
+    
+    const pgData = await AsyncStorage.getItem('pg');
+    if (!pgData) {
+      throw new Error('PG data not found');
     }
 
-    const response = await api.get(`/api/tenants/pg/${pgId}/available-rooms`);
-    
-    // Debug log
-    console.log('Available rooms response:', response.data);
+    const pg = JSON.parse(pgData);
+    if (!pg.PGID) {
+      throw new Error('Invalid PG data');
+    }
+
+    const url = `${ENDPOINTS.STUDENT_DELETE.replace(':pgId', pg.PGID.toString()).replace(':id', studentId.toString())}`;
+    console.log('Delete URL:', url);
+
+    const response = await api.delete<ApiResponse<void>>(url, {
+      params: { deleteType }
+    });
+
+    console.log('Delete response:', response.data);
 
     if (!response.data.success) {
-      throw new Error(response.data.message || 'Failed to fetch available rooms');
+      throw new Error(response.data.message || 'Failed to delete student');
     }
 
-    return response.data.rooms;
-  } catch (error: any) {
-    console.error('Error fetching available rooms:', error);
-    if (error.response?.status === 401) {
-      throw new Error('Your session has expired. Please login again.');
+    return response.data;
+  } catch (error) {
+    console.error('Error deleting student:', error);
+    if (error instanceof Error) {
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack
+      });
+      if (error.message.includes('token')) {
+        throw new TokenExpiredError();
+      }
     }
-    throw new Error('Unable to load available rooms. Please try again.');
+    throw error;
   }
 }; 

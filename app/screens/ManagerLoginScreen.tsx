@@ -3,16 +3,38 @@ import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, TextInput, Button, Surface } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import { router } from 'expo-router';
-import Video from 'react-native-video'; // Importing react-native-video
+import Video from 'react-native-video';
+import { managerService } from '@/app/services/manager.service';
+import { useToast } from '@/app/hooks/useToast';
+import { useAuth } from '@/app/context/AuthContext';
 
 export default function ManagerLoginScreen() {
   const { theme } = useTheme();
-  const [managerId, setManagerId] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const { showToast } = useToast();
+  const { signIn } = useAuth();
 
   const handleLogin = async () => {
-    // ... login logic ...
+    try {
+      setIsLoading(true);
+      const response = await managerService.login({ phone, password });
+      
+      if (response.success) {
+        await signIn(response.token);
+        showToast('success', 'Login successful');
+        router.replace('/screens/ManagerDashboard');
+      } else {
+        showToast('error', response.message || 'Login failed');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      showToast('error', error.message || 'Login failed');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -24,22 +46,23 @@ export default function ManagerLoginScreen() {
         {/* WebM Animation Section */}
         <View style={styles.animationContainer}>
           <Video
-            source={require('@/assets/GIF/Member_Login.webm')} // Path to your WebM file
+            source={require('@/assets/GIF/Member_Login.webm')}
             style={styles.animation}
-            repeat // Loop the animation
-            resizeMode="contain" // Ensures the animation scales correctly
-            muted // No sound for the animation
+            repeat
+            resizeMode="contain"
+            muted
           />
         </View>
 
         {/* Login Form */}
         <View style={styles.formContainer}>
           <TextInput
-            label="Manager ID"
-            value={managerId}
-            onChangeText={setManagerId}
+            label="Phone Number"
+            value={phone}
+            onChangeText={setPhone}
             mode="outlined"
-            left={<TextInput.Icon icon="account-key" />}
+            keyboardType="phone-pad"
+            left={<TextInput.Icon icon="phone" />}
             style={styles.input}
           />
 
@@ -48,9 +71,9 @@ export default function ManagerLoginScreen() {
             value={password}
             onChangeText={setPassword}
             mode="outlined"
-            secureTextEntry
+            secureTextEntry={!showPassword}
             left={<TextInput.Icon icon="lock" />}
-            right={<TextInput.Icon icon="eye" />}
+            right={<TextInput.Icon icon={showPassword ? "eye-off" : "eye"} onPress={() => setShowPassword(!showPassword)} />}
             style={styles.input}
           />
 
@@ -98,7 +121,7 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   animation: {
-    width: 200, // Adjust size as needed
+    width: 200,
     height: 200,
   },
   formContainer: {

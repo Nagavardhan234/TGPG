@@ -1,15 +1,13 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
-import { TextInput, Button, Text, RadioButton, Surface, Avatar, IconButton } from 'react-native-paper';
+import { View, StyleSheet } from 'react-native';
+import { TextInput, Button, Text, Surface, IconButton, SegmentedButtons } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import { useAuth } from '@/app/context/AuthContext';
 import { useStudentAuth } from '@/app/context/StudentAuthContext';
-import { loginManager } from '@/app/services/manager.service';
+import { managerService } from '@/app/services/manager.service';
 import { loginStudent } from '@/app/services/student.auth.service';
 import { ErrorNotification } from '@/app/components/ErrorNotification';
 import { router } from 'expo-router';
-import { Video } from 'expo-av';
-import { RouteMap } from '@/app/_layout';
 
 type UserType = 'manager' | 'student';
 
@@ -17,29 +15,46 @@ export default function LoginScreen() {
   const { theme, isDarkMode, toggleTheme } = useTheme();
   const { login: managerLogin } = useAuth();
   const { login: studentLogin } = useStudentAuth();
-  const [userType, setUserType] = useState<UserType>('manager');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [userType, setUserType] = useState<UserType>('manager');
 
   const handleLogin = async () => {
     try {
+      if (!phone || !password) {
+        setError('Please enter both phone number and password');
+        return;
+      }
+
       setLoading(true);
       setError(null);
 
       if (userType === 'manager') {
-        const response = await loginManager({ phone, password });
-        await managerLogin(
-          response.data.token,
-          response.data.manager,
-          response.data.pg
-        );
-        router.replace('screens/dashboard' as keyof RouteMap);
+        const response = await managerService.login({ phone, password });
+        if (response.success && response.token && response.manager) {
+          await managerLogin(
+            response.token,
+            response.manager,
+            response.pg
+          );
+          router.replace('/screens/dashboard');
+        } else {
+          throw new Error('Invalid response from server');
+        }
       } else {
         const response = await loginStudent({ phone, password });
-        await studentLogin(response.data.token, response.data.student);
-        router.replace('screens/student/dashboard' as keyof RouteMap);
+        if (response.success && response.token && response.student) {
+          await studentLogin(
+            response.token,
+            response.student
+          );
+          router.replace('/screens/student/dashboard');
+        } else {
+          throw new Error(response.message || 'Invalid response from server');
+        }
       }
     } catch (error: any) {
       setError(error.message || 'Login failed');
@@ -59,64 +74,19 @@ export default function LoginScreen() {
       />
 
       <Surface style={[styles.card, { backgroundColor: theme.colors.surface }]}>
-        <View style={styles.animationContainer}>
-          <Video
-            source={require('@/assets/GIF/Member_Login.webm')}
-            style={styles.animation}
-            repeat
-            resizeMode="contain"
-            muted
-          />
-        </View>
-
-        <View style={styles.avatarContainer}>
-          <Avatar.Icon 
-            size={80} 
-            icon={userType === 'manager' ? "account-tie" : "account-group"}
-            style={[
-              styles.avatar, 
-              { 
-                backgroundColor: theme.colors.primary,
-                transform: [{ scale: userType === 'student' ? 1.1 : 1 }]
-              }
-            ]}
-          />
-        </View>
-
-        <Text style={[styles.title, { color: theme.colors.primary }]}>
-          Welcome Back
-        </Text>
-
-        <View style={styles.userTypeContainer}>
-          <RadioButton.Group onValueChange={value => setUserType(value as UserType)} value={userType}>
-            <View style={styles.radioRow}>
-              <RadioButton.Item
-                label="Manager"
-                value="manager"
-                labelStyle={{ 
-                  color: theme.colors.text,
-                  fontSize: 16,
-                  marginLeft: -8,
-                }}
-                color={theme.colors.primary}
-                style={{ paddingHorizontal: 12 }}
-              />
-              <RadioButton.Item
-                label="Student"
-                value="student"
-                labelStyle={{ 
-                  color: theme.colors.text,
-                  fontSize: 16,
-                  marginLeft: -8,
-                }}
-                color={theme.colors.primary}
-                style={{ paddingHorizontal: 12 }}
-              />
-            </View>
-          </RadioButton.Group>
-        </View>
+        <Text style={[styles.title, { color: theme.colors.primary }]}>Login</Text>
 
         <View style={styles.formContainer}>
+          <SegmentedButtons
+            value={userType}
+            onValueChange={value => setUserType(value as UserType)}
+            buttons={[
+              { value: 'manager', label: 'Manager' },
+              { value: 'student', label: 'Student' }
+            ]}
+            style={styles.segmentedButtons}
+          />
+
           <TextInput
             label="Phone Number"
             value={phone}
@@ -132,9 +102,10 @@ export default function LoginScreen() {
             value={password}
             onChangeText={setPassword}
             mode="outlined"
-            secureTextEntry
+            secureTextEntry={!showPassword}
             style={styles.input}
             left={<TextInput.Icon icon="lock" />}
+            right={<TextInput.Icon icon={showPassword ? "eye-off" : "eye"} onPress={() => setShowPassword(!showPassword)} />}
           />
 
           <Button
@@ -170,17 +141,37 @@ export default function LoginScreen() {
   );
 }
 
-const { width, height } = Dimensions.get('window');
-const cardWidth = Math.min(width * 0.9, height * 0.6, 400);
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'flex-start',
+    justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-    minHeight: '100%',
-    paddingTop: 40,
+  },
+  card: {
+    width: '100%',
+    maxWidth: 400,
+    padding: 24,
+    borderRadius: 16,
+    elevation: 4,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  formContainer: {
+    gap: 16,
+  },
+  input: {
+    marginBottom: 16,
+  },
+  button: {
+    marginTop: 8,
+  },
+  registerButton: {
+    marginTop: 8,
   },
   themeToggle: {
     position: 'absolute',
@@ -188,70 +179,7 @@ const styles = StyleSheet.create({
     right: 20,
     zIndex: 1000,
   },
-  card: {
-    width: cardWidth,
-    padding: 24,
-    borderRadius: 24,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  animationContainer: {
-    width: '100%',
-    height: 100,
-    marginBottom: 12,
-    overflow: 'hidden',
-  },
-  animation: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarContainer: {
-    marginBottom: 12,
-    marginTop: -16,
-  },
-  avatar: {
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: 'bold',
+  segmentedButtons: {
     marginBottom: 16,
-    textAlign: 'center',
-  },
-  userTypeContainer: {
-    width: '100%',
-    marginBottom: 12,
-    paddingHorizontal: 16,
-  },
-  radioRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 20,
-  },
-  formContainer: {
-    width: '100%',
-    gap: 10,
-    paddingHorizontal: 8,
-  },
-  input: {
-    marginBottom: 10,
-  },
-  button: {
-    marginTop: 4,
-    borderRadius: 12,
-    paddingVertical: 6,
-  },
-  registerButton: {
-    marginTop: 8,
   },
 });
