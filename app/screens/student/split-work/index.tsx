@@ -19,9 +19,9 @@ import { StudentDashboardLayout } from '@/app/components/layouts';
 import { router, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/app/context/ThemeContext';
 import { useStudentAuth } from '@/app/context/StudentAuthContext';
-import { taskService } from '@/app/services/taskService';
+import { taskService } from '@/app/services/task.service';
 import { TASK_STATUS, TASK_ICONS } from '@/app/config/constants';
-import { socketService } from '@/app/services/socketService';
+import { socketService } from '@/app/services/socket.service';
 
 interface Task {
   TaskID: number;
@@ -64,8 +64,6 @@ export default function SplitWorkScreen() {
     mine: 0,
     completed: 0
   });
-  const [scrollViewRef, setScrollViewRef] = useState(null);
-  const [scrollPosition, setScrollPosition] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const loadTasks = async () => {
@@ -87,12 +85,12 @@ export default function SplitWorkScreen() {
       }
     } catch (error) {
       console.error('Error loading tasks:', error);
+      setError('Failed to load tasks');
     } finally {
       setLoading(false);
     }
   };
 
-  // Load tasks and setup socket on mount
   useEffect(() => {
     if (!isAuthenticated || !student) return;
 
@@ -110,7 +108,6 @@ export default function SplitWorkScreen() {
     };
   }, [isAuthenticated, student]);
 
-  // Handle focus events to refresh data
   useFocusEffect(
     useCallback(() => {
       if (isAuthenticated && student) {
@@ -121,7 +118,7 @@ export default function SplitWorkScreen() {
   );
 
   const setupSocket = async () => {
-    if (!student || !student.Room_No) {
+    if (!student?.Room_No) {
       console.warn('Student or room number is not available');
       return;
     }
@@ -147,6 +144,7 @@ export default function SplitWorkScreen() {
       }
     } catch (error) {
       console.error('Error loading task details:', error);
+      setError('Failed to load task details');
     }
   };
 
@@ -166,6 +164,7 @@ export default function SplitWorkScreen() {
       }
     } catch (error) {
       console.error('Error starting task:', error);
+      setError('Failed to start task');
     }
   };
 
@@ -184,7 +183,6 @@ export default function SplitWorkScreen() {
           return task;
         }));
 
-        // Update stats
         setStats(prevStats => ({
           ...prevStats,
           completed: prevStats.completed + 1
@@ -192,6 +190,7 @@ export default function SplitWorkScreen() {
       }
     } catch (error) {
       console.error('Error completing task:', error);
+      setError('Failed to complete task');
     }
   };
 
@@ -205,7 +204,7 @@ export default function SplitWorkScreen() {
       }
 
       if (task.MyStatus === TASK_STATUS.COMPLETED) {
-        return null; // No action button for completed tasks
+        return null;
       }
 
       if (task.MyStatus === TASK_STATUS.PENDING) {
@@ -393,7 +392,7 @@ export default function SplitWorkScreen() {
 
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" />
+            <ActivityIndicator size="large" color={theme?.colors?.primary} />
           </View>
         ) : (
           <ScrollView
@@ -420,7 +419,6 @@ export default function SplitWorkScreen() {
               router.push('/screens/student/split-work/create');
             } catch (error) {
               console.error('Navigation error:', error);
-              // Show error message if navigation fails
               setError('Failed to navigate to create task screen');
             }
           }}
@@ -590,7 +588,7 @@ const styles = StyleSheet.create({
   },
   taskListContent: {
     padding: 16,
-    paddingBottom: 80, // Add padding for FAB
+    paddingBottom: 80,
   },
   taskCard: {
     borderRadius: 12,
