@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, ActivityIndicator, Platform, useWindowDimensions, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, StyleSheet, ScrollView, ActivityIndicator, Platform, useWindowDimensions, TouchableOpacity } from 'react-native';
 import { 
   DataTable, 
   FAB, 
@@ -16,9 +16,7 @@ import {
   Dialog,
   Chip,
   RadioButton,
-  SegmentedButtons,
-  Card,
-  Divider
+  SegmentedButtons
 } from 'react-native-paper';
 import { useTheme as useCustomTheme } from '@/app/context/ThemeContext';
 import { router } from 'expo-router';
@@ -115,7 +113,7 @@ export default function StudentManagement() {
   const [deleteType, setDeleteType] = useState<'SOFT' | 'HARD'>('SOFT');
 
   const { width } = useWindowDimensions();
-  const isMobile = width < 768;
+  const isSmallScreen = width < 768;
 
   const [editFormData, setEditFormData] = useState<FormData & { status: string }>({
     name: '',
@@ -141,7 +139,7 @@ export default function StudentManagement() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout>();
 
   const [showPassword, setShowPassword] = useState(false);
 
@@ -258,98 +256,123 @@ export default function StudentManagement() {
     }
   };
 
-  const loadStudents = async () => {
+  const loadStudents = async (pageNum = page, search = searchQuery, status = filterStatus) => {
     try {
-      setIsLoading(true);
-      const response = await getStudents();
+      setLoading(true);
+      const pgData = await AsyncStorage.getItem('pg');
+      if (!pgData) throw new Error('PG data not found');
       
-      if (response.success && response.data) {
-        setStudents(response.data);
-      }
+      const { PGID } = JSON.parse(pgData);
+      const response = await getStudentsWithPagination(PGID, pageNum, 10, search, status);
+      
+      // Ensure we have valid data
+      setStudents(response.students || []);
+      setTotalPages(response.totalPages || 0);
+      setPage(response.currentPage || 1);
     } catch (error) {
-      console.error('Load students error:', error);
+      console.error('Error loading students:', error);
+      
       if (error instanceof TokenExpiredError) {
         await handleTokenExpiration();
-      } else {
-        setError({
-          message: 'Failed to load students. Please try again.',
-          type: 'error'
-        });
+        return;
       }
+
+      setError({
+        message: error instanceof Error ? error.message : 'Failed to load students',
+        type: 'error'
+      });
     } finally {
-      setIsLoading(false);
-      setRefreshing(false);
+      setLoading(false);
     }
   };
 
   const loadDefaultRent = async () => {
     try {
-      console.log('Fetching default rent...');
-      const rent = await getDefaultRent();
-      console.log('Default rent received:', rent);
-      setFormData(prev => ({
-        ...prev,
-        monthlyRent: rent.toString()
-      }));
-    } catch (error) {
-      console.error('Error loading default rent:', error);
-      if (error instanceof TokenExpiredError) {
-        await handleTokenExpiration();
-      } else {
+      const pgData = await AsyncStorage.getItem('pg');
+      if (!pgData) {
         setError({
-          message: error instanceof Error ? error.message : 'Failed to load default rent',
-          type: 'error'
+          message: 'No PG data found',
+          type: 'warning'
         });
+        return;
       }
+
+      const pgDetails = JSON.parse(pgData);
+      const { PGID } = pgDetails;
+      
+      const defaultRent = await getDefaultRent(PGID);
+      if (defaultRent) {
+        setFormData(prev => ({
+          ...prev,
+          monthlyRent: defaultRent.toString()
+        }));
+      }
+    } catch (error: any) {
+      console.error('Error loading default rent:', error);
+      setError({
+        message: 'Failed to load default rent',
+        type: 'warning'
+      });
     }
   };
 
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
-    setIsSubmitting(true);
-    try {
-      const studentData = {
-        name: formData.name,
-        phone: formData.phone,
-        email: formData.email,
-        moveInDate: formData.joinDate,
-        monthlyRent: Number(formData.monthlyRent),
-        guardianName: formData.guardianName,
-        guardianPhone: formData.guardianPhone,
-        password: formData.password,
-        roomNo: Number(formData.roomNo)
-      };
+    if (isEditMode) {
+      await handleUpdate();
+    } else {
+      try {
+        setIsSubmitting(true);
+        
+        const pgData = await AsyncStorage.getItem('pg');
+        if (!pgData) {
+          throw new Error('PG data not found');
+        }
 
-      const response = await addStudent(studentData);
-      showMessage({
-        message: 'Success',
-        description: 'Student added successfully',
-        type: 'success',
-      });
-      setModalVisible(false);
-      loadStudents();
-    } catch (error) {
-      if (error instanceof TokenExpiredError) {
-        handleTokenExpiration();
-        return;
+        const { PGID } = JSON.parse(pgData);
+        await addStudent(PGID, formData);
+        
+        showMessage({
+          message: 'Success',
+          description: 'Student added successfully',
+          type: 'success',
+        });
+        
+        setModalVisible(false);
+        loadStudents();
+        
+        // Reset form
+        setFormData({
+          name: '',
+          phone: '',
+          email: '',
+          monthlyRent: '',
+          guardianName: '',
+          guardianPhone: '',
+          password: '',
+          roomNo: 0,
+          joinDate: new Date().toISOString().split('T')[0]
+        });
+      } catch (error: any) {
+        console.error('Error adding student:', error);
+        setError({
+          message: error.message || 'Failed to add student',
+          type: 'error'
+        });
+      } finally {
+        setIsSubmitting(false);
       }
-      setError({
-        message: error instanceof Error ? error.message : 'Failed to add student',
-        type: 'error'
-      });
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
   const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    setShowDatePicker(false);
+    setShowDatePicker(false); // Close the picker after a date is selected
     if (selectedDate) {
       const formattedDate = selectedDate.toISOString().split('T')[0];
       setFormData(prev => ({
         ...prev,
-        joinDate: formattedDate,
+        [dateType]: formattedDate,
       }));
     }
   };
@@ -437,28 +460,24 @@ export default function StudentManagement() {
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = async (studentId: number, deleteType: 'SOFT' | 'HARD') => {
     try {
-      if (!selectedStudent) return;
-
-      await deleteStudent(selectedStudent.TenantID, deleteType);
+      setViewModalVisible(false); // Close view modal first
+      await deleteStudent(studentId, deleteType);
       showMessage({
-        message: 'Success',
-        description: 'Student deleted successfully',
+        message: 'Student deleted successfully',
         type: 'success',
       });
-      setDeleteConfirmVisible(false);
-      setSelectedStudent(null);
-      loadStudents();
+      loadStudents(); // Refresh the list
     } catch (error) {
       if (error instanceof TokenExpiredError) {
         await handleTokenExpiration();
-      } else {
-        setError({
-          message: error instanceof Error ? error.message : 'Failed to delete student',
-          type: 'error'
-        });
+        return;
       }
+      setError({
+        message: error.message || 'Failed to delete student',
+        type: 'error'
+      });
     }
   };
 
@@ -482,47 +501,56 @@ export default function StudentManagement() {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await loadStudents(1); // Reset to first page when refreshing
+    await loadStudents();
+    setRefreshing(false);
   };
 
   const exportToExcel = async () => {
     try {
+      // Ensure students is an array before mapping
+      if (!Array.isArray(students) || students.length === 0) {
+        throw new Error('No student data available to export');
+      }
+
       // Create data for Excel
       const data = students.map(s => ({
-        'Full Name': s.FullName,
-        'Phone': s.Phone,
+        'Full Name': s.FullName || '',
+        'Phone': s.Phone || '',
         'Email': s.Email || '',
-        'Room No': s.Room_No || '',
-        'Status': s.Status,
+        'Room No': s.Room_No?.toString() || '',
+        'Status': s.Status || '',
         'Monthly Rent': s.Monthly_Rent || '',
         'Guardian Name': s.GuardianName || '',
         'Guardian Phone': s.GuardianNumber || '',
-        'Join Date': new Date(s.MoveInDate).toLocaleDateString()
+        'Join Date': s.MoveInDate ? new Date(s.MoveInDate).toLocaleDateString() : ''
       }));
 
       // Convert data to CSV string
+      if (data.length === 0) {
+        throw new Error('No data to export');
+      }
+
+      const headers = Object.keys(data[0]);
       const csvContent = [
-        Object.keys(data[0]).join(','), // Headers
-        ...data.map(row => Object.values(row).join(',')) // Data rows
+        headers.join(','),
+        ...data.map(row => headers.map(header => row[header] || '').join(','))
       ].join('\n');
 
       // Create file
       const fileName = `students_${new Date().toISOString().split('T')[0]}.csv`;
       const filePath = `${FileSystem.documentDirectory}${fileName}`;
 
-      // Write file
       await FileSystem.writeAsStringAsync(filePath, csvContent, {
         encoding: FileSystem.EncodingType.UTF8
       });
 
-      // Share file
       await Sharing.shareAsync(filePath);
     } catch (error) {
       console.error('Export error:', error);
       showMessage({
         message: 'Export failed',
-        description: 'Failed to export student data',
-        type: 'error' as any
+        description: error instanceof Error ? error.message : 'Failed to export student data',
+        type: 'danger'
       });
     }
   };
@@ -554,18 +582,22 @@ export default function StudentManagement() {
         copyToCacheDirectory: true
       });
 
-      if (result.type === 'success') {
-        const fileContent = await FileSystem.readAsStringAsync(result.uri, {
+      if (result.assets && result.assets[0]) {
+        const fileContent = await FileSystem.readAsStringAsync(result.assets[0].uri, {
           encoding: FileSystem.EncodingType.Base64
         });
 
         const workbook = XLSX.read(fileContent, { type: 'base64' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const data = XLSX.utils.sheet_to_json(worksheet);
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        if (!Array.isArray(jsonData)) {
+          throw new Error('Invalid file format');
+        }
 
         // Validate data
-        const validatedData = data.map((row: any) => {
+        const validatedData = jsonData.map((row: any) => {
           if (!row['Full Name'] || !row['Phone'] || !row['Room No'] || !row['Monthly Rent'] || !row['Password']) {
             throw new Error('Missing required fields');
           }
@@ -600,7 +632,7 @@ export default function StudentManagement() {
       showMessage({
         message: 'Import Failed',
         description: error.message || 'Failed to import students',
-        type: 'error'
+        type: 'danger'
       });
     } finally {
       setImportModalVisible(false);
@@ -643,354 +675,77 @@ export default function StudentManagement() {
   };
 
   const filteredStudents = useMemo(() => {
-    return students
+    // Ensure students is always an array
+    const studentArray = Array.isArray(students) ? students : [];
+    
+    return studentArray
       .filter(student => {
-        if (!searchQuery) return true;
-        const searchLower = searchQuery.toLowerCase();
-        return (
-          student.FullName.toLowerCase().includes(searchLower) ||
-          student.Phone.includes(searchQuery) ||
-          student.Room_No.toString().includes(searchQuery)
-        );
+        // Ensure we have valid student data
+        if (!student) return false;
+
+        const matchesStatus = filterStatus === 'ALL' ? true : student.Status === filterStatus;
+        const matchesSearch = searchQuery 
+          ? student.FullName?.toLowerCase().includes(searchQuery.toLowerCase())
+          : true;
+        const matchesRoom = filterRoom 
+          ? student.Room_No?.toString() === filterRoom
+          : true;
+        return matchesStatus && matchesSearch && matchesRoom;
       })
-      .filter(student => filterStatus === 'ALL' ? true : student.Status === filterStatus)
       .sort((a, b) => {
-        const direction = sortOrder === 'asc' ? 1 : -1;
-        switch (sortBy) {
-          case 'name':
-            return direction * a.FullName.localeCompare(b.FullName);
-          case 'room':
-            return direction * ((a.Room_No || 0) - (b.Room_No || 0));
-          default:
-            return 0;
+        const direction = sortDirection === 'asc' ? 1 : -1;
+        if (sortField === 'name') {
+          return direction * (a.FullName || '').localeCompare(b.FullName || '');
+        } else {
+          return direction * ((a.Room_No || 0) - (b.Room_No || 0));
         }
       });
-  }, [students, searchQuery, filterStatus, sortBy, sortOrder]);
+  }, [students, filterStatus, searchQuery, filterRoom, sortField, sortDirection]);
 
-  // Update search handler
+  // Add search handler with debounce
   const handleSearch = (query: string) => {
     setSearchQuery(query);
-    setPage(1); // Reset to first page when searching
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    
+    setSearchTimeout(setTimeout(() => {
+      loadStudents(1, query);
+    }, 500));
   };
 
-  // Update filter handler
-  const handleFilterChange = (status: string) => {
-    setFilterStatus(status);
-    setPage(1); // Reset to first page when filtering
-  };
-
-  // Add room filter handler
-  const handleRoomFilter = (roomNumber: string) => {
-    setFilterRoom(roomNumber);
-    setPage(1);
-    loadStudents(1);
-  };
-
-  // Clean up search timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (searchTimeout) {
-        clearTimeout(searchTimeout);
-      }
-    };
-  }, [searchTimeout]);
-
-  // Update search bar component
-  const renderSearchBar = () => (
-    <Searchbar
-      placeholder="Search by name or phone..."
-      onChangeText={handleSearch}
-      value={searchQuery}
-      style={styles.searchBar}
-      onClearIconPress={() => {
-        setSearchQuery('');
-        setPage(1);
-        loadStudents(1);
-      }}
-    />
-  );
-
-  // Update filter component
-  const renderFilter = () => (
-    <SegmentedButtons
-      value={filterStatus}
-      onValueChange={handleFilterChange}
-      buttons={[
-        { value: 'ALL', label: 'All' },
-        { value: 'ACTIVE', label: 'Active' },
-        { value: 'INACTIVE', label: 'Inactive' },
-        { value: 'MOVED_OUT', label: 'Moved Out' }
-      ]}
-      style={styles.filterButtons}
-    />
-  );
-
-  const renderTable = () => (
-    <DataTable style={styles.table}>
-      <DataTable.Header style={styles.tableHeader}>
-        <DataTable.Title style={styles.logoColumn}></DataTable.Title>
-        <DataTable.Title style={styles.nameColumn}>Name</DataTable.Title>
-        <DataTable.Title style={styles.phoneColumn}>Phone</DataTable.Title>
-        <DataTable.Title style={styles.roomColumn}>Room</DataTable.Title>
-        <DataTable.Title style={styles.actionColumn}>Actions</DataTable.Title>
-      </DataTable.Header>
-
-      {students.map((student) => (
-        <DataTable.Row key={student.TenantID}>
-          <DataTable.Cell style={styles.logoColumn}>
-            <Avatar.Text 
-              size={40} 
-              label={student.FullName.split(' ').map(n => n[0]).join('')}
-              style={{ backgroundColor: theme.colors.primary }}
-            />
-          </DataTable.Cell>
-          <DataTable.Cell style={styles.nameColumn}>{student.FullName}</DataTable.Cell>
-          <DataTable.Cell style={styles.phoneColumn}>{student.Phone}</DataTable.Cell>
-          <DataTable.Cell style={styles.roomColumn}>{student.Room_No}</DataTable.Cell>
-          <DataTable.Cell style={styles.actionColumn}>
-            <IconButton
-              icon="eye"
-              size={20}
-              onPress={() => handleViewStudent(student)}
-            />
-          </DataTable.Cell>
-        </DataTable.Row>
-      ))}
-    </DataTable>
-  );
-
-  // Add sorting handler
+  // Add sorting function
   const handleSort = (field: 'name' | 'room') => {
     if (sortField === field) {
+      // If clicking the same field, toggle direction
       setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
     } else {
+      // If clicking new field, set it with ascending direction
       setSortField(field);
       setSortDirection('asc');
     }
   };
 
-  // Add sorted students computation
+  // Sort the students array
   const sortedStudents = useMemo(() => {
+    if (!sortField) return students;
+
     return [...students].sort((a, b) => {
-      const direction = sortDirection === 'asc' ? 1 : -1;
+      let compareA, compareB;
       
       if (sortField === 'name') {
-        return direction * a.FullName.localeCompare(b.FullName);
+        compareA = a.FullName.toLowerCase();
+        compareB = b.FullName.toLowerCase();
+      } else {
+        compareA = parseInt(a.Room_No);
+        compareB = parseInt(b.Room_No);
       }
-      
-      if (sortField === 'room') {
-        const roomA = a.Room_No || 0;
-        const roomB = b.Room_No || 0;
-        return direction * (roomA - roomB);
-      }
-      
+
+      if (compareA < compareB) return sortDirection === 'asc' ? -1 : 1;
+      if (compareA > compareB) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
   }, [students, sortField, sortDirection]);
-
-  // Render student card with alternating backgrounds
-  const renderStudentCard = (student: Student, index: number) => (
-    <Card 
-      style={[
-        styles.studentCard,
-        { 
-          backgroundColor: index % 2 === 0 ? theme.colors.surface : theme.colors.surfaceVariant,
-          elevation: 2,
-        }
-      ]}
-      onPress={() => handleViewStudent(student)}
-    >
-      <Card.Content>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardTitleSection}>
-            <Avatar.Text 
-              size={40} 
-              label={student.FullName.split(' ').map(n => n[0]).join('')} 
-              style={{ backgroundColor: theme.colors.primary }}
-            />
-            <View style={styles.cardTitleText}>
-              <Text variant="titleMedium" style={styles.studentName}>{student.FullName}</Text>
-              <Text variant="bodyMedium" style={[styles.studentPhone, { color: theme.colors.onSurfaceVariant }]}>
-                {student.Phone}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.cardInfo}>
-            <Chip
-              mode="flat"
-              style={[
-                styles.statusChip,
-                { backgroundColor: getStatusColor(student.Status, theme) }
-              ]}
-            >
-              {student.Status}
-            </Chip>
-            <Text style={[styles.roomNumber, { color: theme.colors.primary }]}>
-              Room {student.Room_No}
-            </Text>
-          </View>
-        </View>
-      </Card.Content>
-    </Card>
-  );
-
-  // Add debounced search
-  useEffect(() => {
-    const debounceTimeout = setTimeout(() => {
-      loadStudents(1);
-    }, 300);
-
-    return () => clearTimeout(debounceTimeout);
-  }, [searchQuery, filterStatus]);
-
-  // Initial load
-  useEffect(() => {
-    loadStudents();
-  }, []);
-
-  // Update pagination handlers
-  const handlePreviousPage = () => {
-    if (page > 1) {
-      loadStudents(page - 1);
-    }
-  };
-
-  const handleNextPage = () => {
-    if (page < totalPages) {
-      loadStudents(page + 1);
-    }
-  };
-
-  // Add view student handler
-  const handleViewStudent = (student: Student) => {
-    setSelectedStudent(student);
-    setViewModalVisible(true);
-  };
-
-  // Add view modal component
-  const ViewStudentModal = () => {
-    if (!selectedStudent) return null;
-
-    return (
-      <Modal
-        visible={viewModalVisible}
-        onDismiss={() => {
-          setViewModalVisible(false);
-          setSelectedStudent(null);
-        }}
-        contentContainerStyle={[
-          styles.modalContainer,
-          { backgroundColor: theme.colors.surface }
-        ]}
-      >
-        <ScrollView>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Avatar.Text 
-                size={60} 
-                label={selectedStudent.FullName.split(' ').map(n => n[0]).join('')}
-                style={{ backgroundColor: theme.colors.primary }}
-              />
-              <Text style={[styles.modalTitle, { color: theme.colors.onSurface }]}>
-                {selectedStudent.FullName}
-              </Text>
-            </View>
-
-            <View style={styles.detailsContainer}>
-              <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: theme.colors.onSurfaceVariant }]}>Phone</Text>
-                <Text style={[styles.detailValue, { color: theme.colors.onSurface }]}>
-                  {selectedStudent.Phone}
-                </Text>
-              </View>
-
-              <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: theme.colors.onSurfaceVariant }]}>Room No</Text>
-                <Text style={[styles.detailValue, { color: theme.colors.onSurface }]}>
-                  {selectedStudent.Room_No}
-                </Text>
-              </View>
-
-              <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: theme.colors.onSurfaceVariant }]}>Status</Text>
-                <Chip
-                  mode="flat"
-                  style={{ backgroundColor: getStatusColor(selectedStudent.Status, theme) }}
-                >
-                  {selectedStudent.Status}
-                </Chip>
-              </View>
-
-              <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: theme.colors.onSurfaceVariant }]}>Join Date</Text>
-                <Text style={[styles.detailValue, { color: theme.colors.onSurface }]}>
-                  {new Date(selectedStudent.MoveInDate).toLocaleDateString()}
-                </Text>
-              </View>
-
-              <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: theme.colors.onSurfaceVariant }]}>Monthly Rent</Text>
-                <Text style={[styles.detailValue, { color: theme.colors.onSurface }]}>
-                  ₹{selectedStudent.Monthly_Rent}
-                </Text>
-              </View>
-
-              {selectedStudent.Email && (
-                <View style={styles.detailRow}>
-                  <Text style={[styles.detailLabel, { color: theme.colors.onSurfaceVariant }]}>Email</Text>
-                  <Text style={[styles.detailValue, { color: theme.colors.onSurface }]}>
-                    {selectedStudent.Email}
-                  </Text>
-                </View>
-              )}
-
-              {selectedStudent.GuardianName && (
-                <View style={styles.detailRow}>
-                  <Text style={[styles.detailLabel, { color: theme.colors.onSurfaceVariant }]}>Guardian Name</Text>
-                  <Text style={[styles.detailValue, { color: theme.colors.onSurface }]}>
-                    {selectedStudent.GuardianName}
-                  </Text>
-                </View>
-              )}
-
-              {selectedStudent.GuardianNumber && (
-                <View style={styles.detailRow}>
-                  <Text style={[styles.detailLabel, { color: theme.colors.onSurfaceVariant }]}>Guardian Phone</Text>
-                  <Text style={[styles.detailValue, { color: theme.colors.onSurface }]}>
-                    {selectedStudent.GuardianNumber}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            <View style={styles.modalActions}>
-              <Button
-                mode="outlined"
-                onPress={() => {
-                  setViewModalVisible(false);
-                  setEditModalVisible(true);
-                }}
-                style={styles.actionButton}
-              >
-                Edit
-              </Button>
-              <Button
-                mode="contained"
-                onPress={() => {
-                  setViewModalVisible(false);
-                  setDeleteConfirmVisible(true);
-                }}
-                style={styles.actionButton}
-                buttonColor={theme.colors.error}
-              >
-                Delete
-              </Button>
-            </View>
-          </View>
-        </ScrollView>
-      </Modal>
-    );
-  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -1003,19 +758,20 @@ export default function StudentManagement() {
           style={styles.errorNotification}
         />
 
-        <ViewStudentModal />
-
         <Modal
           visible={modalVisible}
           onDismiss={handleModalClose}
           contentContainerStyle={[
             styles.modalContainer,
-            { backgroundColor: theme.colors.surface }
+            { 
+              backgroundColor: isDarkMode ? 'rgba(30, 30, 30, 0.95)' : theme.colors.surface 
+            }
           ]}
           style={styles.modalOverlay}
         >
           <ScrollView style={{ zIndex: 1 }}>
             <View style={styles.modalContent}>
+              {/* Profile Icon */}
               <View style={styles.avatarContainer}>
                 <Avatar.Icon 
                   size={80} 
@@ -1027,125 +783,149 @@ export default function StudentManagement() {
                 </Text>
               </View>
 
-              <View style={styles.formSection}>
-                <TextInput
-                  label="Full Name *"
-                  value={formData.name}
-                  onChangeText={(text) => setFormData({ ...formData, name: text })}
-                  mode="outlined"
-                  style={styles.input}
-                />
-                
-                <TextInput
-                  label="Phone Number *"
-                  value={formData.phone}
-                  onChangeText={(text) => setFormData({ ...formData, phone: text })}
-                  mode="outlined"
-                  keyboardType="phone-pad"
-                  style={styles.input}
-                />
+              {/* Form Fields */}
+              <TextInput
+                label="Full Name *"
+                value={formData.name}
+                onChangeText={(text) => setFormData({ ...formData, name: text })}
+                mode="outlined"
+                style={styles.input}
+              />
+              
+              <TextInput
+                label="Phone Number *"
+                value={formData.phone}
+                onChangeText={(text) => setFormData({ ...formData, phone: text })}
+                mode="outlined"
+                keyboardType="phone-pad"
+                style={styles.input}
+              />
 
-                <TextInput
-                  label="Room Number *"
-                  value={formData.roomNo.toString()}
-                  onChangeText={(text) => setFormData({ ...formData, roomNo: parseInt(text) || 0 })}
-                  mode="outlined"
-                  keyboardType="numeric"
-                  style={styles.input}
-                />
-
-                <TextInput
-                  label="Monthly Rent *"
-                  value={formData.monthlyRent}
-                  onChangeText={(text) => setFormData({ ...prev, monthlyRent: text })}
-                  mode="outlined"
-                  keyboardType="numeric"
-                  style={styles.input}
-                  disabled={isEditMode}
-                />
-
-                <TextInput
-                  label="Email (Optional)"
-                  value={formData.email}
-                  onChangeText={(text) => setFormData({ ...formData, email: text })}
-                  mode="outlined"
-                  keyboardType="email-address"
-                  style={styles.input}
-                />
-
-                <TextInput
-                  label="Guardian Name"
-                  value={formData.guardianName}
-                  onChangeText={(text) => setFormData({ ...formData, guardianName: text })}
-                  mode="outlined"
-                  style={styles.input}
-                />
-
-                <TextInput
-                  label="Guardian Phone"
-                  value={formData.guardianPhone}
-                  onChangeText={(text) => setFormData({ ...formData, guardianPhone: text })}
-                  mode="outlined"
-                  keyboardType="phone-pad"
-                  style={styles.input}
-                />
-
-                <TextInput
-                  label="Password *"
-                  value={formData.password}
-                  onChangeText={(text) => setFormData({ ...formData, password: text })}
-                  mode="outlined"
-                  secureTextEntry={!showPassword}
-                  right={
-                    <TextInput.Icon
-                      icon={showPassword ? "eye-off" : "eye"}
-                      onPress={() => setShowPassword(!showPassword)}
-                    />
-                  }
-                  style={styles.input}
-                />
-
-                <View style={styles.datePickerContainer}>
+              <View style={styles.roomSection}>
+                <Text style={[styles.label, { color: theme.colors.onSurface }]}>Room Number *</Text>
+                <View style={styles.roomInputContainer}>
                   <TextInput
-                    label="Join Date *"
-                    value={formData.joinDate}
+                    label="Room Number *"
+                    value={formData.roomNo.toString()}
+                    onChangeText={(text) => setFormData({ ...formData, roomNo: parseInt(text) || 0 })}
                     mode="outlined"
+                    keyboardType="numeric"
                     style={styles.input}
-                    editable={false}
-                    right={
-                      <TextInput.Icon 
-                        icon="calendar" 
-                        onPress={() => setShowDatePicker(true)} 
-                      />
-                    }
                   />
-                  {showDatePicker && (
-                    <DateTimePicker
-                      value={formData.joinDate ? new Date(formData.joinDate) : new Date()}
-                      mode="date"
-                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                      onChange={onDateChange}
-                    />
-                  )}
                 </View>
-
-                {isEditMode && (
-                  <View style={styles.statusSelector}>
-                    <Text style={[styles.label, { color: theme.colors.text }]}>Status</Text>
-                    <SegmentedButtons
-                      value={editFormData.status}
-                      onValueChange={value => 
-                        setEditFormData(prev => ({ ...prev, status: value as 'ACTIVE' | 'INACTIVE' | 'MOVED_OUT' }))
-                      }
-                      buttons={[
-                        { value: 'ACTIVE', label: 'Active' },
-                        { value: 'INACTIVE', label: 'Inactive' },
-                        { value: 'MOVED_OUT', label: 'Moved Out' }
-                      ]}
-                    />
-                  </View>
-                )}
               </View>
+
+              <TextInput
+                label="Monthly Rent"
+                value={formData.monthlyRent}
+                onChangeText={(text) => setFormData({ ...prev, monthlyRent: text })}
+                mode="outlined"
+                keyboardType="numeric"
+                style={styles.input}
+                disabled={isEditMode}
+              />
+
+              <TextInput
+                label="Email (Optional)"
+                value={formData.email}
+                onChangeText={(text) => setFormData({ ...formData, email: text })}
+                mode="outlined"
+                keyboardType="email-address"
+                style={styles.input}
+              />
+
+              <TextInput
+                label="Guardian Name"
+                value={formData.guardianName}
+                onChangeText={(text) => setFormData({ ...formData, guardianName: text })}
+                mode="outlined"
+                style={styles.input}
+              />
+
+              <TextInput
+                label="Guardian Phone"
+                value={formData.guardianPhone}
+                onChangeText={(text) => setFormData({ ...formData, guardianPhone: text })}
+                mode="outlined"
+                keyboardType="phone-pad"
+                style={styles.input}
+              />
+
+              <TextInput
+                label="Password *"
+                value={formData.password}
+                onChangeText={(text) => setFormData({ ...formData, password: text })}
+                mode="outlined"
+                secureTextEntry={!showPassword}
+                right={
+                  <TextInput.Icon
+                    icon={showPassword ? "eye-off" : "eye"}
+                    onPress={() => setShowPassword(!showPassword)}
+                  />
+                }
+                style={styles.input}
+              />
+
+              <TextInput
+                label="Join Date *"
+                value={formData.joinDate}
+                mode="outlined"
+                style={styles.input}
+                error={!formData.joinDate}
+                editable={false}
+                right={
+                  <TextInput.Icon 
+                    icon="calendar" 
+                    onPress={() => setShowDatePicker(true)} 
+                  />
+                }
+              />
+              {showDatePicker && (
+                <DateTimePicker
+                  value={formData.joinDate ? new Date(formData.joinDate) : new Date()}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                  onChange={onDateChange}
+                />
+              )}
+
+              {isEditMode && (
+                <View style={styles.statusSelector}>
+                  <Text style={[styles.label, { color: theme.colors.text }]}>Status</Text>
+                  <SegmentedButtons
+                    value={editFormData.status}
+                    onValueChange={value => 
+                      setEditFormData(prev => ({ ...prev, status: value as 'ACTIVE' | 'INACTIVE' | 'MOVED_OUT' }))
+                    }
+                    buttons={[
+                      {
+                        value: 'ACTIVE',
+                        label: 'Active',
+                        style: [
+                          styles.statusButton,
+                          { backgroundColor: editFormData.status === 'ACTIVE' ? theme.colors.primaryContainer : undefined }
+                        ]
+                      },
+                      {
+                        value: 'INACTIVE',
+                        label: 'Inactive',
+                        style: [
+                          styles.statusButton,
+                          { backgroundColor: editFormData.status === 'INACTIVE' ? theme.colors.errorContainer : undefined }
+                        ]
+                      },
+                      {
+                        value: 'MOVED_OUT',
+                        label: 'Moved Out',
+                        style: [
+                          styles.statusButton,
+                          { backgroundColor: editFormData.status === 'MOVED_OUT' ? theme.colors.surfaceVariant : undefined }
+                        ]
+                      }
+                    ]}
+                  />
+                </View>
+              )}
 
               <View style={styles.buttonContainer}>
                 <Button 
@@ -1174,72 +954,114 @@ export default function StudentManagement() {
       </Portal>
 
       <View style={styles.header}>
-        <Title style={[styles.title, { color: theme.colors.onBackground }]}>
-          Student Management
-        </Title>
+        <Title style={styles.title}>Student Management</Title>
         <View style={styles.searchContainer}>
           <Searchbar
-            placeholder="Search by name, phone or room..."
+            placeholder="Search by name, phone or room"
             onChangeText={handleSearch}
             value={searchQuery}
-            style={[styles.searchBar, { backgroundColor: theme.colors.surface }]}
-            icon="magnify"
-            clearIcon="close"
-            onClearIconPress={() => {
-              setSearchQuery('');
-              loadStudents();
-            }}
+            style={styles.searchBar}
           />
-          
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            style={styles.filterScrollView}
-          >
-            <SegmentedButtons
-              value={filterStatus}
-              onValueChange={handleFilterChange}
-              buttons={[
-                { value: 'ALL', label: 'All' },
-                { value: 'ACTIVE', label: 'Active' },
-                { value: 'INACTIVE', label: 'Inactive' },
-                { value: 'MOVED_OUT', label: 'Moved Out' }
-              ]}
-              style={styles.filterButtons}
-            />
-          </ScrollView>
+          <SegmentedButtons
+            value={filterStatus}
+            onValueChange={(value) => {
+              setFilterStatus(value as typeof filterStatus);
+              loadStudents(1, searchQuery, value);  // Pass status to loadStudents
+            }}
+            buttons={[
+              { value: 'ALL', label: 'All' },
+              { value: 'ACTIVE', label: 'Active' },
+              { value: 'INACTIVE', label: 'Inactive' },
+              { value: 'MOVED_OUT', label: 'Moved Out' }
+            ]}
+          />
         </View>
       </View>
 
+     
       <ScrollView 
-        style={styles.contentContainer}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={[theme.colors.primary]}
-          />
-        }
+        style={styles.tableContainer}
+        onScroll={({ nativeEvent }) => {
+          const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+          const paddingToBottom = 50; // Trigger loading earlier for smoother experience
+          const isCloseToBottom = 
+            layoutMeasurement.height + contentOffset.y >= 
+            contentSize.height - paddingToBottom;
+          
+          if (isCloseToBottom && !loading && page < totalPages) {
+            loadStudents(page + 1);
+          }
+        }}
+        scrollEventThrottle={16} // More frequent updates for smoother scrolling
+        showsVerticalScrollIndicator={false} // Cleaner look
       >
-        {isLoading ? (
-          <ActivityIndicator style={styles.loader} size="large" color={theme.colors.primary} />
-        ) : (
-          <View style={styles.cardContainer}>
-            {filteredStudents.map((student, index) => renderStudentCard(student, index))}
-          </View>
-        )}
+        <DataTable>
+          <DataTable.Header style={[styles.tableHeader, { backgroundColor: theme.colors.surfaceVariant }]}>
+            <DataTable.Title 
+              style={styles.nameColumn}
+              sortDirection={sortField === 'name' ? sortDirection : 'none'}
+              onPress={() => handleSort('name')}
+            >
+              <Text style={[styles.headerText, { color: theme.colors.onSurface }]}>Name</Text>
+            </DataTable.Title>
+            <DataTable.Title 
+              style={styles.roomColumn}
+              sortDirection={sortField === 'room' ? sortDirection : 'none'}
+              onPress={() => handleSort('room')}
+            >
+              <Text style={[styles.headerText, { color: theme.colors.onSurface }]}>Room</Text>
+            </DataTable.Title>
+            <DataTable.Title style={styles.actionColumn}>
+              <Text style={[styles.headerText, { color: theme.colors.onSurface }]}>View</Text>
+            </DataTable.Title>
+          </DataTable.Header>
+
+          {sortedStudents.map((student) => (
+            <DataTable.Row 
+              key={student.TenantID}
+              style={[styles.tableRow, { backgroundColor: theme.colors.surface }]}
+            >
+              <DataTable.Cell style={styles.nameColumn}>
+                <View style={styles.nameCell}>
+                  <Avatar.Text 
+                    size={36} 
+                    label={student.FullName.substring(0, 2).toUpperCase()}
+                    style={[styles.avatar, { backgroundColor: theme.colors.primary }]}
+                  />
+                  <Text style={[styles.nameText, { color: theme.colors.onSurface }]}>
+                    {student.FullName}
+                  </Text>
+                </View>
+              </DataTable.Cell>
+              <DataTable.Cell style={styles.roomColumn}>
+                <View style={styles.roomBadge}>
+                  <Text style={[styles.roomText, { color: theme.colors.onSurface }]}>
+                    {student.Room_No !== null && student.Room_No !== undefined ? student.Room_No.toString() : 'N/A'}
+                  </Text>
+                </View>
+              </DataTable.Cell>
+              <DataTable.Cell style={styles.actionColumn}>
+                <IconButton
+                  icon="eye"
+                  size={24}
+                  iconColor={theme.colors.primary}
+                  onPress={() => {
+                    setSelectedStudent(student);
+                    setViewModalVisible(true);
+                  }}
+                  style={styles.viewButton}
+                />
+              </DataTable.Cell>
+            </DataTable.Row>
+          ))}
+        </DataTable>
       </ScrollView>
 
       <FAB
         icon="plus"
-        label={isMobile ? undefined : "Add Student"}
         style={[
-          styles.fab,
-          { 
-            backgroundColor: isDarkMode ? '#D0BCFF' : theme.colors.primary,
-            right: isMobile ? 16 : 24,
-            bottom: isMobile ? 16 : 24,
-          }
+          styles.fab, 
+          { backgroundColor: isDarkMode ? '#D0BCFF' : theme.colors.primary }
         ]}
         onPress={() => setModalVisible(true)}
       />
@@ -1430,26 +1252,6 @@ export default function StudentManagement() {
           </ScrollView>
         </Modal>
       </Portal>
-
-      <View style={styles.paginationContainer}>
-        <Button
-          mode="outlined"
-          onPress={handlePreviousPage}
-          disabled={page === 1 || isLoading}
-        >
-          Previous
-        </Button>
-        <Text style={styles.pageInfo}>
-          Page {page} of {totalPages}
-        </Text>
-        <Button
-          mode="outlined"
-          onPress={handleNextPage}
-          disabled={page >= totalPages || isLoading}
-        >
-          Next
-        </Button>
-      </View>
     </View>
   );
 }
@@ -1460,221 +1262,267 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   header: {
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 24,
-    marginBottom: 16,
-  },
-  searchContainer: {
+    marginBottom: 24,
     gap: 16,
   },
-  searchBar: {
-    elevation: 2,
-    borderRadius: 12,
-    marginBottom: 8,
-  },
-  filterScrollView: {
-    marginBottom: 8,
-  },
-  filterButtons: {
-    minWidth: 300,
-  },
-  contentContainer: {
-    flex: 1,
-  },
-  cardContainer: {
-    gap: 12,
-    paddingBottom: 80,
-  },
-  studentCard: {
-    marginBottom: 8,
-    borderRadius: 12,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  cardTitleSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  cardTitleText: {
-    flex: 1,
-  },
-  studentName: {
+  title: {
+    fontSize: 28,
     fontWeight: 'bold',
+    marginBottom: 8,
   },
-  studentPhone: {
-    opacity: 0.7,
+  searchContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    alignItems: 'center',
   },
-  cardInfo: {
-    alignItems: 'flex-end',
-    gap: 8,
+  searchBar: {
+    flex: 2,
+    minWidth: 200,
+    backgroundColor: '#f5f5f5',
   },
-  statusChip: {
-    borderRadius: 8,
-  },
-  roomNumber: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  fab: {
-    position: 'absolute',
-    margin: 16,
-  },
-  loader: {
-    padding: 20,
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalContainer: {
     margin: 20,
+    borderRadius: 20,
     maxHeight: '90%',
-    width: '90%',
-    maxWidth: 600,
-    alignSelf: 'center',
-    borderRadius: 16,
-  },
-  modalScroll: {
-    flex: 1,
+    zIndex: 1001,
   },
   modalContent: {
-    padding: 24,
-    gap: 24,
+    padding: 20,
+    position: 'relative',
+    zIndex: 1,
   },
-  formSection: {
-    gap: 16,
+  modalOverlay: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 1000,
+  },
+  avatarContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  avatar: {
+    marginBottom: 10,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
   },
   input: {
-    marginBottom: 8,
-  },
-  datePickerContainer: {
     marginBottom: 16,
   },
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     gap: 12,
-    marginTop: 8,
+    marginTop: 20,
   },
-  errorNotification: {
-    marginBottom: 16,
+  button: {
+    minWidth: 100,
   },
-  avatarContainer: {
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
+  fab: {
+    position: 'absolute',
+    margin: 16,
+    right: 16,
+    bottom: 16,
+    borderRadius: 16,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
   },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-  },
-  modalTitle: {
-    fontSize: 24,
+  fabLabel: {
+    fontSize: 14,
     fontWeight: 'bold',
   },
-  detailsContainer: {
-    gap: 16,
+  errorNotification: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 9999,
+    elevation: 9999,
   },
-  detailRow: {
+  actionButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  filterContainer: {
+    marginBottom: 16,
+    paddingVertical: 8,
+  },
+  filterChip: {
+    marginRight: 8,
+    borderRadius: 20,
+  },
+  tableContainer: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  tableHeader: {
+    borderRadius: 12,
+    marginHorizontal: 4,
+    marginVertical: 8,
+    elevation: 2,
+  },
+  headerText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  tableRow: {
+    marginHorizontal: 4,
+    marginVertical: 4,
+    borderRadius: 12,
+    elevation: 1,
+  },
+  nameColumn: {
+    flex: 4,
+    paddingRight: 16,
+  },
+  roomColumn: {
+    flex: 1.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+  },
+  actionColumn: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  detailLabel: {
-    fontSize: 16,
-    opacity: 0.7,
+  nameCell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flexWrap: 'nowrap',
   },
-  detailValue: {
-    fontSize: 16,
+  avatar: {
+    width: 40,
+    height: 40,
+  },
+  nameText: {
+    fontSize: 15,
     fontWeight: '500',
+    flex: 1,
   },
-  modalActions: {
+  roomBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    alignSelf: 'flex-start',
+    minWidth: 50,
+    alignItems: 'center',
+  },
+  roomText: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  viewButton: {
+    margin: 0,
+  },
+  deleteOptions: {
+    marginTop: 8,
+  },
+  radioOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 4,
+  },
+  statusSelector: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  statusButton: {
+    flex: 1,
+  },
+  importModal: {
+    margin: 20,
+    padding: 20,
+    borderRadius: 8,
+  },
+  importModalContent: {
+    padding: 20,
+  },
+  importInstructions: {
+    marginBottom: 20,
+  },
+  columnList: {
+    marginBottom: 20,
+  },
+  importActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     gap: 12,
-    marginTop: 12,
   },
-  actionButton: {
+  importButton: {
     minWidth: 100,
   },
   filterModal: {
     margin: 20,
-    borderRadius: 16,
-    padding: 24,
-    maxWidth: 600,
-    width: '90%',
-    alignSelf: 'center',
+    padding: 20,
+    borderRadius: 8,
   },
   filterModalContent: {
-    gap: 24,
+    padding: 20,
   },
   filterTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    marginBottom: 20,
+  },
+  filterInput: {
     marginBottom: 16,
   },
   sortSection: {
-    marginBottom: 16,
+    marginTop: 16,
   },
   filterSubtitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
     marginBottom: 8,
+    fontSize: 16,
+    fontWeight: '500',
   },
   sortDirectionContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    marginTop: 16,
   },
   sortButton: {
+    flex: 1,
+    marginHorizontal: 4,
+  },
+  filterButton: {
     minWidth: 100,
   },
   filterActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     gap: 12,
-    marginTop: 12,
+    marginTop: 20,
   },
-  filterButton: {
+  searchBarSmall: {
+    flex: 1,
+    width: '100%',
+    marginBottom: 8,
+  },
+  roomSearch: {
+    flex: 1,
     minWidth: 100,
+    maxWidth: 150,
+    backgroundColor: 'transparent',
   },
-  columnList: {
-    marginBottom: 16,
-  },
-  importModal: {
-    margin: 20,
-    borderRadius: 16,
-    padding: 24,
-    maxWidth: 600,
-    width: '90%',
-    alignSelf: 'center',
-  },
-  importModalContent: {
-    gap: 24,
-  },
-  importInstructions: {
-    fontSize: 16,
-    marginBottom: 16,
-  },
-  importActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  importButton: {
-    minWidth: 100,
-  },
-  paginationContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  pageInfo: {
-    fontSize: 16,
-    fontWeight: 'bold',
+  roomSearchSmall: {
+    flex: 1,
+    width: '100%',
+    marginBottom: 8,
   },
 }); 

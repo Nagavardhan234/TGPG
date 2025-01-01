@@ -1,31 +1,54 @@
 export const ENDPOINTS = {
+  // Auth endpoints
   AUTH: '/api/auth',
-  MANAGERS: '/api/managers',
-  STUDENTS: '/api/students',
-  PGS: '/api/pgs',
-  MANAGER_REGISTER: '/api/managers/register',
   MANAGER_LOGIN: '/api/managers/login',
-  UPLOAD_IMAGE: '/api/upload',
-  TEST: '/api/managers/test',
-  DASHBOARD_STATS: '/api/dashboard/stats',
+  MANAGER_REGISTER: '/api/managers/register',
   STUDENT_LOGIN: '/api/students/login',
-  STUDENT_DASHBOARD: '/api/students/dashboard',
+  
+  // Room endpoints
+  ROOM_STATS: '/api/dashboard/rooms',
   ROOM_DETAILS: '/api/dashboard/rooms/:pgId/details/:roomNumber',
+  ROOM_ADD: '/api/dashboard/room/:pgId',
+  ROOM_UPDATE: '/api/dashboard/room/:pgId/:roomNumber',
+  ROOM_DELETE: '/api/dashboard/room/:pgId/:roomNumber',
+  ROOM_UPDATE_NUMBER: '/api/dashboard/rooms/:pgId/:roomNumber',
+  ROOM_UPDATE_OCCUPANT: '/api/dashboard/rooms/:pgId/:roomNumber/occupant',
+  
+  // Tenant endpoints
+  TENANT_BASE: '/api/tenants',
+  TENANT_LIST: '/api/tenants/pg',
+  TENANT_ADD: '/api/tenants/pg/:pgId/add',
+  TENANT_UPDATE: '/api/tenants/pg/:pgId/update/:tenantId',
+  TENANT_CHECK_PHONE: '/api/tenants/pg/:pgId/check-phone/:phone',
+  TENANT_AVAILABLE_ROOMS: '/api/tenants/pg/:pgId/available-rooms',
+  
+  // Dashboard endpoints
+  DASHBOARD_STATS: '/api/dashboard/stats',
+  DASHBOARD_ROOM_STATS: '/api/dashboard/rooms/:pgId',
+  
+  // Student endpoints
+  STUDENT_DASHBOARD: '/api/students/dashboard',
   STUDENT_LIST: '/api/students/pg',
   STUDENT_PAGINATED: '/api/students/pg/:pgId/paginated',
   STUDENT_DEFAULT_RENT: '/api/students/pg/:pgId/default-rent',
   STUDENT_DELETE: '/api/students/pg/:pgId/student/:id',
-  // Task related endpoints
+  
+  // Task endpoints
   TASK_CREATE: '/api/tasks/create',
   TASK_LIST: '/api/tasks/room',
   TASK_DETAILS: '/api/tasks/details/:taskId',
   TASK_MEMBERS: '/api/tasks/members',
   TASK_START: '/api/tasks/:taskId/start',
   TASK_COMPLETE: '/api/tasks/:taskId/complete',
-  UPDATE_ROOM: '/api/dashboard/rooms',
-  UPDATE_ROOM_DETAILS: '/api/dashboard/room/:pgId/:roomNumber',
-  UPDATE_ROOM_NUMBER: '/api/dashboard/rooms/:pgId/:roomNumber',
-  ROOMS: '/api/rooms'
+  
+  // Upload endpoint
+  UPLOAD_IMAGE: '/api/upload',
+  
+  // PG endpoints
+  PG_DETAILS: '/api/pg',
+  PG_SETTINGS: '/api/pg/:pgId/settings',
+  PG_RENT: '/api/pg/:pgId/rent',
+  PG_STATS: '/api/pg/:pgId/stats'
 };
 
 export const BASE_URL = 'http://localhost:3000';
