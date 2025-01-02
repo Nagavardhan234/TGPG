@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { TextInput, Button, Text, Surface, IconButton, SegmentedButtons } from 'react-native-paper';
+import { TextInput, Button, Text, Surface, IconButton, SegmentedButtons, Avatar } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import { useAuth } from '@/app/context/AuthContext';
 import { useStudentAuth } from '@/app/context/StudentAuthContext';
@@ -73,8 +73,29 @@ export default function LoginScreen() {
         iconColor={theme.colors.primary}
       />
 
-      <Surface style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+      <Surface style={[
+        styles.card, 
+        { 
+          backgroundColor: theme.colors.surface,
+          borderColor: isDarkMode ? theme.colors.outline : 'transparent',
+          borderWidth: isDarkMode ? 1 : 0
+        }
+      ]}>
         <Text style={[styles.title, { color: theme.colors.primary }]}>Login</Text>
+
+        <View style={styles.avatarContainer}>
+          <Avatar.Icon 
+            size={80} 
+            icon={userType === 'manager' ? "account-tie" : "account-group"}
+            style={[
+              styles.avatar, 
+              { 
+                backgroundColor: theme.colors.primary,
+                transform: [{ scale: userType === 'student' ? 1.1 : 1 }]
+              }
+            ]}
+          />
+        </View>
 
         <View style={styles.formContainer}>
           <SegmentedButtons
@@ -160,6 +181,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 24,
     textAlign: 'center',
+  },
+  avatarContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  avatar: {
+    elevation: 4,
   },
   formContainer: {
     gap: 16,
