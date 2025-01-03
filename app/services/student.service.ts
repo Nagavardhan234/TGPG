@@ -257,7 +257,7 @@ export const validatePhoneUnique = async (pgId: number, phone: string, excludeId
   } catch (error: unknown) {
     console.error('Error validating phone:', error);
     if (error instanceof ValidationError) {
-      throw error;
+    throw error;
     }
     if (error instanceof Error && 'response' in error && (error as any).response?.status === 401) {
       throw new TokenExpiredError();
@@ -395,7 +395,7 @@ export const getDefaultRent = async (pgId: number): Promise<number> => {
     return response.data.data.rent;
   } catch (error) {
     if (error instanceof Error) {
-      console.error('Error fetching default rent:', error);
+    console.error('Error fetching default rent:', error);
       if ('response' in error && (error as any).response?.status === 401) {
         throw new TokenExpiredError();
       }
@@ -474,9 +474,9 @@ export interface PaginatedStudentResponse {
 }
 
 export const getStudentsWithPagination = async (
-  pgId: number,
-  page: number = 1,
-  limit: number = 10,
+  pgId: number, 
+  page: number = 1, 
+  limit: number = 10, 
   search: string = '',
   status: string = 'ALL'
 ): Promise<PaginatedStudentResponse> => {
@@ -499,7 +499,7 @@ export const getStudentsWithPagination = async (
       currentPage: number;
       totalPages: number;
     }>>(`/api/tenants/pg/${pgId}/paginated?${params}`);
-
+    
     if (!response.data.success) {
       throw new ApiError(response.data.message || 'Failed to fetch students');
     }

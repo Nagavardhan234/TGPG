@@ -19,6 +19,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   manager: Manager | null;
   pg: PG | null;
+  token: string | null;
   login: (token: string, manager: Manager, pg: PG | null) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -29,6 +30,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [manager, setManager] = useState<Manager | null>(null);
   const [pg, setPG] = useState<PG | null>(null);
+  const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
     checkAuth();
@@ -70,6 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsAuthenticated(true);
       setManager(managerData);
       setPG(pgData);
+      setToken(token);
     } catch (error) {
       console.error('Login error:', error);
       throw error;
@@ -90,7 +93,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, manager, pg, login, logout }}>
+    <AuthContext.Provider value={{ 
+      isAuthenticated, 
+      manager, 
+      pg, 
+      token,
+      login, 
+      logout 
+    }}>
       {children}
     </AuthContext.Provider>
   );

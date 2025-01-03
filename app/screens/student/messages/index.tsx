@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { 
   Surface, 
@@ -10,79 +10,123 @@ import {
   FAB,
   TouchableRipple,
   Badge,
-  Divider
+  Divider,
+  ActivityIndicator
 } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import { StudentDashboardLayout } from '@/app/components/layouts';
 import { router } from 'expo-router';
+import { useStudentAuth } from '@/app/context/StudentAuthContext';
+import api from '@/app/config/axios.config';
+import { formatDistanceToNow } from 'date-fns';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface ChatRoom {
-  id: number;
-  name: string;
-  type: 'roommate' | 'pg' | 'manager' | 'everyone';
-  lastMessage: string;
-  timestamp: string;
-  unreadCount: number;
-  isOnline?: boolean;
-  participants?: string[];
-  isPinned?: boolean;
+  ChatRoomID: number;
+  Name: string;
+  Type: string;
+  LastMessage: string;
+  LastMessageAt: string;
+  UnreadCount: number;
+  IsActive: boolean;
+  IsPinned: boolean;
+  CreatedAt: string;
+  LastActivityAt: string;
 }
-
-// Dummy data
-const chatRooms: ChatRoom[] = [
-  {
-    id: 1,
-    name: "Room 301 Group",
-    type: "roommate",
-    lastMessage: "Don't forget to clean the common area!",
-    timestamp: "2m ago",
-    unreadCount: 3,
-    participants: ["John", "Mike", "Sarah"],
-    isPinned: true
-  },
-  {
-    id: 2,
-    name: "PG Manager",
-    type: "manager",
-    lastMessage: "Monthly inspection tomorrow at 10 AM",
-    timestamp: "1h ago",
-    unreadCount: 1,
-    isOnline: true
-  },
-  {
-    id: 3,
-    name: "PG Community",
-    type: "pg",
-    lastMessage: "Movie night this weekend!",
-    timestamp: "3h ago",
-    unreadCount: 0
-  }
-];
 
 export default function MessagesScreen() {
   const { theme } = useTheme();
+  const { isAuthenticated, student } = useStudentAuth();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedType, setSelectedType] = useState<ChatRoom['type'] | 'all'>('all');
+  const [selectedType, setSelectedType] = useState<string>('all');
+  const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filterTypes: { value: ChatRoom['type'] | 'all'; label: string; icon: string }[] = [
+  const filterTypes = [
     { value: 'all', label: 'All', icon: 'message-text' },
-    { value: 'roommate', label: 'Roommates', icon: 'account-group' },
-    { value: 'pg', label: 'PG', icon: 'home-group' },
-    { value: 'manager', label: 'Manager', icon: 'shield-account' },
-    { value: 'everyone', label: 'Everyone', icon: 'earth' },
+    { value: 'ROOM', label: 'Roommates', icon: 'account-group' },
+    { value: 'COMMUNITY', label: 'PG', icon: 'home-group' },
+    { value: 'MANAGER', label: 'Manager', icon: 'shield-account' }
   ];
 
+  useEffect(() => {
+    fetchChatRooms();
+  }, []);
+
+  const fetchChatRooms = async () => {
+    try {
+      setLoading(true);
+      
+      // Log student auth state
+      const studentToken = await AsyncStorage.getItem('student_token');
+      console.log('Auth State:', {
+        isAuthenticated,
+        studentToken,
+        student,
+        pgId: student?.pgId
+      });
+      
+      if (!student?.pgId) {
+        console.log('Missing pgId:', { student });
+        setError('Please log in to view messages');
+        setLoading(false);
+        return;
+      }
+
+      console.log('Fetching chat rooms for PG:', student.pgId);
+      const response = await api.get(`/api/messages/pg/${student.pgId}/rooms`);
+      console.log('API Response:', {
+        status: response.status,
+        headers: response.headers,
+        data: response.data
+      });
+      
+      if (response.data.success) {
+        console.log('Chat rooms fetched:', response.data.data);
+        setChatRooms(response.data.data);
+      } else {
+        console.error('Failed to fetch chat rooms:', response.data);
+        setError('Failed to fetch chat rooms');
+      }
+    } catch (err: any) {
+      console.error('Error fetching chat rooms:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        url: err.config?.url,
+        headers: err.config?.headers,
+        stack: err.stack
+      });
+      if (err.response?.status === 401) {
+        setError('Your session has expired. Please log in again.');
+      } else {
+        setError(`Error fetching chat rooms: ${err.response?.data?.message || err.message}`);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredChats = chatRooms
-    .filter(chat => selectedType === 'all' || chat.type === selectedType)
+    .filter(chat => selectedType === 'all' || chat.Type === selectedType)
     .filter(chat => 
-      chat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      chat.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
+      chat.Name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (chat.LastMessage && chat.LastMessage.toLowerCase().includes(searchQuery.toLowerCase()))
     );
+
+  const formatTimestamp = (timestamp: string) => {
+    if (!timestamp) return '';
+    return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
+  };
 
   const renderChatRoom = (chat: ChatRoom) => (
     <TouchableRipple
-      key={chat.id}
-      onPress={() => router.push(`/screens/student/messages/chat/${chat.id}`)}
+      key={chat.ChatRoomID}
+      onPress={() => router.push({
+        pathname: '/screens/student/messages/chat/[id]',
+        params: { id: chat.ChatRoomID }
+      })}
       style={styles.chatRoomButton}
     >
       <Surface style={[styles.chatRoom, { backgroundColor: theme?.colors?.surface }]}>
@@ -90,19 +134,19 @@ export default function MessagesScreen() {
           <View style={styles.avatarContainer}>
             <Avatar.Text
               size={50}
-              label={chat.name.substring(0, 2)}
+              label={chat.Name.substring(0, 2)}
               style={{ backgroundColor: theme?.colors?.primary + '20' }}
             />
-            {chat.isOnline && (
+            {chat.IsActive && (
               <View style={[styles.onlineIndicator, { backgroundColor: theme?.colors?.primary }]} />
             )}
           </View>
           <View style={styles.chatInfo}>
             <View style={styles.chatHeader}>
               <Text style={[styles.chatName, { color: theme?.colors?.onSurface }]}>
-                {chat.name}
+                {chat.Name}
               </Text>
-              {chat.isPinned && (
+              {chat.IsPinned && (
                 <IconButton icon="pin" size={16} iconColor={theme?.colors?.primary} />
               )}
             </View>
@@ -110,45 +154,49 @@ export default function MessagesScreen() {
               numberOfLines={1} 
               style={[
                 styles.lastMessage, 
-                { color: chat.unreadCount > 0 ? theme?.colors?.onSurface : theme?.colors?.onSurfaceVariant }
+                { color: chat.UnreadCount > 0 ? theme?.colors?.onSurface : theme?.colors?.onSurfaceVariant }
               ]}
             >
-              {chat.lastMessage}
+              {chat.LastMessage || 'No messages yet'}
             </Text>
-            {chat.participants && (
-              <View style={styles.participants}>
-                {chat.participants.map((participant, index) => (
-                  <Avatar.Text
-                    key={index}
-                    size={20}
-                    label={participant.substring(0, 1)}
-                    style={[
-                      styles.participantAvatar,
-                      { backgroundColor: theme?.colors?.primaryContainer }
-                    ]}
-                    labelStyle={{ fontSize: 10, color: theme?.colors?.primary }}
-                  />
-                ))}
-              </View>
-            )}
           </View>
         </View>
         <View style={styles.chatRoomRight}>
           <Text style={{ color: theme?.colors?.onSurfaceVariant, fontSize: 12 }}>
-            {chat.timestamp}
+            {formatTimestamp(chat.LastMessageAt)}
           </Text>
-          {chat.unreadCount > 0 && (
+          {chat.UnreadCount > 0 && (
             <Badge
               size={20}
               style={[styles.unreadBadge, { backgroundColor: theme?.colors?.primary }]}
             >
-              {chat.unreadCount}
+              {chat.UnreadCount}
             </Badge>
           )}
         </View>
       </Surface>
     </TouchableRipple>
   );
+
+  if (loading) {
+    return (
+      <StudentDashboardLayout title="Messages">
+        <View style={[styles.container, styles.centerContent]}>
+          <ActivityIndicator size="large" color={theme?.colors?.primary} />
+        </View>
+      </StudentDashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <StudentDashboardLayout title="Messages">
+        <View style={[styles.container, styles.centerContent]}>
+          <Text style={{ color: theme?.colors?.error }}>{error}</Text>
+        </View>
+      </StudentDashboardLayout>
+    );
+  }
 
   return (
     <StudentDashboardLayout title="Messages">
@@ -182,11 +230,18 @@ export default function MessagesScreen() {
 
         <ScrollView>
           {filteredChats.map((chat, index) => (
-            <React.Fragment key={chat.id}>
+            <React.Fragment key={chat.ChatRoomID}>
               {renderChatRoom(chat)}
               {index < filteredChats.length - 1 && <Divider />}
             </React.Fragment>
           ))}
+          {filteredChats.length === 0 && (
+            <View style={styles.emptyState}>
+              <Text style={{ color: theme?.colors?.onSurfaceVariant }}>
+                No chat rooms found
+              </Text>
+            </View>
+          )}
         </ScrollView>
 
         <FAB
@@ -253,11 +308,11 @@ const styles = StyleSheet.create({
   },
   chatName: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: 'bold',
+    marginBottom: 4,
   },
   lastMessage: {
     fontSize: 14,
-    marginTop: 4,
   },
   participants: {
     flexDirection: 'row',
@@ -271,12 +326,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   unreadBadge: {
-    marginTop: 4,
+    marginTop: 8,
   },
   fab: {
     position: 'absolute',
     right: 16,
     bottom: 16,
     borderRadius: 28,
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyState: {
+    padding: 20,
+    alignItems: 'center',
   },
 }); 

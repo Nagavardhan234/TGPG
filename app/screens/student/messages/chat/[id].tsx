@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Pressable, Image } from 'react-native';
 import { 
   Surface, 
   Text, 
@@ -28,65 +28,80 @@ import Animated, {
 } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useStudentAuth } from '@/app/context/StudentAuthContext';
+import { io } from 'socket.io-client';
+import api from '@/app/services/api';
+import { format } from 'date-fns';
+import { authService } from '../../../../../app/services/auth.service';
 
 interface Message {
-  id: number;
-  text: string;
-  sender: {
-    id: number;
-    name: string;
-  };
-  timestamp: string;
-  type: 'text' | 'image' | 'voice' | 'file';
-  mediaUrl?: string;
-  duration?: number;
-  reactions?: {
-    emoji: string;
-    count: number;
-    userReacted: boolean;
+  MessageID: number;
+  Content: string;
+  Type: 'TEXT' | 'IMAGE' | 'VOICE' | 'FILE';
+  MediaURL?: string;
+  Duration?: number;
+  CreatedAt: string;
+  SenderType: string;
+  SenderID: number;
+  SenderName: string;
+  ReadCount: number;
+  Reactions?: {
+    Emoji: string;
+    Count: number;
+    UserReacted: boolean;
   }[];
-  isRead?: boolean;
 }
 
-// Dummy data
-const messages: Message[] = [
-  {
-    id: 1,
-    text: "Hey everyone! Don't forget about tomorrow's cleaning schedule.",
-    sender: { id: 1, name: "John" },
-    timestamp: "10:30 AM",
-    type: "text",
-    reactions: [
-      { emoji: "👍", count: 2, userReacted: true },
-      { emoji: "✅", count: 1, userReacted: false }
-    ]
-  },
-  {
-    id: 2,
-    text: "I've already cleaned the common area",
-    sender: { id: 2, name: "Mike" },
-    timestamp: "10:32 AM",
-    type: "text",
-    mediaUrl: "https://example.com/image.jpg",
-    reactions: [
-      { emoji: "🎉", count: 3, userReacted: false }
-    ]
-  }
-];
+interface ChatRoom {
+  ChatRoomID: number;
+  Name: string;
+  Type: string;
+  LastMessage?: string;
+  UnreadCount: number;
+  LastTypingUser?: string;
+}
 
-// Add typing animation
 const TypingIndicator = () => {
   const { theme } = useTheme();
+  const [typingName, setTypingName] = useState('Someone');
+  
   return (
     <Animated.View 
       entering={FadeIn}
       exiting={FadeOut}
-      style={[styles.typingIndicator, { backgroundColor: theme?.colors?.surfaceVariant }]}
+      style={[styles.typingIndicator, { 
+        backgroundColor: theme?.dark ? `${theme?.colors?.surfaceVariant}50` : '#F8F9FA',
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: `${theme?.colors?.primary}10`,
+        marginLeft: 48,
+        maxWidth: '80%',
+      }]}
     >
-      <Text style={{ color: theme?.colors?.onSurfaceVariant }}>
-        Mike is typing...
+      <Text style={{ 
+        color: theme?.colors?.primary,
+        fontSize: 13,
+        marginRight: 8,
+        fontWeight: '500'
+      }}>
+        {typingName} is typing
       </Text>
-      <ActivityIndicator size={16} color={theme?.colors?.primary} />
+      <View style={styles.typingDots}>
+        {[0, 1, 2].map((i) => (
+          <Animated.View 
+            key={i}
+            style={[styles.dot, { 
+              backgroundColor: theme?.colors?.primary,
+              opacity: 0.6,
+              width: 4,
+              height: 4,
+              borderRadius: 2,
+              marginLeft: 2,
+            }]}
+            entering={FadeIn.delay(i * 200)}
+          />
+        ))}
+      </View>
     </Animated.View>
   );
 };
@@ -94,6 +109,7 @@ const TypingIndicator = () => {
 export default function ChatScreen() {
   const { theme } = useTheme();
   const { id } = useLocalSearchParams();
+  const { student } = useStudentAuth();
   const [message, setMessage] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -105,20 +121,163 @@ export default function ChatScreen() {
   const [showReactions, setShowReactions] = useState(false);
   const [selectedEmoji, setSelectedEmoji] = useState<string | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [chatRoom, setChatRoom] = useState<ChatRoom | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const socketRef = useRef<any>(null);
 
-  // Simulate typing indicator
   useEffect(() => {
-    const typingTimeout = setTimeout(() => setIsTyping(Math.random() > 0.7), 3000);
-    return () => clearTimeout(typingTimeout);
-  }, [messages]);
+    const initializeChat = async () => {
+      try {
+        await loadChatRoom();
+        await loadMessages();
+        initializeSocket();
+      } catch (error) {
+        console.error('Error initializing chat:', error);
+      }
+    };
 
-  const handleScroll = (event: any) => {
-    const scrollPosition = event.nativeEvent.contentOffset.y;
-    setShowScrollButton(scrollPosition > 300);
+    initializeChat();
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, [id]);
+
+  const initializeSocket = async () => {
+    try {
+      const token = await authService.getToken();
+      
+      socketRef.current = io(process.env.EXPO_PUBLIC_API_URL || '', {
+        query: {
+          roomId: id,
+          token
+        },
+        transports: ['websocket'],
+        reconnection: true,
+        reconnectionAttempts: 5
+      });
+
+      socketRef.current.on('connect', () => {
+        console.log('Socket connected');
+      });
+
+      socketRef.current.on('disconnect', () => {
+        console.log('Socket disconnected');
+      });
+
+      socketRef.current.on('error', (error: any) => {
+        console.error('Socket error:', error);
+      });
+
+      socketRef.current.on('new_message', (newMessage: Message) => {
+        setMessages(prev => [newMessage, ...prev]);
+        if (scrollViewRef.current) {
+          scrollToBottom();
+        }
+      });
+
+      socketRef.current.on('typing_start', (data: { userId: number }) => {
+        if (data.userId !== student?.TenantID) {
+          setIsTyping(true);
+          // Auto-hide typing indicator after 3 seconds
+          setTimeout(() => setIsTyping(false), 3000);
+        }
+      });
+
+      socketRef.current.on('typing_end', (data: { userId: number }) => {
+        if (data.userId !== student?.TenantID) {
+          setIsTyping(false);
+        }
+      });
+    } catch (error) {
+      console.error('Error initializing socket:', error);
+    }
   };
 
-  const scrollToBottom = () => {
-    scrollViewRef.current?.scrollToEnd({ animated: true });
+  const loadChatRoom = async () => {
+    try {
+      const response = await api.get(`/api/messages/rooms/${id}`);
+      if (response.data.success) {
+        setChatRoom(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error loading chat room:', error);
+      if (error.response?.status === 401) {
+        // Handle unauthorized error - maybe redirect to login
+        router.replace('/login');
+      }
+    }
+  };
+
+  const loadMessages = async (refresh = false) => {
+    try {
+      setLoading(true);
+      const currentPage = refresh ? 1 : page;
+      const response = await api.get(`/api/messages/rooms/${id}/messages`, {
+        params: {
+          page: currentPage,
+          limit: 50
+        }
+      });
+      
+      if (response.data.success) {
+        const newMessages = response.data.data;
+        if (refresh) {
+          setMessages(newMessages);
+        } else {
+          setMessages(prev => [...prev, ...newMessages]);
+        }
+        
+        setHasMore(newMessages.length === 50);
+        setPage(currentPage + 1);
+      }
+    } catch (error) {
+      console.error('Error loading messages:', error);
+      if (error.response?.status === 401) {
+        // Handle unauthorized error - maybe redirect to login
+        router.replace('/login');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSend = async () => {
+    if (!message.trim()) return;
+
+    try {
+      const response = await api.post(`/api/messages/rooms/${id}/messages`, {
+        content: message.trim(),
+        type: 'TEXT'
+      });
+
+      if (response.data.success) {
+        // Add message to local state immediately for instant feedback
+        const newMessage = response.data.data;
+        setMessages(prev => [newMessage, ...prev]);
+        setMessage('');
+        scrollToBottom();
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      if (error.response?.status === 401) {
+        // Handle unauthorized error - maybe redirect to login
+        router.replace('/login');
+      }
+    }
+  };
+
+  const handleReaction = async (messageId: number, emoji: string) => {
+    try {
+      await api.post(`/api/messages/messages/${messageId}/reactions`, { emoji });
+    } catch (error) {
+      console.error('Error adding reaction:', error);
+    }
   };
 
   const startRecording = async () => {
@@ -144,205 +303,394 @@ export default function ChatScreen() {
     await recording.stopAndUnloadAsync();
     const uri = recording.getURI();
     setRecording(null);
-    // Handle the recorded audio file
-    console.log('Recording stopped, file:', uri);
+    
+    try {
+      const formData = new FormData();
+      formData.append('audio', {
+        uri,
+        type: 'audio/m4a',
+        name: 'recording.m4a'
+      });
+      formData.append('type', 'VOICE');
+
+      await api.post(`/api/messages/rooms/${id}/messages`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+    } catch (error) {
+      console.error('Error sending voice message:', error);
+    }
   };
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       quality: 1,
     });
 
     if (!result.canceled && result.assets[0].uri) {
-      // Handle the selected image
-      console.log('Selected image:', result.assets[0].uri);
+      try {
+        const formData = new FormData();
+        formData.append('image', {
+          uri: result.assets[0].uri,
+          type: 'image/jpeg',
+          name: 'image.jpg'
+        });
+        formData.append('type', 'IMAGE');
+
+        await api.post(`/api/messages/rooms/${id}/messages`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+      } catch (error) {
+        console.error('Error sending image:', error);
+      }
     }
   };
 
-  const renderMessage = (msg: Message, index: number) => (
-    <Animated.View
-      key={msg.id}
-      entering={SlideInRight.delay(index * 100)}
-      exiting={SlideOutLeft}
-    >
-      <Pressable onLongPress={() => {
-        setSelectedMessage(msg);
-        setShowReactions(true);
-      }}>
-        <Surface 
-          style={[
-            styles.messageContainer,
-            { 
-              backgroundColor: msg.sender.id === 1 ? 
-                theme?.colors?.primaryContainer : 
-                theme?.colors?.surfaceVariant,
-              alignSelf: msg.sender.id === 1 ? 'flex-end' : 'flex-start',
-            }
-          ]}
-        >
-          <LinearGradient
-            colors={[
-              msg.sender.id === 1 ? 
-                `${theme?.colors?.primary}20` : 
-                `${theme?.colors?.surfaceVariant}20`,
-              'transparent'
-            ]}
-            style={styles.messageGradient}
-          />
+  const renderMessage = (msg: Message, index: number) => {
+    const isOwnMessage = msg.SenderID === student?.TenantID;
+    const showAvatar = !isOwnMessage && (!messages[index + 1] || messages[index + 1].SenderID !== msg.SenderID);
+    const showName = !isOwnMessage && (!messages[index + 1] || messages[index + 1].SenderID !== msg.SenderID);
+    const isFirstInGroup = index === 0 || messages[index - 1]?.SenderID !== msg.SenderID;
+    const isLastInGroup = index === messages.length - 1 || messages[index + 1]?.SenderID !== msg.SenderID;
+    const showTime = index === 0 || 
+      new Date(msg.CreatedAt).getTime() - new Date(messages[index - 1]?.CreatedAt).getTime() > 300000;
 
-          {msg.sender.id !== 1 && (
-            <View style={styles.senderInfo}>
-              <Avatar.Text
-                size={24}
-                label={msg.sender.name.substring(0, 2)}
-                style={{ backgroundColor: theme?.colors?.primary + '40' }}
-              />
-              <Text style={[styles.senderName, { color: theme?.colors?.primary }]}>
-                {msg.sender.name}
-              </Text>
-            </View>
-          )}
-
-          {msg.type === 'image' && msg.mediaUrl && (
-            <Image 
-              source={{ uri: msg.mediaUrl }}
-              style={styles.messageImage}
+    return (
+      <Animated.View
+        key={msg.MessageID}
+        entering={SlideInRight.delay(index * 50).springify()}
+        style={[
+          styles.messageWrapper,
+          { alignSelf: isOwnMessage ? 'flex-end' : 'flex-start' }
+        ]}
+      >
+        {showTime && (
+          <View style={styles.timeHeader}>
+            <Text style={[styles.timeHeaderText, { 
+              color: theme?.colors?.onSurfaceVariant,
+              fontSize: 12,
+            }]}>
+              {format(new Date(msg.CreatedAt), 'MMM d, h:mm a')}
+            </Text>
+          </View>
+        )}
+        <View style={[
+          styles.messageRow,
+          { 
+            flexDirection: 'row',
+            alignItems: 'flex-end',
+            justifyContent: isOwnMessage ? 'flex-end' : 'flex-start',
+          }
+        ]}>
+          {showAvatar && !isOwnMessage && (
+            <Avatar.Text
+              size={32}
+              label={msg.SenderName.substring(0, 2)}
+              style={[styles.avatar, { 
+                backgroundColor: `${theme?.colors?.primary}10`,
+                borderWidth: 1,
+                borderColor: theme?.colors?.primary,
+              }]}
+              labelStyle={{ color: theme?.colors?.primary, fontSize: 14 }}
             />
           )}
-
-          <Text style={{ color: theme?.colors?.onSurface }}>
-            {msg.text}
-          </Text>
-
-          <View style={styles.messageFooter}>
-            <Text style={[styles.timestamp, { color: theme?.colors?.onSurfaceVariant }]}>
-              {msg.timestamp}
-              {msg.isRead && <IconButton icon="check-all" size={12} />}
-            </Text>
-            {msg.reactions && (
-              <View style={styles.reactions}>
-                {msg.reactions.map((reaction, idx) => (
+          <View style={[
+            styles.messageContent,
+            { 
+              maxWidth: '85%',
+              marginLeft: !isOwnMessage && !showAvatar ? 40 : 0
+            }
+          ]}>
+            {showName && !isOwnMessage && (
+              <Text style={[styles.senderName, { 
+                color: theme?.colors?.primary,
+                fontSize: 13,
+                fontWeight: '600',
+                marginBottom: 4,
+                marginLeft: 4,
+              }]}>
+                {msg.SenderName}
+              </Text>
+            )}
+            <Pressable 
+              onLongPress={() => {
+                setSelectedMessage(msg);
+                setShowReactions(true);
+              }}
+              style={[
+                styles.messageContainer,
+                isOwnMessage ? styles.ownMessage : styles.otherMessage,
+                { 
+                  backgroundColor: isOwnMessage ? 
+                    theme?.colors?.primary : 
+                    theme?.dark ? `${theme?.colors?.surfaceVariant}90` : '#F8F9FA',
+                  borderWidth: isOwnMessage ? 0 : 1,
+                  borderColor: `${theme?.colors?.primary}10`,
+                }
+              ]}
+            >
+              {msg.Type === 'IMAGE' && msg.MediaURL && (
+                <Image 
+                  source={{ uri: msg.MediaURL }}
+                  style={[styles.messageImage, {
+                    borderRadius: 12,
+                    marginBottom: 4,
+                  }]}
+                  resizeMode="cover"
+                />
+              )}
+              <Text style={[
+                styles.messageText,
+                { 
+                  color: isOwnMessage ? theme?.colors?.onPrimary : theme?.colors?.onSurface,
+                  fontSize: 15,
+                }
+              ]}>
+                {msg.Content}
+              </Text>
+            </Pressable>
+            {msg.Reactions && msg.Reactions.length > 0 && (
+              <View style={[
+                styles.reactions,
+                { alignSelf: isOwnMessage ? 'flex-end' : 'flex-start' }
+              ]}>
+                {msg.Reactions.map((reaction, idx) => (
                   <Animated.View
                     key={idx}
-                    entering={FadeIn.delay(idx * 100)}
+                    entering={FadeIn.delay(idx * 100).springify()}
                   >
                     <Chip
-                      style={[
-                        styles.reactionChip,
-                        { 
-                          backgroundColor: reaction.userReacted ? 
-                            theme?.colors?.primaryContainer : 
-                            theme?.colors?.surfaceVariant 
-                        }
-                      ]}
+                      style={[styles.reactionChip, { 
+                        backgroundColor: reaction.UserReacted ? 
+                          `${theme?.colors?.primary}15` : 
+                          theme?.dark ? `${theme?.colors?.surfaceVariant}60` : '#F8F8F8',
+                      }]}
+                      onPress={() => handleReaction(msg.MessageID, reaction.Emoji)}
                     >
-                      <Text>{reaction.emoji} {reaction.count}</Text>
+                      <Text style={{ fontSize: 12 }}>
+                        {reaction.Emoji} {reaction.Count}
+                      </Text>
                     </Chip>
                   </Animated.View>
                 ))}
               </View>
             )}
           </View>
-        </Surface>
-      </Pressable>
-    </Animated.View>
-  );
+        </View>
+      </Animated.View>
+    );
+  };
+
+  const handleScroll = (event: any) => {
+    const scrollPosition = event.nativeEvent.contentOffset.y;
+    setShowScrollButton(scrollPosition > 300);
+  };
+
+  const scrollToBottom = () => {
+    scrollViewRef.current?.scrollToEnd({ animated: true });
+  };
+
+  const handleLoadMore = () => {
+    if (hasMore && !loading) {
+      loadMessages();
+    }
+  };
 
   return (
-    <StudentDashboardLayout title="Chat">
+    <StudentDashboardLayout title={chatRoom?.Name || 'Chat'}>
       <KeyboardAvoidingView 
-        style={styles.container}
+        style={[styles.container, { backgroundColor: theme?.dark ? theme?.colors?.background : '#FFFFFF' }]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
+        <LinearGradient
+          colors={[
+            theme?.dark ? `${theme?.colors?.background}00` : '#FFFFFF00',
+            theme?.dark ? theme?.colors?.background : '#FFFFFF'
+          ]}
+          style={StyleSheet.absoluteFill}
+        />
+        
         <ScrollView
           ref={scrollViewRef}
           onScroll={handleScroll}
           scrollEventThrottle={16}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          contentContainerStyle={[styles.scrollContent, {
+            paddingHorizontal: 16,
+          }]}
+          style={{ flex: 1 }}
         >
-          {messages.map(renderMessage)}
+          {loading && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={theme?.colors?.primary} />
+            </View>
+          )}
+          {messages.slice().reverse().map(renderMessage)}
           {isTyping && <TypingIndicator />}
         </ScrollView>
 
         {showScrollButton && (
           <Animated.View 
-            entering={FadeIn}
-            exiting={FadeOut}
-            style={styles.scrollButton}
+            entering={FadeIn.springify()}
+            exiting={FadeOut.springify()}
+            style={[styles.scrollButton, {
+              backgroundColor: theme?.dark ? `${theme?.colors?.primary}15` : '#FFFFFF',
+              borderWidth: 1,
+              borderColor: `${theme?.colors?.primary}30`,
+            }]}
           >
             <IconButton 
               icon="chevron-down"
-              mode="contained"
+              size={20}
+              iconColor={theme?.colors?.primary}
               onPress={scrollToBottom}
             />
           </Animated.View>
         )}
 
-        <BlurView intensity={20} style={styles.inputWrapper}>
-          <Surface style={[styles.inputContainer, { backgroundColor: theme?.colors?.surface }]}>
+        <BlurView intensity={20} tint={theme?.dark ? 'dark' : 'light'} style={styles.inputWrapper}>
+          <Surface style={[styles.inputContainer, { 
+            backgroundColor: theme?.dark ? `${theme?.colors?.surface}95` : '#FFFFFF',
+            borderTopWidth: 1,
+            borderTopColor: `${theme?.colors?.primary}10`,
+          }]}>
             <IconButton 
               icon="emoticon-outline"
-              size={24}
-              onPress={() => {}}
+              size={22}
+              iconColor={theme?.colors?.primary}
+              style={styles.inputIcon}
             />
             <IconButton 
               icon="paperclip"
-              size={24}
+              size={22}
+              iconColor={theme?.colors?.primary}
+              style={styles.inputIcon}
               onPress={() => setShowAttachMenu(true)}
             />
             <TextInput
               placeholder="Type a message..."
               value={message}
-              onChangeText={setMessage}
-              style={styles.input}
+              onChangeText={(text) => {
+                setMessage(text);
+                socketRef.current?.emit('typing_start', { roomId: id });
+              }}
+              onEndEditing={() => socketRef.current?.emit('typing_end', { roomId: id })}
+              style={[styles.input, {
+                backgroundColor: theme?.dark ? `${theme?.colors?.surface}80` : '#F8F8F8',
+                borderRadius: 24,
+                borderWidth: 1,
+                borderColor: `${theme?.colors?.primary}20`,
+                fontSize: 15,
+              }]}
+              placeholderTextColor={`${theme?.colors?.onSurface}40`}
               right={
                 <TextInput.Icon 
                   icon={isRecording ? "stop" : "microphone"}
-                  onPress={isRecording ? stopRecording : startRecording}
-                  color={isRecording ? theme?.colors?.error : undefined}
+                  color={isRecording ? theme?.colors?.error : theme?.colors?.primary}
+                  size={20}
                 />
               }
             />
             <IconButton 
               icon={message.trim() ? "send" : "camera"}
-              size={24}
-              onPress={() => {}}
-              containerColor={message.trim() ? theme?.colors?.primary : undefined}
-              iconColor={message.trim() ? theme?.colors?.surface : undefined}
+              size={22}
+              style={[
+                styles.sendButton,
+                message.trim() && {
+                  backgroundColor: theme?.colors?.primary,
+                  transform: [{ rotate: '-45deg' }]
+                }
+              ]}
+              onPress={message.trim() ? handleSend : pickImage}
+              iconColor={message.trim() ? theme?.colors?.onPrimary : theme?.colors?.primary}
             />
           </Surface>
         </BlurView>
 
-        {/* Attachment Menu */}
         <Portal>
           <Modal
             visible={showAttachMenu}
             onDismiss={() => setShowAttachMenu(false)}
             contentContainerStyle={[
               styles.attachMenu,
-              { backgroundColor: theme?.colors?.surface }
+              { 
+                backgroundColor: theme?.dark ? theme?.colors?.surface : '#FFFFFF',
+                borderRadius: 24,
+              }
             ]}
           >
             <View style={styles.attachGrid}>
               {[
-                { icon: 'image', label: 'Photo' },
-                { icon: 'file', label: 'Document' },
-                { icon: 'camera', label: 'Camera' },
-                { icon: 'map-marker', label: 'Location' }
+                { icon: 'image', label: 'Photo', onPress: pickImage },
+                { icon: 'file-document', label: 'Document', onPress: () => {} },
+                { icon: 'camera', label: 'Camera', onPress: () => {} },
+                { icon: 'map-marker', label: 'Location', onPress: () => {} }
               ].map((item, index) => (
-                <Button
+                <Pressable
                   key={index}
-                  icon={item.icon}
-                  mode="contained-tonal"
+                  style={[styles.attachButton, {
+                    backgroundColor: `${theme?.colors?.primary}10`,
+                    borderRadius: 16,
+                  }]}
                   onPress={() => {
                     setShowAttachMenu(false);
-                    if (item.icon === 'image') pickImage();
+                    item.onPress();
                   }}
-                  style={styles.attachButton}
                 >
-                  {item.label}
-                </Button>
+                  <View style={styles.attachIconWrapper}>
+                    <IconButton
+                      icon={item.icon}
+                      size={20}
+                      iconColor={theme?.colors?.primary}
+                    />
+                  </View>
+                  <Text style={[styles.attachButtonLabel, {
+                    color: theme?.colors?.primary,
+                    fontSize: 12,
+                    marginTop: 4,
+                  }]}>
+                    {item.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </Modal>
+
+          <Modal
+            visible={showReactions}
+            onDismiss={() => setShowReactions(false)}
+            contentContainerStyle={[
+              styles.reactionsMenu,
+              { 
+                backgroundColor: theme?.dark ? theme?.colors?.surface : '#FFFFFF',
+                borderRadius: 24,
+              }
+            ]}
+          >
+            <View style={styles.reactionsGrid}>
+              {['👍', '❤️', '😂', '😮', '😢', '😡'].map((emoji, index) => (
+                <Pressable
+                  key={index}
+                  style={[styles.reactionButton, {
+                    backgroundColor: `${theme?.colors?.primary}10`,
+                    borderRadius: 12,
+                    padding: 8,
+                  }]}
+                  onPress={() => {
+                    if (selectedMessage) {
+                      handleReaction(selectedMessage.MessageID, emoji);
+                    }
+                    setShowReactions(false);
+                  }}
+                >
+                  <Text style={[styles.reactionEmoji, { fontSize: 24 }]}>{emoji}</Text>
+                </Pressable>
               ))}
             </View>
           </Modal>
@@ -356,101 +704,224 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  messageContainer: {
-    margin: 8,
+  loadingContainer: {
     padding: 12,
-    borderRadius: 12,
+    alignItems: 'center',
+  },
+  messageWrapper: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginVertical: 2,
+    paddingHorizontal: 8,
+  },
+  messageContentWrapper: {
+    flex: 1,
     maxWidth: '80%',
   },
-  senderName: {
-    fontSize: 12,
-    marginBottom: 4,
+  messageContainer: {
+    padding: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    maxWidth: '85%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  ownMessage: {
+    borderTopRightRadius: 4,
+    marginLeft: 'auto',
+  },
+  otherMessage: {
+    borderTopLeftRadius: 4,
+    marginRight: 'auto',
+  },
+  ownFirstInGroup: {
+    borderTopRightRadius: 20,
+  },
+  otherFirstInGroup: {
+    borderTopLeftRadius: 20,
+  },
+  ownLastInGroup: {
+    borderBottomRightRadius: 20,
+  },
+  otherLastInGroup: {
+    borderBottomLeftRadius: 20,
+  },
+  messageText: {
+    fontSize: 15,
+    lineHeight: 20,
   },
   messageImage: {
     width: '100%',
     height: 200,
-    borderRadius: 8,
+    borderRadius: 16,
     marginBottom: 8,
   },
   messageFooter: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 4,
+    justifyContent: 'flex-end',
+    marginTop: 2,
   },
   timestamp: {
-    fontSize: 12,
+    fontSize: 10,
   },
   reactions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 4,
+    marginTop: 4,
+    marginHorizontal: 4,
   },
   reactionChip: {
     height: 24,
     borderRadius: 12,
   },
+  typingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    paddingVertical: 8,
+    marginVertical: 8,
+  },
+  typingDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    opacity: 0.8,
+  },
+  inputWrapper: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.1)',
+  },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.1)',
+    paddingHorizontal: 12,
   },
   input: {
     flex: 1,
     marginHorizontal: 8,
-    backgroundColor: 'transparent',
+    paddingHorizontal: 16,
+    height: 44,
+  },
+  inputIcon: {
+    margin: 0,
+    width: 36,
+    height: 36,
+  },
+  sendButton: {
+    margin: 0,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
   },
   attachMenu: {
     margin: 20,
-    padding: 20,
-    borderRadius: 12,
+    padding: 16,
+    width: '90%',
+    alignSelf: 'center',
   },
   attachGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
     justifyContent: 'space-between',
+    gap: 12,
   },
   attachButton: {
     width: '48%',
-    marginBottom: 12,
-  },
-  headerRight: {
-    flexDirection: 'row',
-  },
-  senderInfo: {
-    flexDirection: 'row',
+    padding: 12,
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
   },
-  messageGradient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '100%',
-    borderRadius: 12,
-  },
-  typingIndicator: {
-    flexDirection: 'row',
+  attachIconWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
-    padding: 8,
-    borderRadius: 16,
-    margin: 8,
-    alignSelf: 'flex-start',
+    marginBottom: 4,
+  },
+  attachButtonLabel: {
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  reactionsMenu: {
+    margin: 20,
+    padding: 20,
+    elevation: 4,
+  },
+  reactionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+    justifyContent: 'center',
+  },
+  reactionButton: {
+    padding: 12,
+  },
+  reactionEmoji: {
+    fontSize: 28,
   },
   scrollButton: {
     position: 'absolute',
     right: 16,
     bottom: 80,
-    borderRadius: 24,
-    elevation: 4,
+    borderRadius: 20,
+    elevation: 2,
   },
-  inputWrapper: {
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.1)',
+  scrollContent: {
+    flexGrow: 1,
+    paddingVertical: 16,
+  },
+  timeHeader: {
+    alignItems: 'center',
+    marginVertical: 16,
+    opacity: 0.7,
+  },
+  timeHeaderText: {
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  messageRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginBottom: 2,
+  },
+  messageContainer: {
+    padding: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  ownMessage: {
+    backgroundColor: '#007AFF',
+  },
+  otherMessage: {
+    backgroundColor: '#F8F9FA',
+  },
+  typingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    paddingVertical: 8,
+    marginVertical: 8,
+  },
+  avatar: {
+    marginRight: 8,
+    alignSelf: 'flex-end',
   },
 }); 

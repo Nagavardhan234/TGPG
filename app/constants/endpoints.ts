@@ -48,7 +48,13 @@ export const ENDPOINTS = {
   PG_DETAILS: '/api/pg',
   PG_SETTINGS: '/api/pg/:pgId/settings',
   PG_RENT: '/api/pg/:pgId/rent',
-  PG_STATS: '/api/pg/:pgId/stats'
+  PG_STATS: '/api/pg/:pgId/stats',
+  
+  // Message endpoints
+  CHAT_ROOMS: '/api/messages/pg/:pgId/rooms',
+  CHAT_ROOM_MESSAGES: '/api/messages/rooms/:chatRoomId/messages',
+  CHAT_MESSAGE_REACTIONS: '/api/messages/messages/:messageId/reactions',
+  CHAT_ROOM_READ: '/api/messages/rooms/:chatRoomId/read',
 };
 
 export const BASE_URL = 'http://localhost:3000';

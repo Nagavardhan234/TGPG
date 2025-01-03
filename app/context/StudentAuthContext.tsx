@@ -1,14 +1,15 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import api from '../services/api';
 
 interface Student {
   TenantID: number;
   FullName: string;
-  Email: string;
+  Email: string | null;
   Phone: string;
-  Room_No: string;
-  PGID: number;
+  Room_No: number;
+  pgId: number;
 }
 
 interface StudentAuthContextType {
@@ -36,15 +37,21 @@ export const StudentAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
       ]);
 
       if (token && studentData) {
+        const student = JSON.parse(studentData);
         setIsAuthenticated(true);
-        setStudent(JSON.parse(studentData));
+        setStudent(student);
+        // Set token in axios headers
+        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       } else {
         setIsAuthenticated(false);
         setStudent(null);
+        delete api.defaults.headers.common['Authorization'];
       }
     } catch (error) {
       console.error('Student auth check error:', error);
       setIsAuthenticated(false);
+      setStudent(null);
+      delete api.defaults.headers.common['Authorization'];
     }
   };
 

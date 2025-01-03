@@ -1,20 +1,16 @@
 import api from '../config/axios.config';
 import { ENDPOINTS } from '../constants/endpoints';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { jwtDecode } from 'jwt-decode';
 
 interface StudentResponse {
   id: number;
   name: string;
-  email: string;
+  email: string | null;
   phone: string;
   roomNo: number;
   pgId: number;
   status: string;
-  moveInDate: string;
-  monthlyRent: number;
-  guardianName: string;
-  guardianNumber: string;
-  roomNumber?: string;
 }
 
 interface LoginResponse {
@@ -22,6 +18,14 @@ interface LoginResponse {
   token: string;
   user: StudentResponse;
   message?: string;
+}
+
+interface TokenPayload {
+  id: number;
+  role: string;
+  pgId: number;
+  iat: number;
+  exp: number;
 }
 
 export const loginStudent = async (credentials: { phone: string; password: string }) => {
@@ -49,8 +53,7 @@ export const loginStudent = async (credentials: { phone: string; password: strin
       Email: response.data.user.email,
       Phone: response.data.user.phone,
       Room_No: response.data.user.roomNo,
-      RoomNumber: response.data.user.roomNumber || response.data.user.roomNo.toString(),
-      PGID: response.data.user.pgId,
+      pgId: response.data.user.pgId, // Use pgId from response
       Status: response.data.user.status || 'ACTIVE'
     }));
 
@@ -66,8 +69,7 @@ export const loginStudent = async (credentials: { phone: string; password: strin
         Email: response.data.user.email,
         Phone: response.data.user.phone,
         Room_No: response.data.user.roomNo,
-        RoomNumber: response.data.user.roomNumber || response.data.user.roomNo.toString(),
-        PGID: response.data.user.pgId,
+        pgId: response.data.user.pgId, // Use pgId from response
         Status: response.data.user.status || 'ACTIVE'
       }
     };
