@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1080" height="1920" viewBox="0 0 1080 1920" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="gradient1" cx="0.5" cy="0.5" r="0.7" gradientUnits="objectBoundingBox">
+      <stop offset="0%" stop-color="#00FFFF" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#00FFFF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="gradient2" cx="0.7" cy="0.3" r="0.6" gradientUnits="objectBoundingBox">
+      <stop offset="0%" stop-color="#FF00FF" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#FF00FF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="gradient3" cx="0.3" cy="0.7" r="0.5" gradientUnits="objectBoundingBox">
+      <stop offset="0%" stop-color="#00FFA3" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#00FFA3" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  
+  <rect width="1080" height="1920" fill="#0A0A1F"/>
+  <rect width="1080" height="1920" fill="url(#gradient1)"/>
+  <rect width="1080" height="1920" fill="url(#gradient2)"/>
+  <rect width="1080" height="1920" fill="url(#gradient3)"/>
+  
+  <g filter="url(#blur)">
+    <circle cx="200" cy="300" r="150" fill="#00FFFF" fill-opacity="0.1"/>
+    <circle cx="900" cy="600" r="200" fill="#FF00FF" fill-opacity="0.1"/>
+    <circle cx="400" cy="1200" r="180" fill="#00FFA3" fill-opacity="0.1"/>
+    <circle cx="800" cy="1600" r="160" fill="#00FFFF" fill-opacity="0.1"/>
+  </g>
+  
+  <filter id="blur">
+    <feGaussianBlur stdDeviation="80"/>
+  </filter>
+</svg> 

@@ -361,10 +361,10 @@ export default function ChatScreen() {
       new Date(msg.CreatedAt).getTime() - new Date(messages[index - 1]?.CreatedAt).getTime() > 300000;
 
     return (
-      <Animated.View
+    <Animated.View
         key={msg.MessageID}
         entering={SlideInRight.delay(index * 50).springify()}
-        style={[
+          style={[
           styles.messageWrapper,
           { alignSelf: isOwnMessage ? 'flex-end' : 'flex-start' }
         ]}
@@ -376,9 +376,9 @@ export default function ChatScreen() {
               fontSize: 12,
             }]}>
               {format(new Date(msg.CreatedAt), 'MMM d, h:mm a')}
-            </Text>
-          </View>
-        )}
+              </Text>
+            </View>
+          )}
         <View style={[
           styles.messageRow,
           { 
@@ -415,7 +415,7 @@ export default function ChatScreen() {
                 marginLeft: 4,
               }]}>
                 {msg.SenderName}
-              </Text>
+          </Text>
             )}
             <Pressable 
               onLongPress={() => {
@@ -452,7 +452,7 @@ export default function ChatScreen() {
                 }
               ]}>
                 {msg.Content}
-              </Text>
+            </Text>
             </Pressable>
             {msg.Reactions && msg.Reactions.length > 0 && (
               <View style={[
@@ -482,8 +482,8 @@ export default function ChatScreen() {
             )}
           </View>
         </View>
-      </Animated.View>
-    );
+    </Animated.View>
+  );
   };
 
   const handleScroll = (event: any) => {
@@ -655,7 +655,7 @@ export default function ChatScreen() {
                     fontSize: 12,
                     marginTop: 4,
                   }]}>
-                    {item.label}
+                  {item.label}
                   </Text>
                 </Pressable>
               ))}
