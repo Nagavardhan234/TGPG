@@ -33,6 +33,7 @@ import { io } from 'socket.io-client';
 import api from '@/app/services/api';
 import { format } from 'date-fns';
 import { authService } from '../../../../../app/services/auth.service';
+import jwtDecode from 'jwt-decode';
 
 interface Message {
   MessageID: number;
@@ -150,8 +151,29 @@ export default function ChatScreen() {
 
   const initializeSocket = async () => {
     try {
+      console.log('[Chat] Starting socket initialization');
       const token = await authService.getToken();
       
+      if (!token) {
+        console.error('[Chat] No token available for socket connection');
+        router.replace('/screens/student/login');
+        return;
+      }
+
+      // Log token payload
+      try {
+        const decoded = jwtDecode(token);
+        console.log('[Chat] Token payload for socket:', {
+          id: decoded.id,
+          role: decoded.role,
+          pgId: decoded.pgId,
+          expiresAt: new Date(decoded.exp * 1000).toISOString()
+        });
+      } catch (decodeError) {
+        console.error('[Chat] Error decoding token for socket:', decodeError);
+      }
+      
+      console.log('[Chat] Creating socket connection to:', process.env.EXPO_PUBLIC_API_URL);
       socketRef.current = io(process.env.EXPO_PUBLIC_API_URL || '', {
         query: {
           roomId: id,
@@ -163,18 +185,33 @@ export default function ChatScreen() {
       });
 
       socketRef.current.on('connect', () => {
-        console.log('Socket connected');
+        console.log('[Chat] Socket connected successfully. Socket ID:', socketRef.current?.id);
       });
 
-      socketRef.current.on('disconnect', () => {
-        console.log('Socket disconnected');
+      socketRef.current.on('connect_error', (error: any) => {
+        console.error('[Chat] Socket connection error:', error.message);
+        if (error.message.includes('Authentication error')) {
+          router.replace('/screens/student/login');
+        }
+      });
+
+      socketRef.current.on('disconnect', (reason: string) => {
+        console.log('[Chat] Socket disconnected. Reason:', reason);
+        if (reason === 'io server disconnect') {
+          // Server initiated disconnect, attempt to reconnect
+          socketRef.current?.connect();
+        }
       });
 
       socketRef.current.on('error', (error: any) => {
-        console.error('Socket error:', error);
+        console.error('[Chat] Socket error:', error);
+        if (error.message?.includes('Authentication error')) {
+          router.replace('/screens/student/login');
+        }
       });
 
       socketRef.current.on('new_message', (newMessage: Message) => {
+        console.log('[Chat] Received new message:', newMessage.MessageID);
         setMessages(prev => [newMessage, ...prev]);
         if (scrollViewRef.current) {
           scrollToBottom();
@@ -182,33 +219,39 @@ export default function ChatScreen() {
       });
 
       socketRef.current.on('typing_start', (data: { userId: number }) => {
+        console.log('[Chat] User started typing:', data.userId);
         if (data.userId !== student?.TenantID) {
           setIsTyping(true);
-          // Auto-hide typing indicator after 3 seconds
           setTimeout(() => setIsTyping(false), 3000);
         }
       });
 
       socketRef.current.on('typing_end', (data: { userId: number }) => {
+        console.log('[Chat] User stopped typing:', data.userId);
         if (data.userId !== student?.TenantID) {
           setIsTyping(false);
         }
       });
     } catch (error) {
-      console.error('Error initializing socket:', error);
+      console.error('[Chat] Error initializing socket:', error);
+      if (error.message?.includes('Authentication error')) {
+        router.replace('/screens/student/login');
+      }
     }
   };
 
   const loadChatRoom = async () => {
     try {
+      console.log('[Chat] Loading chat room:', id);
       const response = await api.get(`/api/messages/rooms/${id}`);
       if (response.data.success) {
+        console.log('[Chat] Chat room loaded successfully');
         setChatRoom(response.data.data);
       }
     } catch (error) {
-      console.error('Error loading chat room:', error);
+      console.error('[Chat] Error loading chat room:', error);
       if (error.response?.status === 401) {
-        // Handle unauthorized error - maybe redirect to login
+        console.log('[Chat] Unauthorized, redirecting to login');
         router.replace('/login');
       }
     }
@@ -216,6 +259,7 @@ export default function ChatScreen() {
 
   const loadMessages = async (refresh = false) => {
     try {
+      console.log('[Chat] Loading messages. Refresh:', refresh);
       setLoading(true);
       const currentPage = refresh ? 1 : page;
       const response = await api.get(`/api/messages/rooms/${id}/messages`, {
@@ -227,6 +271,7 @@ export default function ChatScreen() {
       
       if (response.data.success) {
         const newMessages = response.data.data;
+        console.log('[Chat] Loaded', newMessages.length, 'messages');
         if (refresh) {
           setMessages(newMessages);
         } else {
@@ -237,9 +282,9 @@ export default function ChatScreen() {
         setPage(currentPage + 1);
       }
     } catch (error) {
-      console.error('Error loading messages:', error);
+      console.error('[Chat] Error loading messages:', error);
       if (error.response?.status === 401) {
-        // Handle unauthorized error - maybe redirect to login
+        console.log('[Chat] Unauthorized, redirecting to login');
         router.replace('/login');
       }
     } finally {

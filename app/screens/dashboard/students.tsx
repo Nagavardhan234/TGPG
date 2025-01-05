@@ -481,11 +481,9 @@ export default function StudentManagement() {
     }
   };
 
-  // Update modal close handler
   const handleModalClose = () => {
     setModalVisible(false);
-    setIsEditMode(false);
-    setSelectedStudent(null);
+    // Reset only form data without affecting search
     setFormData({
       name: '',
       phone: '',
@@ -497,6 +495,21 @@ export default function StudentManagement() {
       roomNo: 0,
       joinDate: new Date().toISOString().split('T')[0]
     });
+    // Clear any form-related states
+    setError(null);
+    setIsEditMode(false);
+    setSelectedStudent(null);
+  };
+
+  // Separate search handler that won't be affected by form state
+  const handleSearch = (query: string) => {
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    setSearchQuery(query);
+    setSearchTimeout(setTimeout(() => {
+      loadStudents(1, query);
+    }, 500));
   };
 
   const handleRefresh = async () => {
@@ -701,18 +714,6 @@ export default function StudentManagement() {
         }
       });
   }, [students, filterStatus, searchQuery, filterRoom, sortField, sortDirection]);
-
-  // Add search handler with debounce
-  const handleSearch = (query: string) => {
-    setSearchQuery(query);
-    if (searchTimeout) {
-      clearTimeout(searchTimeout);
-    }
-    
-    setSearchTimeout(setTimeout(() => {
-      loadStudents(1, query);
-    }, 500));
-  };
 
   // Add sorting function
   const handleSort = (field: 'name' | 'room') => {
@@ -983,7 +984,7 @@ export default function StudentManagement() {
         style={styles.tableContainer}
         onScroll={({ nativeEvent }) => {
           const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
-          const paddingToBottom = 50; // Trigger loading earlier for smoother experience
+          const paddingToBottom = 50;
           const isCloseToBottom = 
             layoutMeasurement.height + contentOffset.y >= 
             contentSize.height - paddingToBottom;
@@ -992,69 +993,81 @@ export default function StudentManagement() {
             loadStudents(page + 1);
           }
         }}
-        scrollEventThrottle={16} // More frequent updates for smoother scrolling
-        showsVerticalScrollIndicator={false} // Cleaner look
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
       >
-        <DataTable>
-          <DataTable.Header style={[styles.tableHeader, { backgroundColor: theme.colors.surfaceVariant }]}>
-            <DataTable.Title 
-              style={styles.nameColumn}
-              sortDirection={sortField === 'name' ? sortDirection : 'none'}
-              onPress={() => handleSort('name')}
+        {!students || students.length === 0 ? (
+          <View style={styles.emptyStateContainer}>
+            <IconButton
+              icon="account-group"
+              size={50}
+              iconColor={theme.colors.primary}
+            />
+            <Text style={[styles.emptyStateText, { color: theme.colors.text }]}>
+              No students found
+            </Text>
+            <Button 
+              mode="contained"
+              onPress={() => setModalVisible(true)}
+              style={styles.emptyStateButton}
             >
-              <Text style={[styles.headerText, { color: theme.colors.onSurface }]}>Name</Text>
-            </DataTable.Title>
-            <DataTable.Title 
-              style={styles.roomColumn}
-              sortDirection={sortField === 'room' ? sortDirection : 'none'}
-              onPress={() => handleSort('room')}
-            >
-              <Text style={[styles.headerText, { color: theme.colors.onSurface }]}>Room</Text>
-            </DataTable.Title>
-            <DataTable.Title style={styles.actionColumn}>
-              <Text style={[styles.headerText, { color: theme.colors.onSurface }]}>View</Text>
-            </DataTable.Title>
-          </DataTable.Header>
+              Add Student
+            </Button>
+          </View>
+        ) : (
+          <DataTable>
+            <DataTable.Header style={[styles.tableHeader, { backgroundColor: theme.colors.surfaceVariant }]}>
+              <DataTable.Title style={styles.nameColumn}>
+                <Text style={[styles.headerText, { color: theme.colors.onSurface }]}>Name</Text>
+              </DataTable.Title>
+              <DataTable.Title style={styles.roomColumn}>
+                <Text style={[styles.headerText, { color: theme.colors.onSurface }]}>Room</Text>
+              </DataTable.Title>
+              <DataTable.Title style={styles.actionColumn}>
+                <Text style={[styles.headerText, { color: theme.colors.onSurface }]}>View</Text>
+              </DataTable.Title>
+            </DataTable.Header>
 
-          {sortedStudents.map((student) => (
-            <DataTable.Row 
-              key={student.TenantID}
-              style={[styles.tableRow, { backgroundColor: theme.colors.surface }]}
-            >
-              <DataTable.Cell style={styles.nameColumn}>
-                <View style={styles.nameCell}>
-                  <Avatar.Text 
-                    size={36} 
-                    label={student.FullName.substring(0, 2).toUpperCase()}
-                    style={[styles.avatar, { backgroundColor: theme.colors.primary }]}
+            {students.map((student) => (
+              <DataTable.Row 
+                key={student.TenantID}
+                style={[styles.tableRow, { backgroundColor: theme.colors.surface }]}
+              >
+                <DataTable.Cell style={styles.nameColumn}>
+                  <View style={styles.nameCell}>
+                    <Avatar.Text 
+                      size={36} 
+                      label={student.FullName?.substring(0, 2).toUpperCase() || 'ST'}
+                      style={[styles.avatar, { backgroundColor: theme.colors.primary }]}
+                    />
+                    <Text style={[styles.nameText, { color: theme.colors.onSurface }]}>
+                      {student.FullName || 'Unknown'}
+                    </Text>
+                  </View>
+                </DataTable.Cell>
+                <DataTable.Cell style={styles.roomColumn}>
+                  <View style={styles.roomBadge}>
+                    <Text style={[styles.roomText, { color: theme.colors.onSurface }]}>
+                      {student.Room_No !== null && student.Room_No !== undefined ? student.Room_No.toString() : 'N/A'}
+                    </Text>
+                  </View>
+                </DataTable.Cell>
+                <DataTable.Cell style={styles.actionColumn}>
+                  <IconButton
+                    icon="eye"
+                    size={24}
+                    iconColor={theme.colors.primary}
+                    onPress={() => {
+                      setSelectedStudent(student);
+                      setViewModalVisible(true);
+                    }}
+                    style={styles.viewButton}
                   />
-                  <Text style={[styles.nameText, { color: theme.colors.onSurface }]}>
-                    {student.FullName}
-                  </Text>
-                </View>
-              </DataTable.Cell>
-              <DataTable.Cell style={styles.roomColumn}>
-                <View style={styles.roomBadge}>
-                  <Text style={[styles.roomText, { color: theme.colors.onSurface }]}>
-                    {student.Room_No !== null && student.Room_No !== undefined ? student.Room_No.toString() : 'N/A'}
-                  </Text>
-                </View>
-              </DataTable.Cell>
-              <DataTable.Cell style={styles.actionColumn}>
-                <IconButton
-                  icon="eye"
-                  size={24}
-                  iconColor={theme.colors.primary}
-                  onPress={() => {
-                    setSelectedStudent(student);
-                    setViewModalVisible(true);
-                  }}
-                  style={styles.viewButton}
-                />
-              </DataTable.Cell>
-            </DataTable.Row>
-          ))}
-        </DataTable>
+                </DataTable.Cell>
+              </DataTable.Row>
+            ))}
+          </DataTable>
+        )}
       </ScrollView>
 
       <FAB
@@ -1524,5 +1537,21 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     marginBottom: 8,
+  },
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 300,
+    padding: 20,
+  },
+  emptyStateText: {
+    fontSize: 18,
+    marginVertical: 16,
+    textAlign: 'center',
+  },
+  emptyStateButton: {
+    marginTop: 16,
+    paddingHorizontal: 32,
   },
 }); 

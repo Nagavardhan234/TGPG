@@ -204,48 +204,60 @@ export default function RoomManagement() {
         <Chip selected={filter === 'vacant'} onPress={() => setFilter('vacant')} style={styles.chip}>Vacant</Chip>
       </View>
 
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-        </View>
-      ) : (
-        <ScrollView style={styles.roomsContainer}>
-          <View style={styles.roomsGrid}>
-            {filteredRooms.length > 0 ? (
-              filteredRooms.map((room, index) => (
-                <Card key={index} style={[styles.roomCard, { backgroundColor: isDarkMode ? '#1E1E1E' : '#FFFFFF' }]}>
-                  <Card.Content>
-                    <Title style={{ color: theme.colors.text }}>Room {room.room_number}</Title>
-                    <Paragraph style={{ color: theme.colors.text }}>Capacity: {room.capacity}</Paragraph>
-                    <Paragraph style={{ color: theme.colors.text }}>
-                      Current Occupants: {room.active_tenants}/{room.capacity}
-                    </Paragraph>
-                  </Card.Content>
-                  <Card.Actions>
-                    <Button 
-                      onPress={() => handleEditRoom(room)} 
-                      style={styles.actionButton}
-                    >
-                      Edit
-                    </Button>
-                    <Button 
-                      onPress={() => handleDeleteRoom(room)} 
-                      style={[styles.actionButton]} 
-                      textColor={isDarkMode ? '#FF6F61' : '#FF4444'}
-                    >
-                      Delete
-                    </Button>
-                  </Card.Actions>
-                </Card>
-              ))
-            ) : (
-              <View style={styles.noRoomsContainer}>
-                <Paragraph style={{ color: theme.colors.text }}>No rooms available.</Paragraph>
-              </View>
-            )}
+      <ScrollView style={styles.roomsContainer}>
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
           </View>
-        </ScrollView>
-      )}
+        ) : !rooms || rooms.length === 0 ? (
+          <View style={styles.emptyStateContainer}>
+            <IconButton
+              icon="door"
+              size={50}
+              iconColor={theme.colors.primary}
+            />
+            <Text style={[styles.emptyStateText, { color: theme.colors.text }]}>
+              No rooms available
+            </Text>
+            <Button 
+              mode="contained"
+              onPress={() => setAddRoomVisible(true)}
+              style={styles.emptyStateButton}
+            >
+              Add Room
+            </Button>
+          </View>
+        ) : (
+          <View style={styles.roomsGrid}>
+            {filteredRooms.map((room, index) => (
+              <Card key={index} style={[styles.roomCard, { backgroundColor: isDarkMode ? '#1E1E1E' : '#FFFFFF' }]}>
+                <Card.Content>
+                  <Title style={{ color: theme.colors.text }}>Room {room.room_number || 'N/A'}</Title>
+                  <Paragraph style={{ color: theme.colors.text }}>Capacity: {room.capacity || 0}</Paragraph>
+                  <Paragraph style={{ color: theme.colors.text }}>
+                    Current Occupants: {room.active_tenants || 0}/{room.capacity || 0}
+                  </Paragraph>
+                </Card.Content>
+                <Card.Actions>
+                  <Button 
+                    onPress={() => handleEditRoom(room)} 
+                    style={styles.actionButton}
+                  >
+                    Edit
+                  </Button>
+                  <Button 
+                    onPress={() => handleDeleteRoom(room)} 
+                    style={[styles.actionButton]} 
+                    textColor={isDarkMode ? '#FF6F61' : '#FF4444'}
+                  >
+                    Delete
+                  </Button>
+                </Card.Actions>
+              </Card>
+            ))}
+          </View>
+        )}
+      </ScrollView>
 
       <FAB
         icon="plus"
@@ -451,5 +463,21 @@ const styles = StyleSheet.create({
   },
   managementButton: {
     marginLeft: 8,
+  },
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 300,
+    padding: 20,
+  },
+  emptyStateText: {
+    fontSize: 18,
+    marginVertical: 16,
+    textAlign: 'center',
+  },
+  emptyStateButton: {
+    marginTop: 16,
+    paddingHorizontal: 32,
   },
 }); 
