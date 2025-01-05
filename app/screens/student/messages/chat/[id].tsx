@@ -706,7 +706,20 @@ export default function ChatScreen() {
 
       // Message handlers
       socketRef.current.on('new_message', (newMessage) => {
-        setMessages(prev => [...prev, newMessage]);
+        console.log('[Chat] Received new message:', newMessage);
+        // Convert UTC to IST for display
+        const messageWithIST = {
+          ...newMessage,
+          CreatedAt: new Date(new Date(newMessage.CreatedAt).getTime() + 330 * 60000)
+        };
+        
+        setMessages(prev => {
+          // Remove temp message if it exists
+          const filtered = prev.filter(m => 
+            !m.isPending && m.MessageID !== messageWithIST.MessageID
+          );
+          return [...filtered, messageWithIST];
+        });
         scrollToBottom();
       });
 
@@ -869,43 +882,37 @@ export default function ChatScreen() {
       if (recording) {
         // Handle voice message
       } else {
+        const messageContent = message.trim();
+        setMessage(''); // Clear input immediately for better UX
+        
         console.log('[Chat] Sending new message');
         
-        const response = await api.post(`/api/messages/rooms/${id}/messages`, {
-          content: message.trim(),
+        // Send only through socket
+        socketRef.current?.emit('send_message', {
+          chatRoomId: parseInt(id),
+          content: messageContent,
           type: 'TEXT',
           senderType: 'TENANT',
           senderId: student?.TenantID
-        }, {
-          headers: {
-            Authorization: `Bearer ${await AsyncStorage.getItem('student_token')}`
-          }
         });
 
-        console.log('[Chat] Server response for new message:', response.data);
+        // Add optimistic message
+        const tempMessage = {
+          MessageID: `temp_${Date.now()}`,
+          ChatRoomID: parseInt(id),
+          Content: messageContent,
+          Type: 'TEXT',
+          CreatedAt: new Date(Date.now() + 330 * 60000), // Convert to IST
+          SenderType: 'TENANT',
+          SenderID: student?.TenantID,
+          SenderName: student?.FullName,
+          ReadCount: 0,
+          Reactions: [],
+          isPending: true
+        };
 
-        if (response.data?.success) {
-          setMessage('');
-          
-          const newMessage = response.data.data;
-          console.log('[Chat] New message timestamp:', newMessage.CreatedAt);
-          console.log('[Chat] Formatted time:', formatMessageTime(newMessage.CreatedAt));
-          
-          if (newMessage) {
-            setMessages(prev => {
-              const updatedMessages = [...prev, newMessage];
-              return updatedMessages;
-            });
-            
-            socketRef.current?.emit('message_sent', {
-              roomId: id,
-              messageId: newMessage.MessageID,
-              senderId: student?.TenantID
-            });
-
-            setTimeout(() => scrollToBottom(), 100);
-          }
-        }
+        setMessages(prev => [...prev, tempMessage]);
+        setTimeout(() => scrollToBottom(), 100);
       }
     } catch (error) {
       console.error('[Chat] Error sending message:', error);
