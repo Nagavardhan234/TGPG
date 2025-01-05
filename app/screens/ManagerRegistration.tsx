@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Image, TouchableOpacity, Switch, Modal, ActivityIndicator } from 'react-native';
 import {PortalProvider} from 'react-native-portal'
 import { 
@@ -17,7 +17,8 @@ import {
 import { useTheme } from '@/app/context/ThemeContext';
 import * as ImagePicker from 'expo-image-picker';
 import { FontAwesome } from '@expo/vector-icons';
-import { registerManager, uploadImage, checkExistingCredentials } from '../services/manager.service';
+import { registerManager } from '../services/manager.service';
+import { uploadImage } from '../services/upload.service';
 import { showMessage } from 'react-native-flash-message';
 import { router } from 'expo-router';
 import { getAmenities, Amenity } from '../services/amenity.service';
@@ -96,8 +97,6 @@ interface PaymentDetails {
     electricity: boolean;
     electricityPrice: string;
   };
-  includeGST: boolean;
-  includeServiceCharge: boolean;
 }
 
 // Add this component for amenities
@@ -541,8 +540,15 @@ const ValidationPopup = ({
   );
 };
 
+// Add this helper function at the top level
+const validateNumberInput = (value: string): string => {
+  // Remove any non-digit characters and leading zeros
+  return value.replace(/[^0-9]/g, '').replace(/^0+/, '') || '';
+};
+
 export default function ManagerRegistration() {
   const { theme, isDarkMode } = useTheme();
+  const scrollViewRef = useRef<ScrollView>(null);
   
   // Group all useState declarations together at the top of the component
   const [currentStep, setCurrentStep] = useState(0);
@@ -566,6 +572,7 @@ export default function ManagerRegistration() {
     address: '',
     alternatePhone: '',
   });
+  const [amenitiesError, setAmenitiesError] = useState<string | null>(null);
 
   // Move validateField and handleFieldChange back inside the component
   const validateField = (field: string, value: string): string => {
@@ -616,7 +623,6 @@ export default function ManagerRegistration() {
   // Add handleNext function
   const handleNext = () => {
     let isValid = false;
-    
     switch (currentStep) {
       case 0:
         isValid = validatePersonalDetails();
@@ -627,15 +633,28 @@ export default function ManagerRegistration() {
       case 2:
         isValid = validatePaymentDetails();
         break;
-      case 3:
-        handleSubmit();
-        return;
       default:
         isValid = true;
     }
 
     if (isValid) {
-      setCurrentStep(prev => prev + 1);
+      setCurrentStep((prev) => {
+        const nextStep = prev + 1;
+        // Reset scroll position when moving to next step
+        if (scrollViewRef.current) {
+          scrollViewRef.current.scrollTo({ x: 0, y: 0, animated: true });
+        }
+        return nextStep;
+      });
+    } else {
+      // Show error message
+      showMessage({
+        message: 'Validation Error',
+        description: 'Please fill in all required fields correctly',
+        type: 'danger',
+        duration: 3000,
+        floating: true,
+      });
     }
   };
 
@@ -682,6 +701,8 @@ export default function ManagerRegistration() {
 
     if (!pgDetails.address.trim()) {
       errors.push({ field: 'pgAddress', message: 'PG address is required' });
+    } else if (pgDetails.address.length > 250) {
+      errors.push({ field: 'pgAddress', message: 'Address cannot exceed 250 characters' });
     }
 
     if (!pgDetails.city.trim()) {
@@ -698,12 +719,44 @@ export default function ManagerRegistration() {
       errors.push({ field: 'pincode', message: 'Please enter a valid 6-digit pincode' });
     }
 
+    if (!pgDetails.description.trim()) {
+      errors.push({ field: 'description', message: 'Description is required' });
+    } else if (pgDetails.description.length > 250) {
+      errors.push({ field: 'description', message: 'Description cannot exceed 250 characters' });
+    }
+
     if (!pgDetails.totalRooms) {
       errors.push({ field: 'totalRooms', message: 'Total rooms is required' });
+    } else if (!/^\d+$/.test(pgDetails.totalRooms)) {
+      errors.push({ field: 'totalRooms', message: 'Total rooms must be a number' });
+    } else if (parseInt(pgDetails.totalRooms) < 1) {
+      errors.push({ field: 'totalRooms', message: 'Total rooms must be at least 1' });
+    }
+
+    if (!pgDetails.totalTenants) {
+      errors.push({ field: 'totalTenants', message: 'Total tenants is required' });
+    } else if (!/^\d+$/.test(pgDetails.totalTenants)) {
+      errors.push({ field: 'totalTenants', message: 'Total tenants must be a number' });
+    } else if (parseInt(pgDetails.totalTenants) < 1) {
+      errors.push({ field: 'totalTenants', message: 'Total tenants must be at least 1' });
     }
 
     if (!pgDetails.costPerBed) {
       errors.push({ field: 'costPerBed', message: 'Cost per bed is required' });
+    } else if (!/^\d+$/.test(pgDetails.costPerBed)) {
+      errors.push({ field: 'costPerBed', message: 'Cost per bed must be a number' });
+    } else if (parseInt(pgDetails.costPerBed) < 1) {
+      errors.push({ field: 'costPerBed', message: 'Cost per bed must be at least 1' });
+    }
+
+    if (!pgDetails.contactNumber.trim()) {
+      errors.push({ field: 'pgContactNumber', message: 'Contact number is required' });
+    } else if (!/^\d{10}$/.test(pgDetails.contactNumber)) {
+      errors.push({ field: 'pgContactNumber', message: 'Please enter a valid 10-digit number' });
+    }
+
+    if (pgDetails.otherAmenities && pgDetails.otherAmenities.length > 250) {
+      errors.push({ field: 'otherAmenities', message: 'Other amenities cannot exceed 250 characters' });
     }
 
     setValidationErrors(errors);
@@ -775,29 +828,25 @@ export default function ManagerRegistration() {
       laundryPrice: '',
       electricity: false,
       electricityPrice: ''
-    },
-    includeGST: true,
-    includeServiceCharge: true
+    }
   });
 
   // Add useEffect to fetch amenities
   useEffect(() => {
     const fetchAmenities = async () => {
-      setIsLoadingAmenities(true);
       try {
-        const amenitiesData = await getAmenities();
-        setAvailableAmenities(amenitiesData);
+        setAmenitiesError(null);
+        const amenitiesList = await getAmenities();
+        setAvailableAmenities(amenitiesList);
       } catch (error) {
+        console.error('Error fetching amenities:', error);
+        setAmenitiesError('Unable to load amenities. Please try again later.');
         showMessage({
-          message: 'Error',
-          description: 'Failed to load amenities',
+          message: 'Error loading amenities',
           type: 'danger',
         });
-      } finally {
-        setIsLoadingAmenities(false);
       }
     };
-
     fetchAmenities();
   }, []);
 
@@ -1060,12 +1109,17 @@ export default function ManagerRegistration() {
       <ValidationInput
         label="PG Address"
         value={pgDetails.address}
-        onChangeText={text => setPgDetails(prev => ({ ...prev, address: text }))}
+        onChangeText={text => {
+          if (text.length <= 250) {
+            setPgDetails(prev => ({ ...prev, address: text }))
+          }
+        }}
         error={validationErrors.find(error => error.field === 'pgAddress')?.message}
         icon="map-marker"
         multiline
         numberOfLines={3}
         style={styles.input}
+        helperText={`${pgDetails.address.length}/250 characters`}
       />
 
       <ValidationInput
@@ -1152,10 +1206,15 @@ export default function ManagerRegistration() {
       <ValidationInput
         label="Other Amenities"
         value={pgDetails.otherAmenities}
-        onChangeText={text => setPgDetails(prev => ({ ...prev, otherAmenities: text }))}
+        onChangeText={text => {
+          if (text.length <= 250) {
+            setPgDetails(prev => ({ ...prev, otherAmenities: text }))
+          }
+        }}
         error={validationErrors.find(error => error.field === 'otherAmenities')?.message}
-        icon="other-amenities"
+        icon="plus-circle"
         style={styles.input}
+        helperText={`${pgDetails.otherAmenities.length}/250 characters`}
       />
 
       <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Room Details</Text>
@@ -1164,7 +1223,10 @@ export default function ManagerRegistration() {
           <ValidationInput
             label="Total Number of Rooms"
             value={pgDetails.totalRooms}
-            onChangeText={text => setPgDetails(prev => ({ ...prev, totalRooms: text }))}
+            onChangeText={text => {
+              const numericValue = validateNumberInput(text);
+              setPgDetails(prev => ({ ...prev, totalRooms: numericValue }));
+            }}
             error={validationErrors.find(error => error.field === 'totalRooms')?.message}
             icon="door"
             keyboardType="numeric"
@@ -1173,7 +1235,10 @@ export default function ManagerRegistration() {
           <ValidationInput
             label="Number of Tenants per Room"
             value={pgDetails.totalTenants}
-            onChangeText={text => setPgDetails(prev => ({ ...prev, totalTenants: text }))}
+            onChangeText={text => {
+              const numericValue = validateNumberInput(text);
+              setPgDetails(prev => ({ ...prev, totalTenants: numericValue }));
+            }}
             error={validationErrors.find(error => error.field === 'totalTenants')?.message}
             icon="account-group"
             keyboardType="numeric"
@@ -1182,7 +1247,10 @@ export default function ManagerRegistration() {
           <ValidationInput
             label="Cost per Bed"
             value={pgDetails.costPerBed}
-            onChangeText={text => setPgDetails(prev => ({ ...prev, costPerBed: text }))}
+            onChangeText={text => {
+              const numericValue = validateNumberInput(text);
+              setPgDetails(prev => ({ ...prev, costPerBed: numericValue }));
+            }}
             error={validationErrors.find(error => error.field === 'costPerBed')?.message}
             icon="currency-inr"
             keyboardType="numeric"
@@ -1214,12 +1282,17 @@ export default function ManagerRegistration() {
       <ValidationInput
         label="Description"
         value={pgDetails.description}
-        onChangeText={text => setPgDetails(prev => ({ ...prev, description: text }))}
+        onChangeText={text => {
+          if (text.length <= 250) {
+            setPgDetails(prev => ({ ...prev, description: text }))
+          }
+        }}
         error={validationErrors.find(error => error.field === 'description')?.message}
-        icon="description"
+        icon="text"
         multiline
         numberOfLines={4}
         style={styles.input}
+        helperText={`${pgDetails.description.length}/250 characters`}
       />
     </View>
   );
@@ -1298,165 +1371,130 @@ export default function ManagerRegistration() {
           />
         </Surface>
       )}
-
-      <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-          Charges & Taxes
-        </Text>
-        <IconButton
-          icon="information"
-          size={20}
-          onPress={() => setShowInfoModal(true)}
-          style={styles.infoButton}
-        />
-      </View>
-      <Surface style={styles.chargesCard}>
-        <View style={styles.chargeRow}>
-          <View style={styles.chargeInfo}>
-            <Text style={styles.chargeTitle}>GST (18%)</Text>
-            <Text style={styles.chargeDescription}>
-              Include GST in room cost or charge separately?
-            </Text>
-          </View>
-          <Switch
-            value={paymentDetails.includeGST}
-            onValueChange={value => setPaymentDetails(prev => ({
-              ...prev,
-              includeGST: value
-            }))}
-          />
-        </View>
-
-        <View style={styles.chargeRow}>
-          <View style={styles.chargeInfo}>
-            <Text style={styles.chargeTitle}>Service Charge (5%)</Text>
-            <Text style={styles.chargeDescription}>
-              Include service charge in room cost or charge separately?
-            </Text>
-          </View>
-          <Switch
-            value={paymentDetails.includeServiceCharge}
-            onValueChange={value => setPaymentDetails(prev => ({
-              ...prev,
-              includeServiceCharge: value
-            }))}
-          />
-        </View>
-      </Surface>
     </View>
   );
 
   const handleSubmit = async () => {
     try {
+      // Validate current step before submission
+      if (currentStep === 1 && !validatePGDetails()) {
+        return;
+      }
+
       setIsLoading(true);
 
-      // Upload profile image first if exists
-      let profileImageUrl = null;
-      if (profileImage) {
-        profileImageUrl = await uploadImage(profileImage);
-      }
+      try {
+        // Upload profile image first if exists
+        let profileImageUrl = null;
+        if (profileImage) {
+          profileImageUrl = await uploadImage(profileImage);
+        }
 
-      // Upload PG images if any
-      let pgImageUrls = [];
-      if (pgDetails.images.length > 0) {
-        pgImageUrls = await Promise.all(pgDetails.images.map(image => uploadImage(image)));
-      }
+        // Upload PG images if any
+        let pgImageUrls = [];
+        if (pgDetails.images.length > 0) {
+          pgImageUrls = await Promise.all(pgDetails.images.map(image => uploadImage(image)));
+        }
 
-      // Create the form data object with correct field mappings
-      const formData = {
-        // Personal Details
-        fullName: managerDetails.fullName,
-        email: managerDetails.email,
-        phone: managerDetails.phone,
-        password: managerDetails.password,
-        profileImage: profileImageUrl,
-        address: managerDetails.address,
-        alternatePhone: managerDetails.alternatePhone || null,
+        // Create the form data object with correct field mappings
+        const formData = {
+          // Personal Details
+          fullName: managerDetails.fullName,
+          email: managerDetails.email,
+          phone: managerDetails.phone,
+          password: managerDetails.password,
+          profileImage: profileImageUrl,
+          address: managerDetails.address,
+          alternatePhone: managerDetails.alternatePhone || null,
 
-        // PG Details
-        pgName: pgDetails.name,
-        pgAddress: pgDetails.address,
-        city: pgDetails.city,
-        state: pgDetails.state,
-        pincode: pgDetails.pincode,
-        pgType: pgDetails.type,
-        pgContactNumber: pgDetails.contactNumber,
-        totalRooms: parseInt(pgDetails.totalRooms) || 0,
-        costPerBed: parseInt(pgDetails.costPerBed) || 0,
-        totalTenants: parseInt(pgDetails.totalTenants) || 0,
-        amenities: pgDetails.amenities,
-        otherAmenities: pgDetails.otherAmenities,
-        pgImages: pgImageUrls,
-        description: pgDetails.description,
-        seasonalPrice: pgDetails.seasonalPrice || null,
-        rating: null,
-        occupancyRate: null,
+          // PG Details
+          pgName: pgDetails.name,
+          pgAddress: pgDetails.address,
+          city: pgDetails.city,
+          state: pgDetails.state,
+          pincode: pgDetails.pincode,
+          pgType: pgDetails.type,
+          pgContactNumber: pgDetails.contactNumber,
+          totalRooms: parseInt(pgDetails.totalRooms) || 0,
+          costPerBed: parseInt(pgDetails.costPerBed) || 0,
+          totalTenants: parseInt(pgDetails.totalTenants) || 0,
+          amenities: pgDetails.amenities.map(id => id.toString()),
+          otherAmenities: pgDetails.otherAmenities,
+          pgImages: pgImageUrls,
+          description: pgDetails.description,
+          seasonalPrice: pgDetails.seasonalPrice || null,
+          rating: null,
+          occupancyRate: null,
 
-        // Payment Details
-        paymentMethod: paymentDetails.paymentMethod,
-        upiId: paymentDetails.paymentMethod === 'upi' ? paymentDetails.upiId : null,
-        bankDetails: paymentDetails.paymentMethod === 'bank' ? {
-          bankName: paymentDetails.bankDetails.bankName,
-          accountNumber: paymentDetails.bankDetails.accountNumber,
-          ifscCode: paymentDetails.bankDetails.ifscCode
-        } : null,
+          // Payment Details
+          paymentMethod: paymentDetails.paymentMethod,
+          upiId: paymentDetails.paymentMethod === 'upi' ? paymentDetails.upiId : null,
+          bankDetails: paymentDetails.paymentMethod === 'bank' ? {
+            bankName: paymentDetails.bankDetails.bankName,
+            accountNumber: paymentDetails.bankDetails.accountNumber,
+            ifscCode: paymentDetails.bankDetails.ifscCode
+          } : null,
 
-        // Extra Charges
-        extraCharges: {
-          food: {
-            available: paymentDetails.extraCharges.food,
-            price: parseInt(paymentDetails.extraCharges.foodPrice) || 0
-          },
-          laundry: {
-            available: paymentDetails.extraCharges.laundry,
-            price: parseInt(paymentDetails.extraCharges.laundryPrice) || 0
-          },
-          electricity: {
-            available: paymentDetails.extraCharges.electricity,
-            price: parseInt(paymentDetails.extraCharges.electricityPrice) || 0
+          // Extra Charges
+          extraCharges: {
+            food: {
+              available: paymentDetails.extraCharges.food,
+              price: parseInt(paymentDetails.extraCharges.foodPrice) || 0
+            },
+            laundry: {
+              available: paymentDetails.extraCharges.laundry,
+              price: parseInt(paymentDetails.extraCharges.laundryPrice) || 0
+            },
+            electricity: {
+              available: paymentDetails.extraCharges.electricity,
+              price: parseInt(paymentDetails.extraCharges.electricityPrice) || 0
+            }
           }
-        },
+        };
 
-        // Tax Settings
-        taxSettings: {
-          includeGST: paymentDetails.includeGST,
-          includeServiceCharge: paymentDetails.includeServiceCharge
-        },
+        const response = await registerManager(formData);
 
-        // Status and Verification
-        status: 'pending',
-        emailVerified: false,
-        phoneVerified: false,
-        documentsVerified: false,
-        
-        // Timestamps
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-
-      const response = await registerManager(formData);
-
-      if (response.success) {
+        if (response.success) {
+          setIsLoading(false);
+          setShowSuccessModal(true);
+        }
+      } catch (error) {
+        console.error('Error uploading images:', error);
+        showMessage({
+          message: 'Image Upload Failed',
+          description: 'Failed to upload one or more images. Please try again.',
+          type: 'danger',
+          duration: 4000,
+          floating: true,
+        });
         setIsLoading(false);
-        setShowSuccessModal(true);
+        return;
       }
     } catch (error: any) {
       console.error('Registration error:', error);
       setIsLoading(false);
       
-      if (error.error === "Manager with this email or phone already exists" || 
+      if (error.response?.data?.errors) {
+        // Handle validation errors from backend
+        const backendErrors = error.response.data.errors;
+        setValidationErrors(backendErrors);
+        
+        // Navigate to the appropriate step based on the error
+        if (backendErrors.some(e => e.field === 'description' || e.field === 'pgName')) {
+          setCurrentStep(1); // Go to PG Details step
+        }
+      } else if (error.error === "Manager with this email or phone already exists" || 
           error.response?.data?.error === "Manager with this email or phone already exists") {
         setShowDuplicateManagerModal(true);
-        return;
+      } else {
+        showMessage({
+          message: 'Registration Failed',
+          description: error.response?.data?.error || 'Registration failed',
+          type: 'danger',
+          duration: 4000,
+          floating: true,
+        });
       }
-      
-      showMessage({
-        message: 'Registration Failed',
-        description: error.response?.data?.error || 'Registration failed',
-        type: 'danger',
-        duration: 4000,
-        floating: true,
-      });
     }
   };
 
@@ -1526,15 +1564,6 @@ export default function ManagerRegistration() {
             </View>
           </View>
         )}
-
-        <View style={styles.chargeInfo}>
-          <Text style={styles.chargeNote}>
-            GST (18%) will be {paymentDetails.includeGST ? 'included in' : 'charged on top of'} room cost
-          </Text>
-          <Text style={styles.chargeNote}>
-            Service charge (5%) will be {paymentDetails.includeServiceCharge ? 'included in' : 'charged on top of'} room cost
-          </Text>
-        </View>
       </Surface>
 
       <View style={styles.termsContainer}>
@@ -1567,9 +1596,10 @@ export default function ManagerRegistration() {
       </View>
       
       <ScrollView 
-        style={[styles.scrollView, { backgroundColor: theme.colors.background }]}
-        contentContainerStyle={styles.content}
-        stickyHeaderIndices={[0]}
+        ref={scrollViewRef}
+        style={styles.container} 
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         <View style={[styles.stepIndicatorContainer, { backgroundColor: theme.colors.background }]}>
           {renderStepIndicator()}
@@ -1590,13 +1620,15 @@ export default function ManagerRegistration() {
               Back
             </Button>
           )}
-          <Button 
-            mode="contained"
-            onPress={handleNext}
-            style={[styles.button, styles.nextButton]}
-          >
-            {currentStep === STEPS.length - 1 ? 'Submit' : 'Next'}
-          </Button>
+          {currentStep < STEPS.length - 1 && (
+            <Button 
+              mode="contained"
+              onPress={handleNext}
+              style={[styles.button, styles.nextButton]}
+            >
+              Next
+            </Button>
+          )}
         </View>
       </ScrollView>
 
@@ -1624,6 +1656,13 @@ export default function ManagerRegistration() {
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={styles.loadingText}>Creating your account...</Text>
         </View>
+      )}
+
+      {/* Add error message for amenities in PG Details section */}
+      {currentStep === 1 && amenitiesError && (
+        <HelperText type="error" visible={true}>
+          {amenitiesError}
+        </HelperText>
       )}
     </View>
   );

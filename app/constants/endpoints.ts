@@ -5,6 +5,9 @@ export const ENDPOINTS = {
   MANAGER_REGISTER: '/api/managers/register',
   STUDENT_LOGIN: '/api/students/login',
   
+  // Amenities endpoint
+  AMENITIES: '/api/amenities',
+  
   // Room endpoints
   ROOM_STATS: '/api/dashboard/rooms',
   ROOM_DETAILS: '/api/dashboard/rooms/:pgId/details/:roomNumber',

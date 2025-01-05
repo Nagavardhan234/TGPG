@@ -25,6 +25,48 @@ interface LoginResponse {
   pg: PG | null;
 }
 
+interface RegistrationResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+  token: string;
+  manager: Manager;
+}
+
+export const registerManager = async (formData: any): Promise<RegistrationResponse> => {
+  try {
+    console.log('Sending registration request:', {
+      url: ENDPOINTS.MANAGER_REGISTER,
+      data: { ...formData, password: '***' }
+    });
+
+    const response = await api.post(ENDPOINTS.MANAGER_REGISTER, formData);
+    const data = response.data;
+
+    if (data.success && data.token) {
+      // Store the token
+      await AsyncStorage.setItem('token', data.token);
+      
+      // Store user data
+      if (data.manager) {
+        await AsyncStorage.setItem('user', JSON.stringify(data.manager));
+      }
+
+      // Update the Authorization header for subsequent requests
+      api.defaults.headers.common['Authorization'] = `Bearer ${data.token}`;
+    }
+
+    return data;
+  } catch (error: any) {
+    console.error('Registration error:', error);
+    throw {
+      success: false,
+      error: error.response?.data?.error || 'REGISTRATION_ERROR',
+      message: error.response?.data?.message || 'Registration failed'
+    };
+  }
+};
+
 export const managerService = {
   login: async (credentials: { 
     phone: string;
