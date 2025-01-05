@@ -63,6 +63,185 @@ interface ChatRoom {
   LastTypingUser?: string;
 }
 
+const baseStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  loadingContainer: {
+    padding: 12,
+    alignItems: 'center',
+  },
+  messageWrapper: {
+    marginHorizontal: 8,
+    marginVertical: 2,
+  },
+  messageContainer: {
+    borderRadius: 20,
+    padding: 12,
+    paddingBottom: 8,
+    minWidth: 80,
+    maxWidth: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  messageText: {
+    fontSize: 15,
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  timestamp: {
+    fontSize: 11,
+    marginTop: 2,
+    alignSelf: 'flex-end',
+  },
+  messageImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  input: {
+    flex: 1,
+    marginHorizontal: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    fontSize: 15,
+  },
+  sendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  attachButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  }
+});
+
+const styles = StyleSheet.create({
+  inputWrapper: {
+    width: '100%',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.1)',
+  },
+  inputIcon: {
+    margin: 0,
+    width: 36,
+    height: 36,
+  },
+  attachMenu: {
+    margin: 20,
+    padding: 16,
+    width: '90%',
+    alignSelf: 'center',
+  },
+  attachGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  attachButton: {
+    width: '48%',
+    padding: 12,
+    alignItems: 'center',
+  },
+  attachIconWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  attachButtonLabel: {
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  typingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    paddingHorizontal: 12,
+    marginVertical: 8,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  typingDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 4,
+    height: 20,
+  },
+  dot: {
+    marginHorizontal: 2,
+    transform: [{ scale: 1 }],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1,
+    elevation: 1,
+  },
+  typingLetter: {
+    transform: [{ scale: 1 }],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+  },
+  loadingCard: {
+    width: '100%',
+    maxWidth: 300,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+    elevation: 4,
+  },
+  loadingContent: {
+    padding: 24,
+    alignItems: 'center',
+  },
+  loadingIconContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    height: 40,
+  },
+  loadingDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginHorizontal: 4,
+    opacity: 0.7,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'center',
+  }
+});
+
 const TypingIndicator = () => {
   const { theme } = useTheme();
   const [dots, setDots] = useState('');
@@ -197,6 +376,36 @@ export default function ChatScreen() {
   const socketRef = useRef<any>(null);
   const [isConnecting, setIsConnecting] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Add timezone offset constant
+  const INDIA_TIMEZONE_OFFSET = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
+
+  const formatMessageTime = (dateString: string) => {
+    try {
+      console.log('[Chat] Formatting time for:', dateString);
+      
+      // Parse the UTC date string and convert directly to IST (UTC+5:30)
+      const utcDate = new Date(dateString);
+      const istTime = new Date(utcDate.getTime() + (5.5 * 60 * 60 * 1000));
+      
+      // Get hours and minutes directly
+      const hours = istTime.getUTCHours();
+      const minutes = istTime.getUTCMinutes();
+      
+      // Format to 12-hour time
+      const period = hours >= 12 ? 'PM' : 'AM';
+      const displayHours = hours % 12 || 12; // Convert 0 to 12 for 12 AM
+      const displayMinutes = minutes.toString().padStart(2, '0');
+      
+      const formattedTime = `${displayHours}:${displayMinutes} ${period}`;
+      console.log('[Chat] Final formatted time:', formattedTime);
+      
+      return formattedTime;
+    } catch (error) {
+      console.error('[Chat] Error formatting time:', error);
+      return '--:-- --';
+    }
+  };
 
   useEffect(() => {
     const initializeChat = async () => {
@@ -346,7 +555,6 @@ export default function ChatScreen() {
 
   const loadMessages = async (refresh = false) => {
     try {
-      console.log('[Chat] Loading messages. Refresh:', refresh);
       const currentPage = refresh ? 1 : page;
       const response = await api.get(`/api/messages/rooms/${id}/messages`, {
         headers: {
@@ -362,7 +570,23 @@ export default function ChatScreen() {
         throw new Error(response.data?.message || 'Failed to load messages');
       }
 
-      return response.data;
+      // Log received messages timestamps
+      if (response.data.data.length > 0) {
+        console.log('[Chat] Received messages timestamps:');
+        response.data.data.slice(0, 3).forEach((msg: Message) => {
+          console.log(`Message ID ${msg.MessageID}: ${msg.CreatedAt}`);
+        });
+      }
+
+      // Sort messages in ascending order (oldest to newest)
+      const sortedMessages = [...response.data.data].sort((a, b) => 
+        new Date(a.CreatedAt).getTime() - new Date(b.CreatedAt).getTime()
+      );
+
+      return {
+        ...response.data,
+        data: sortedMessages
+      };
     } catch (error: any) {
       console.error('[Chat] Error loading messages:', error);
       if (error.response?.status === 404) {
@@ -401,133 +625,89 @@ export default function ChatScreen() {
       const token = await AsyncStorage.getItem('student_token');
       
       if (!token) {
-        console.log('[Chat] No token found, redirecting to login');
         router.replace('/screens/student/login');
         return;
       }
 
       // Use localhost for development
       const socketUrl = 'http://localhost:3000';
-      console.log('[Chat] Creating socket connection to:', socketUrl);
       
-      if (socketRef.current?.connected) {
-        console.log('[Chat] Disconnecting existing socket');
+      // Clean up existing socket if any
+      if (socketRef.current) {
+        socketRef.current.removeAllListeners();
         socketRef.current.disconnect();
+        socketRef.current = null;
       }
 
+      // Create new socket connection with optimized settings
       socketRef.current = io(socketUrl, {
         path: '/socket.io',
         auth: { token },
-        transports: ['polling', 'websocket'],
+        transports: ['websocket'], // Use only websocket for faster connection
         reconnection: true,
-        reconnectionAttempts: 5,
+        reconnectionAttempts: Infinity,
         reconnectionDelay: 1000,
-        timeout: 10000,
+        reconnectionDelayMax: 5000,
+        timeout: 5000,
         forceNew: true,
         query: { 
           roomId: id,
           userType: 'STUDENT'
-        }
+        },
+        autoConnect: false // We'll manually connect for better control
       });
 
-      // Enhanced connection handling
+      // Set up event handlers before connecting
       socketRef.current.on('connect', () => {
-        console.log('[Chat] Socket connected successfully. Socket ID:', socketRef.current.id);
+        console.log('[Chat] Socket connected:', socketRef.current.id);
         setIsConnecting(false);
         setError(null);
         
-        // Join room with proper data structure
-        const joinData = {
+        // Join room immediately after connection
+        socketRef.current.emit('join_room', {
           roomId: id,
           userType: 'STUDENT',
           userId: student?.TenantID,
           userName: student?.FullName
-        };
-        
-        console.log('[Chat] Joining room with data:', joinData);
-        socketRef.current.emit('join_room', joinData);
+        });
       });
 
-      // Handle room join confirmation
+      socketRef.current.on('connect_error', (err) => {
+        console.error('[Chat] Connection error:', err.message);
+        // Fall back to polling if websocket fails
+        if (socketRef.current.io.opts.transports[0] === 'websocket') {
+          console.log('[Chat] Falling back to polling');
+          socketRef.current.io.opts.transports = ['polling', 'websocket'];
+          socketRef.current.connect();
+        }
+      });
+
       socketRef.current.on('room_joined', (data) => {
-        console.log('[Chat] Successfully joined room:', data);
+        console.log('[Chat] Joined room:', data);
         setError(null);
+        setIsConnecting(false);
       });
 
-      // Handle room join error
       socketRef.current.on('room_join_error', (error) => {
-        console.error('[Chat] Error joining room:', error);
-        setError('Failed to join chat room: ' + error.message);
-      });
-
-      socketRef.current.on('connect_error', async (err) => {
-        console.error('[Chat] Socket connection error:', err.message);
-        
-        if (err.message.includes('authentication') || err.message.includes('jwt')) {
-          try {
-            // Try to get a new token from the server
-            const response = await api.post('/api/student/auth/refresh', {}, {
-              headers: { Authorization: `Bearer ${token}` }
-            });
-            
-            if (response.data?.success && response.data?.token) {
-              await AsyncStorage.setItem('student_token', response.data.token);
-              // Retry connection with new token
-              console.log('[Chat] Token refreshed, retrying connection');
-              initializeSocket();
-            } else {
-              console.log('[Chat] Token refresh failed, redirecting to login');
-              router.replace('/screens/student/login');
-            }
-          } catch (refreshError) {
-            console.error('[Chat] Token refresh failed:', refreshError);
-            router.replace('/screens/student/login');
-          }
-        } else {
-          console.error('[Chat] Non-auth socket error:', err.message);
-          setError(`Failed to connect to chat server: ${err.message}`);
-          setIsConnecting(false);
+        console.error('[Chat] Room join error:', error);
+        // Retry immediately with polling if websocket fails
+        if (socketRef.current.io.opts.transports[0] === 'websocket') {
+          socketRef.current.io.opts.transports = ['polling', 'websocket'];
+          socketRef.current.connect();
         }
       });
 
-      socketRef.current.on('disconnect', async (reason) => {
-        console.log('[Chat] Socket disconnected. Reason:', reason);
-        setIsConnecting(true);
-        
+      socketRef.current.on('disconnect', (reason) => {
+        console.log('[Chat] Disconnected:', reason);
         if (reason === 'io server disconnect' || reason === 'transport close') {
-          try {
-            // Try to get a new token from the server
-            const response = await api.post('/api/student/auth/refresh', {}, {
-              headers: { Authorization: `Bearer ${token}` }
-            });
-            
-            if (response.data?.success && response.data?.token) {
-              await AsyncStorage.setItem('student_token', response.data.token);
-              // Retry connection with new token
-              console.log('[Chat] Token refreshed after disconnect, retrying connection');
-              initializeSocket();
-            } else {
-              console.log('[Chat] Token refresh failed after disconnect, redirecting to login');
-              router.replace('/screens/student/login');
-            }
-          } catch (refreshError) {
-            console.error('[Chat] Token refresh failed after disconnect:', refreshError);
-            router.replace('/screens/student/login');
-          }
+          socketRef.current.connect(); // Auto reconnect
         }
       });
 
-      socketRef.current.on('error', (err) => {
-        console.error('[Chat] Socket error:', err);
-        setError(`Chat server error: ${err.message || 'Unknown error'}`);
-      });
-
+      // Message handlers
       socketRef.current.on('new_message', (newMessage) => {
-        console.log('[Chat] Received new message:', newMessage.MessageID);
-        setMessages(prev => [newMessage, ...prev]);
-        if (scrollViewRef.current) {
-          scrollToBottom();
-        }
+        setMessages(prev => [...prev, newMessage]);
+        scrollToBottom();
       });
 
       socketRef.current.on('typing_start', (data) => {
@@ -542,12 +722,33 @@ export default function ChatScreen() {
           setIsTyping(false);
         }
       });
+
+      // Start connection
+      socketRef.current.connect();
+
     } catch (err: any) {
-      console.error('[Chat] Error initializing socket:', err);
-      setError(`Failed to initialize chat: ${err.message}`);
-      setIsConnecting(false);
+      console.error('[Chat] Socket initialization error:', err);
+      setError('Connection error. Retrying...');
+      // Retry with polling after short delay
+      setTimeout(() => {
+        if (socketRef.current) {
+          socketRef.current.io.opts.transports = ['polling', 'websocket'];
+          socketRef.current.connect();
+        }
+      }, 1000);
     }
   };
+
+  // Cleanup socket on unmount
+  useEffect(() => {
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.removeAllListeners();
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    };
+  }, []);
 
   const checkTokenAndRedirect = async () => {
     try {
@@ -667,57 +868,44 @@ export default function ChatScreen() {
     try {
       if (recording) {
         // Handle voice message
-        // ... voice message handling code ...
       } else {
-        // Create message object
-        const messageData = {
-          roomId: id,
+        console.log('[Chat] Sending new message');
+        
+        const response = await api.post(`/api/messages/rooms/${id}/messages`, {
           content: message.trim(),
           type: 'TEXT',
-          senderType: 'STUDENT',
-          senderId: student?.TenantID,
-          senderName: student?.FullName || 'Student'
-        };
-
-        // Add message to local state immediately for instant feedback
-        const newMessage: Message = {
-          MessageID: Date.now(),
-          Content: message.trim(),
-          Type: 'TEXT',
-          CreatedAt: new Date().toISOString(),
-          SenderType: 'STUDENT',
-          SenderID: student?.TenantID || 0,
-          SenderName: student?.FullName || 'Student',
-          ReadCount: 0,
-          Reactions: []
-        };
-
-        // Update UI immediately
-        setMessages(prev => [...prev, newMessage]);
-        setMessage('');
-
-        console.log('[Chat] Sending message:', messageData);
-        socketRef.current?.emit('new_message', messageData, (response: any) => {
-          if (response?.error) {
-            console.error('[Chat] Error sending message:', response.error);
-            setError('Failed to send message');
-            // Remove the message from local state if failed
-            setMessages(prev => prev.filter(msg => msg.MessageID !== newMessage.MessageID));
-          } else {
-            console.log('[Chat] Message sent successfully:', response);
-            // Update the temporary message with server data if needed
-            if (response.messageId) {
-              setMessages(prev => prev.map(msg => 
-                msg.MessageID === newMessage.MessageID 
-                  ? { ...msg, MessageID: response.messageId }
-                  : msg
-              ));
-            }
+          senderType: 'TENANT',
+          senderId: student?.TenantID
+        }, {
+          headers: {
+            Authorization: `Bearer ${await AsyncStorage.getItem('student_token')}`
           }
         });
 
-        // Emit typing end
-        socketRef.current?.emit('typing_end', { roomId: id });
+        console.log('[Chat] Server response for new message:', response.data);
+
+        if (response.data?.success) {
+          setMessage('');
+          
+          const newMessage = response.data.data;
+          console.log('[Chat] New message timestamp:', newMessage.CreatedAt);
+          console.log('[Chat] Formatted time:', formatMessageTime(newMessage.CreatedAt));
+          
+          if (newMessage) {
+            setMessages(prev => {
+              const updatedMessages = [...prev, newMessage];
+              return updatedMessages;
+            });
+            
+            socketRef.current?.emit('message_sent', {
+              roomId: id,
+              messageId: newMessage.MessageID,
+              senderId: student?.TenantID
+            });
+
+            setTimeout(() => scrollToBottom(), 100);
+          }
+        }
       }
     } catch (error) {
       console.error('[Chat] Error sending message:', error);
@@ -741,152 +929,193 @@ export default function ChatScreen() {
     }
   };
 
+  // Define theme-dependent styles inside the component
+  const getThemedStyles = () => ({
+    ownMessage: {
+      backgroundColor: theme?.colors?.primary,
+      borderRadius: 20,
+      borderBottomRightRadius: 4,
+      marginLeft: 'auto',
+      borderWidth: 0,
+      shadowColor: theme?.colors?.primary,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    otherMessage: {
+      backgroundColor: theme?.dark ? 'rgba(255,255,255,0.08)' : '#F0F2F5',
+      borderRadius: 20,
+      borderBottomLeftRadius: 4,
+      marginRight: 'auto',
+      borderWidth: 0,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+      elevation: 2,
+    },
+    senderName: {
+      fontSize: 13,
+      color: theme?.colors?.primary,
+      marginBottom: 2,
+      fontWeight: '600',
+      opacity: 0.9,
+    },
+    ownMessageText: {
+      color: '#FFFFFF',
+      fontWeight: '400',
+    },
+    otherMessageText: {
+      color: theme?.dark ? '#FFFFFF' : '#000000',
+      fontWeight: '400',
+    },
+    ownTimestamp: {
+      color: 'rgba(255,255,255,0.7)',
+      fontSize: 11,
+    },
+    otherTimestamp: {
+      color: theme?.dark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)',
+      fontSize: 11,
+    },
+    themedInput: {
+      backgroundColor: theme?.dark ? 'rgba(255,255,255,0.08)' : '#F0F2F5',
+      borderRadius: 24,
+      borderWidth: 0,
+      color: theme?.colors?.text,
+      elevation: 2,
+    },
+    themedInputContainer: {
+      backgroundColor: theme?.dark ? theme?.colors?.surface : '#FFFFFF',
+      borderTopWidth: 1,
+      borderTopColor: theme?.dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+      paddingVertical: 8,
+    }
+  });
+
   const renderMessage = (message: Message, index: number) => {
-    const isOwnMessage = message.SenderType === 'STUDENT' && message.SenderID === student?.TenantID;
+    const themedStyles = getThemedStyles();
+    const isOwnMessage = message.SenderType === 'TENANT' && message.SenderID === student?.TenantID;
     const showSenderInfo = index === 0 || 
       messages[index - 1]?.SenderID !== message.SenderID ||
       messages[index - 1]?.SenderType !== message.SenderType;
     
-    const messageTime = format(new Date(message.CreatedAt), 'h:mm a');
+    const messageTime = formatMessageTime(message.CreatedAt);
 
     return (
       <Animated.View
         key={message.MessageID}
-        entering={isOwnMessage ? SlideInRight : FadeIn}
-        exiting={isOwnMessage ? SlideOutLeft : FadeOut}
+        entering={isOwnMessage ? SlideInRight.springify() : FadeIn.springify()}
         style={[
-          styles.messageWrapper,
-          isOwnMessage ? { justifyContent: 'flex-end' } : { justifyContent: 'flex-start' },
-          { marginVertical: 2, maxWidth: '80%', alignSelf: isOwnMessage ? 'flex-end' : 'flex-start' }
+          baseStyles.messageWrapper,
+          isOwnMessage ? { alignSelf: 'flex-end' } : { alignSelf: 'flex-start' },
+          { maxWidth: '80%', marginVertical: 4 }
         ]}
       >
         {!isOwnMessage && showSenderInfo && (
-          <Avatar.Text 
-            size={28} 
-            label={message.SenderName.substring(0, 2).toUpperCase()}
-            style={[styles.avatar, { marginBottom: 4 }]}
-          />
+          <Text style={[themedStyles.senderName, { marginLeft: 12 }]}>
+            {message.SenderName}
+          </Text>
         )}
-        
-        <View style={[styles.messageContentWrapper, { maxWidth: '100%' }]}>
-          {!isOwnMessage && showSenderInfo && (
-            <Text style={{ 
-              color: theme?.colors?.primary,
-              fontSize: 12,
-              marginBottom: 2,
-              marginLeft: 8
-            }}>
-              {message.SenderName}
-            </Text>
+
+        <View style={[
+          baseStyles.messageContainer,
+          isOwnMessage ? themedStyles.ownMessage : themedStyles.otherMessage,
+          { marginTop: showSenderInfo && !isOwnMessage ? 4 : 0 }
+        ]}>
+          {message.Type === 'IMAGE' && message.MediaURL && (
+            <Image
+              source={{ uri: message.MediaURL }}
+              style={[baseStyles.messageImage, { borderRadius: 12 }]}
+              resizeMode="cover"
+            />
           )}
           
-          <Surface
-            style={[
-              styles.messageContainer,
-              isOwnMessage ? styles.ownMessage : styles.otherMessage,
-              { 
-                backgroundColor: isOwnMessage ? 
-                  theme?.colors?.primary : 
-                  theme?.dark ? `${theme?.colors?.surface}80` : '#F8F9FA',
-                paddingVertical: 6,
-                paddingHorizontal: 12,
-                marginHorizontal: isOwnMessage ? 4 : 8
-              }
-            ]}
-          >
-            {message.Type === 'IMAGE' && message.MediaURL && (
-              <Image
-                source={{ uri: message.MediaURL }}
-                style={[styles.messageImage, { borderRadius: 8, marginBottom: 4 }]}
-                resizeMode="cover"
-              />
-            )}
-            
-            <Text style={[
-              styles.messageText,
-              { 
-                color: isOwnMessage ? '#FFFFFF' : theme?.colors?.text,
-                fontSize: 14,
-                lineHeight: 20
-              }
-            ]}>
-              {message.Content}
-            </Text>
+          <Text style={[
+            baseStyles.messageText,
+            isOwnMessage ? themedStyles.ownMessageText : themedStyles.otherMessageText,
+            { fontSize: 15, lineHeight: 20 }
+          ]}>
+            {message.Content}
+          </Text>
 
-            <Text style={[
-              styles.timestamp,
-              { 
-                color: isOwnMessage ? 'rgba(255,255,255,0.7)' : `${theme?.colors?.onSurface}60`,
-                fontSize: 10,
-                alignSelf: 'flex-end',
-                marginTop: 2
-              }
-            ]}>
-              {messageTime}
-            </Text>
-          </Surface>
-
-          {message.Reactions && message.Reactions.length > 0 && (
-            <View style={[styles.reactions, { marginTop: 2, marginLeft: 8 }]}>
-              {message.Reactions.map((reaction, index) => (
-                <Chip
-                  key={`${reaction.Emoji}-${index}`}
-                  style={[styles.reactionChip, {
-                    backgroundColor: reaction.UserReacted ? 
-                      `${theme?.colors?.primary}20` : 
-                      theme?.dark ? `${theme?.colors?.surface}50` : '#F0F0F0',
-                    height: 20,
-                    paddingHorizontal: 6
-                  }]}
-                  textStyle={{
-                    color: theme?.colors?.onSurface,
-                    fontSize: 10
-                  }}
-                >
-                  {`${reaction.Emoji} ${reaction.Count}`}
-                </Chip>
-              ))}
-            </View>
-          )}
+          <Text style={[
+            baseStyles.timestamp,
+            isOwnMessage ? themedStyles.ownTimestamp : themedStyles.otherTimestamp,
+            { fontSize: 11, marginTop: 4 }
+          ]}>
+            {messageTime}
+          </Text>
         </View>
       </Animated.View>
     );
   };
 
-  // Update socket event handlers
+  // Update socket event handler for message order
   useEffect(() => {
     if (socketRef.current) {
-      socketRef.current.on('new_message', (receivedMessage: Message) => {
-        console.log('[Chat] Received new message:', receivedMessage);
-        setMessages(prev => {
-          const messageExists = prev.some(msg => 
-            msg.MessageID === receivedMessage.MessageID || 
-            (msg.Content === receivedMessage.Content && 
-             msg.CreatedAt === receivedMessage.CreatedAt)
-          );
-          if (!messageExists) {
-            return [...prev, receivedMessage];
-          }
-          return prev;
-        });
-      });
+      socketRef.current.on('message_sent', async (data) => {
+        try {
+          console.log('[Chat] Received message_sent event:', data);
+          
+          // Only fetch if it's not our own message
+          if (data.senderId !== student?.TenantID) {
+            console.log('[Chat] Fetching message details for ID:', data.messageId);
+            
+            const response = await api.get(`/api/messages/rooms/${id}/messages/${data.messageId}`, {
+              headers: {
+                Authorization: `Bearer ${await AsyncStorage.getItem('student_token')}`
+              }
+            });
 
-      socketRef.current.on('message_error', (error: any) => {
-        console.error('[Chat] Message error:', error);
-        setError('Error with message: ' + error.message);
+            console.log('[Chat] Message details response:', response.data);
+
+            if (response.data?.success && response.data.message) {
+              console.log('[Chat] Current messages before update:', messages.length);
+              
+              setMessages(prev => {
+                // Check if message already exists
+                const exists = prev.some(msg => msg.MessageID === response.data.message.MessageID);
+                console.log('[Chat] Message exists?', exists);
+                
+                if (!exists) {
+                  const updatedMessages = [...prev, response.data.message];
+                  console.log('[Chat] Updated messages count:', updatedMessages.length);
+                  return updatedMessages;
+                }
+                return prev;
+              });
+            }
+          } else {
+            console.log('[Chat] Ignoring own message:', data.messageId);
+          }
+        } catch (error) {
+          console.error('[Chat] Error fetching message:', error);
+        }
       });
 
       return () => {
-        socketRef.current?.off('new_message');
-        socketRef.current?.off('message_error');
+        socketRef.current?.off('message_sent');
       };
     }
-  }, [socketRef.current]);
+  }, [socketRef.current, id, student?.TenantID]);
 
-  // Update the messages state when receiving initial messages
+  // Add logging to messages state updates
+  useEffect(() => {
+    console.log('[Chat] Messages state updated:', {
+      count: messages.length,
+      lastMessage: messages[messages.length - 1],
+      firstMessage: messages[0]
+    });
+  }, [messages]);
+
+  // Add logging to message state updates
   useEffect(() => {
     if (messages.length > 0) {
-      console.log('[Chat] Messages updated:', messages.length, 'messages');
+      console.log('[Chat] Messages state updated. Sample timestamps:');
+      messages.slice(0, 3).forEach(msg => {
+        console.log(`Message ID ${msg.MessageID}: ${msg.CreatedAt} -> ${formatMessageTime(msg.CreatedAt)}`);
+      });
     }
   }, [messages]);
 
@@ -901,22 +1130,22 @@ export default function ChatScreen() {
         }}>
           <Animated.View
             entering={FadeIn.duration(1000)}
-            style={styles.loadingContainer}
+            style={baseStyles.loadingContainer}
           >
-            <Surface style={[styles.loadingCard, {
+            <Surface style={[baseStyles.loadingCard, {
               backgroundColor: theme?.dark ? theme?.colors?.surface : '#FFFFFF',
               borderColor: `${theme?.colors?.primary}20`,
             }]}>
-              <View style={styles.loadingContent}>
+              <View style={baseStyles.loadingContent}>
                 <Animated.View
                   entering={FadeIn}
-                  style={styles.loadingIconContainer}
+                  style={baseStyles.loadingIconContainer}
                 >
                   {[0, 1, 2].map((i) => (
                     <Animated.View
                       key={i}
                       entering={FadeIn.delay(i * 200)}
-                      style={[styles.loadingDot, {
+                      style={[baseStyles.loadingDot, {
                         backgroundColor: theme?.colors?.primary,
                         transform: [{
                           scale: withSpring(1, {
@@ -930,7 +1159,7 @@ export default function ChatScreen() {
                     />
                   ))}
                 </Animated.View>
-                <Text style={[styles.loadingText, { color: theme?.colors?.primary }]}>
+                <Text style={[baseStyles.loadingText, { color: theme?.colors?.primary }]}>
                   {isConnecting ? 'Connecting to chat...' : 'Loading messages...'}
                 </Text>
               </View>
@@ -957,7 +1186,7 @@ export default function ChatScreen() {
   return (
     <StudentDashboardLayout title={chatRoom?.Name || 'Chat'}>
       <KeyboardAvoidingView 
-        style={[styles.container, { backgroundColor: theme?.dark ? theme?.colors?.background : '#FFFFFF' }]}
+        style={[baseStyles.container, { backgroundColor: theme?.dark ? theme?.colors?.background : '#FFFFFF' }]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <LinearGradient
@@ -974,94 +1203,71 @@ export default function ChatScreen() {
           scrollEventThrottle={16}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.5}
-          contentContainerStyle={[styles.scrollContent, {
+          contentContainerStyle={[{
             paddingHorizontal: 16,
-            flexDirection: 'column-reverse'
+            paddingBottom: 16,
+            flexGrow: 1,
+            justifyContent: 'flex-end'
           }]}
           style={{ flex: 1 }}
           inverted={false}
         >
           {loading && (
-            <View style={styles.loadingContainer}>
+            <View style={baseStyles.loadingContainer}>
               <ActivityIndicator size="small" color={theme?.colors?.primary} />
             </View>
           )}
-          {messages.slice().reverse().map((msg, index, array) => renderMessage(msg, array.length - 1 - index))}
+          {messages.map((msg, index) => renderMessage(msg, index))}
           {isTyping && <TypingIndicator />}
         </ScrollView>
 
-        {showScrollButton && (
-          <Animated.View 
-            entering={FadeIn.springify()}
-            exiting={FadeOut.springify()}
-            style={[styles.scrollButton, {
-              backgroundColor: theme?.dark ? `${theme?.colors?.primary}15` : '#FFFFFF',
-              borderWidth: 1,
-              borderColor: `${theme?.colors?.primary}30`,
-            }]}
-          >
-            <IconButton 
-              icon="chevron-down"
-              size={20}
-              iconColor={theme?.colors?.primary}
-              onPress={scrollToBottom}
-            />
-          </Animated.View>
-        )}
-
         <BlurView intensity={20} tint={theme?.dark ? 'dark' : 'light'} style={styles.inputWrapper}>
-          <Surface style={[styles.inputContainer, { 
-            backgroundColor: theme?.dark ? `${theme?.colors?.surface}95` : '#FFFFFF',
-            borderTopWidth: 1,
-            borderTopColor: `${theme?.colors?.primary}10`,
-          }]}>
+          <Surface style={[baseStyles.inputContainer, getThemedStyles().themedInputContainer]}>
             <IconButton 
               icon="emoticon-outline"
-              size={22}
+              size={24}
               iconColor={theme?.colors?.primary}
-              style={styles.inputIcon}
+              style={[styles.inputIcon, { opacity: 0.8 }]}
               onPress={() => setShowReactions(true)}
             />
             <IconButton 
               icon="paperclip"
-              size={22}
+              size={24}
               iconColor={theme?.colors?.primary}
-              style={styles.inputIcon}
+              style={[styles.inputIcon, { opacity: 0.8 }]}
               onPress={() => setShowAttachMenu(true)}
             />
             <TextInput
               placeholder="Type a message..."
               value={message}
               onChangeText={handleTyping}
-              style={[styles.input, {
-                backgroundColor: theme?.dark ? `${theme?.colors?.surface}80` : '#F8F8F8',
-                borderRadius: 24,
-                borderWidth: 1,
-                borderColor: `${theme?.colors?.primary}20`,
-                fontSize: 15,
-              }]}
-              placeholderTextColor={`${theme?.colors?.onSurface}40`}
+              style={[
+                baseStyles.input,
+                getThemedStyles().themedInput,
+                { fontSize: 16 }
+              ]}
+              placeholderTextColor={theme?.colors?.placeholder}
               right={
                 <TextInput.Icon 
                   icon={isRecording ? "stop" : "microphone"}
                   color={isRecording ? theme?.colors?.error : theme?.colors?.primary}
-                  size={20}
+                  size={22}
                   onPress={() => setIsRecording(!isRecording)}
                 />
               }
             />
             <IconButton 
               icon={message.trim() ? "send" : "camera"}
-              size={22}
+              size={24}
               style={[
-                styles.sendButton,
+                baseStyles.sendButton,
                 message.trim() && {
                   backgroundColor: theme?.colors?.primary,
                   transform: [{ rotate: '-45deg' }]
                 }
               ]}
               onPress={message.trim() ? handleSend : pickImage}
-              iconColor={message.trim() ? theme?.colors?.onPrimary : theme?.colors?.primary}
+              iconColor={message.trim() ? '#FFFFFF' : theme?.colors?.primary}
             />
           </Surface>
         </BlurView>
@@ -1108,41 +1314,8 @@ export default function ChatScreen() {
                     fontSize: 12,
                     marginTop: 4,
                   }]}>
-                  {item.label}
+                    {item.label}
                   </Text>
-                </Pressable>
-              ))}
-            </View>
-          </Modal>
-
-          <Modal
-            visible={showReactions}
-            onDismiss={() => setShowReactions(false)}
-            contentContainerStyle={[
-              styles.reactionsMenu,
-              { 
-                backgroundColor: theme?.dark ? theme?.colors?.surface : '#FFFFFF',
-                borderRadius: 24,
-              }
-            ]}
-          >
-            <View style={styles.reactionsGrid}>
-              {['👍', '❤️', '😂', '😮', '😢', '😡'].map((emoji, index) => (
-                <Pressable
-                  key={index}
-                  style={[styles.reactionButton, {
-                    backgroundColor: `${theme?.colors?.primary}10`,
-                    borderRadius: 12,
-                    padding: 8,
-                  }]}
-                  onPress={() => {
-                    if (selectedMessage) {
-                      handleReaction(selectedMessage.MessageID, emoji);
-                    }
-                    setShowReactions(false);
-                  }}
-                >
-                  <Text style={[styles.reactionEmoji, { fontSize: 24 }]}>{emoji}</Text>
                 </Pressable>
               ))}
             </View>
@@ -1151,285 +1324,4 @@ export default function ChatScreen() {
       </KeyboardAvoidingView>
     </StudentDashboardLayout>
   );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  loadingContainer: {
-    padding: 12,
-    alignItems: 'center',
-  },
-  messageWrapper: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    marginVertical: 2,
-    paddingHorizontal: 8,
-  },
-  messageContentWrapper: {
-    flex: 1,
-    maxWidth: '80%',
-  },
-  messageContainer: {
-    padding: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    maxWidth: '85%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  ownMessage: {
-    borderTopRightRadius: 4,
-    marginLeft: 'auto',
-  },
-  otherMessage: {
-    borderTopLeftRadius: 4,
-    marginRight: 'auto',
-  },
-  ownFirstInGroup: {
-    borderTopRightRadius: 20,
-  },
-  otherFirstInGroup: {
-    borderTopLeftRadius: 20,
-  },
-  ownLastInGroup: {
-    borderBottomRightRadius: 20,
-  },
-  otherLastInGroup: {
-    borderBottomLeftRadius: 20,
-  },
-  messageText: {
-    fontSize: 15,
-    lineHeight: 20,
-  },
-  messageImage: {
-    width: '100%',
-    height: 200,
-    borderRadius: 16,
-    marginBottom: 8,
-  },
-  messageFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    marginTop: 2,
-  },
-  timestamp: {
-    fontSize: 10,
-  },
-  reactions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-    marginTop: 4,
-    marginHorizontal: 4,
-  },
-  reactionChip: {
-    height: 24,
-    borderRadius: 12,
-  },
-  typingIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    paddingHorizontal: 12,
-    marginVertical: 8,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  typingDots: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 4,
-    height: 20,
-  },
-  dot: {
-    marginHorizontal: 2,
-    transform: [{ scale: 1 }],
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1,
-    elevation: 1,
-  },
-  typingLetter: {
-    transform: [{ scale: 1 }],
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
-  },
-  inputWrapper: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(0,0,0,0.1)',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    paddingHorizontal: 12,
-  },
-  input: {
-    flex: 1,
-    marginHorizontal: 8,
-    paddingHorizontal: 16,
-    height: 44,
-  },
-  inputIcon: {
-    margin: 0,
-    width: 36,
-    height: 36,
-  },
-  sendButton: {
-    margin: 0,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-  },
-  attachMenu: {
-    margin: 20,
-    padding: 16,
-    width: '90%',
-    alignSelf: 'center',
-  },
-  attachGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  attachButton: {
-    width: '48%',
-    padding: 12,
-    alignItems: 'center',
-  },
-  attachIconWrapper: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  attachButtonLabel: {
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  reactionsMenu: {
-    margin: 20,
-    padding: 20,
-    elevation: 4,
-  },
-  reactionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
-    justifyContent: 'center',
-  },
-  reactionButton: {
-    padding: 12,
-  },
-  reactionEmoji: {
-    fontSize: 28,
-  },
-  scrollButton: {
-    position: 'absolute',
-    right: 16,
-    bottom: 80,
-    borderRadius: 20,
-    elevation: 2,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingVertical: 16,
-  },
-  timeHeader: {
-    alignItems: 'center',
-    marginVertical: 16,
-    opacity: 0.7,
-  },
-  timeHeaderText: {
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  messageRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    marginBottom: 2,
-  },
-  messageContainer: {
-    padding: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  ownMessage: {
-    backgroundColor: '#007AFF',
-  },
-  otherMessage: {
-    backgroundColor: '#F8F9FA',
-  },
-  typingIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    paddingVertical: 8,
-    marginVertical: 8,
-  },
-  avatar: {
-    marginRight: 8,
-    alignSelf: 'flex-end',
-  },
-  loadingContainer: {
-    width: '100%',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  loadingCard: {
-    width: '100%',
-    maxWidth: 300,
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
-    elevation: 4,
-  },
-  loadingContent: {
-    padding: 24,
-    alignItems: 'center',
-  },
-  loadingIconContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-    height: 40,
-  },
-  loadingDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginHorizontal: 4,
-    opacity: 0.7,
-  },
-  loadingText: {
-    fontSize: 16,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-}); 
+} 
