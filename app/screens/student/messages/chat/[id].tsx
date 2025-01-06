@@ -377,27 +377,26 @@ export default function ChatScreen() {
   const [isConnecting, setIsConnecting] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Add timezone offset constant
-  const INDIA_TIMEZONE_OFFSET = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
-
   const formatMessageTime = (dateString: string) => {
     try {
       console.log('[Chat] Formatting time for:', dateString);
       
-      // Parse the UTC date string and convert directly to IST (UTC+5:30)
-      const utcDate = new Date(dateString);
-      const istTime = new Date(utcDate.getTime() + (5.5 * 60 * 60 * 1000));
+      // Create date from the string (it's already in IST)
+      const date = new Date(dateString.replace('Z', ''));
+      console.log('[Chat] Date object:', date);
       
-      // Get hours and minutes directly
-      const hours = istTime.getUTCHours();
-      const minutes = istTime.getUTCMinutes();
+      // Get hours and minutes (local time)
+      const hours = date.getHours();
+      const minutes = date.getMinutes();
+      
+      console.log('[Chat] Hours:', hours, 'Minutes:', minutes);
       
       // Format to 12-hour time
-      const period = hours >= 12 ? 'PM' : 'AM';
-      const displayHours = hours % 12 || 12; // Convert 0 to 12 for 12 AM
+      const period = hours >= 12 ? 'pm' : 'am';
+      const displayHours = hours % 12 || 12;
       const displayMinutes = minutes.toString().padStart(2, '0');
       
-      const formattedTime = `${displayHours}:${displayMinutes} ${period}`;
+      const formattedTime = `${displayHours}:${displayMinutes}${period}`;
       console.log('[Chat] Final formatted time:', formattedTime);
       
       return formattedTime;
@@ -570,16 +569,17 @@ export default function ChatScreen() {
         throw new Error(response.data?.message || 'Failed to load messages');
       }
 
-      // Log received messages timestamps
-      if (response.data.data.length > 0) {
-        console.log('[Chat] Received messages timestamps:');
-        response.data.data.slice(0, 3).forEach((msg: Message) => {
-          console.log(`Message ID ${msg.MessageID}: ${msg.CreatedAt}`);
-        });
-      }
+      // Keep messages in UTC string format
+      const messages = response.data.data.map((msg: Message) => {
+        console.log('[Chat] Original message timestamp:', msg.CreatedAt);
+        return {
+          ...msg,
+          CreatedAt: msg.CreatedAt // Keep as string
+        };
+      });
 
       // Sort messages in ascending order (oldest to newest)
-      const sortedMessages = [...response.data.data].sort((a, b) => 
+      const sortedMessages = [...messages].sort((a, b) => 
         new Date(a.CreatedAt).getTime() - new Date(b.CreatedAt).getTime()
       );
 
@@ -707,10 +707,10 @@ export default function ChatScreen() {
       // Message handlers
       socketRef.current.on('new_message', (newMessage) => {
         console.log('[Chat] Received new message:', newMessage);
-        // Convert UTC to IST for display
+        // Backend sends IST time, just ensure no 'Z' suffix
         const messageWithIST = {
           ...newMessage,
-          CreatedAt: new Date(new Date(newMessage.CreatedAt).getTime() + 330 * 60000)
+          CreatedAt: newMessage.CreatedAt.replace('Z', '')
         };
         
         setMessages(prev => {
@@ -883,26 +883,38 @@ export default function ChatScreen() {
         // Handle voice message
       } else {
         const messageContent = message.trim();
-        setMessage(''); // Clear input immediately for better UX
+        setMessage('');
         
         console.log('[Chat] Sending new message');
         
-        // Send only through socket
+        const tempId = `temp_${Date.now()}`;
+        
         socketRef.current?.emit('send_message', {
-          chatRoomId: parseInt(id),
+          chatRoomId: parseInt(id as string),
           content: messageContent,
           type: 'TEXT',
-          senderType: 'TENANT',
-          senderId: student?.TenantID
+          tempMessageId: tempId
         });
 
-        // Add optimistic message
+        // Create temp message with current time in IST format
+        const now = new Date();
+        // Format the date manually to match backend IST format
+        const timeString = `${now.getFullYear()}-` +
+          `${String(now.getMonth() + 1).padStart(2, '0')}-` +
+          `${String(now.getDate()).padStart(2, '0')}T` +
+          `${String(now.getHours()).padStart(2, '0')}:` +
+          `${String(now.getMinutes()).padStart(2, '0')}:` +
+          `${String(now.getSeconds()).padStart(2, '0')}.` +
+          `${String(now.getMilliseconds()).padStart(3, '0')}`;
+        
+        console.log('[Chat] Creating temp message with IST time:', timeString);
+
         const tempMessage = {
-          MessageID: `temp_${Date.now()}`,
-          ChatRoomID: parseInt(id),
+          MessageID: tempId,
+          ChatRoomID: parseInt(id as string),
           Content: messageContent,
           Type: 'TEXT',
-          CreatedAt: new Date(Date.now() + 330 * 60000), // Convert to IST
+          CreatedAt: timeString,
           SenderType: 'TENANT',
           SenderID: student?.TenantID,
           SenderName: student?.FullName,
@@ -1007,7 +1019,11 @@ export default function ChatScreen() {
       messages[index - 1]?.SenderID !== message.SenderID ||
       messages[index - 1]?.SenderType !== message.SenderType;
     
-    const messageTime = formatMessageTime(message.CreatedAt);
+    const messageTime = formatMessageTime(
+      typeof message.CreatedAt === 'string' 
+        ? message.CreatedAt 
+        : message.CreatedAt.toISOString()
+    );
 
     return (
       <Animated.View
@@ -1078,31 +1094,52 @@ export default function ChatScreen() {
             console.log('[Chat] Message details response:', response.data);
 
             if (response.data?.success && response.data.message) {
-              console.log('[Chat] Current messages before update:', messages.length);
+              // Backend sends IST time, just ensure no 'Z' suffix
+              const messageWithIST = {
+                ...response.data.message,
+                CreatedAt: response.data.message.CreatedAt.replace('Z', '')
+              };
               
               setMessages(prev => {
                 // Check if message already exists
-                const exists = prev.some(msg => msg.MessageID === response.data.message.MessageID);
+                const exists = prev.some(msg => msg.MessageID === messageWithIST.MessageID);
                 console.log('[Chat] Message exists?', exists);
                 
                 if (!exists) {
-                  const updatedMessages = [...prev, response.data.message];
+                  const updatedMessages = [...prev, messageWithIST];
                   console.log('[Chat] Updated messages count:', updatedMessages.length);
                   return updatedMessages;
                 }
                 return prev;
               });
             }
-          } else {
-            console.log('[Chat] Ignoring own message:', data.messageId);
           }
         } catch (error) {
           console.error('[Chat] Error fetching message:', error);
         }
       });
 
+      socketRef.current.on('new_message', (newMessage) => {
+        console.log('[Chat] Received new message:', newMessage);
+        // Backend sends IST time, just ensure no 'Z' suffix
+        const messageWithIST = {
+          ...newMessage,
+          CreatedAt: newMessage.CreatedAt.replace('Z', '')
+        };
+        
+        setMessages(prev => {
+          // Remove temp message if it exists
+          const filtered = prev.filter(m => 
+            !m.isPending && m.MessageID !== messageWithIST.MessageID
+          );
+          return [...filtered, messageWithIST];
+        });
+        scrollToBottom();
+      });
+
       return () => {
         socketRef.current?.off('message_sent');
+        socketRef.current?.off('new_message');
       };
     }
   }, [socketRef.current, id, student?.TenantID]);
