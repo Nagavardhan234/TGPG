@@ -663,7 +663,6 @@ export default function ChatScreen() {
         setIsConnecting(false);
         setError(null);
         
-        // Join room immediately after connection
         socketRef.current.emit('join_room', {
           roomId: id,
           userType: 'STUDENT',
@@ -700,39 +699,7 @@ export default function ChatScreen() {
       socketRef.current.on('disconnect', (reason) => {
         console.log('[Chat] Disconnected:', reason);
         if (reason === 'io server disconnect' || reason === 'transport close') {
-          socketRef.current.connect(); // Auto reconnect
-        }
-      });
-
-      // Message handlers
-      socketRef.current.on('new_message', (newMessage) => {
-        console.log('[Chat] Received new message:', newMessage);
-        // Backend sends IST time, just ensure no 'Z' suffix
-        const messageWithIST = {
-          ...newMessage,
-          CreatedAt: newMessage.CreatedAt.replace('Z', '')
-        };
-        
-        setMessages(prev => {
-          // Remove temp message if it exists
-          const filtered = prev.filter(m => 
-            !m.isPending && m.MessageID !== messageWithIST.MessageID
-          );
-          return [...filtered, messageWithIST];
-        });
-        scrollToBottom();
-      });
-
-      socketRef.current.on('typing_start', (data) => {
-        if (data.userId !== student?.TenantID) {
-          setIsTyping(true);
-          setTimeout(() => setIsTyping(false), 3000);
-        }
-      });
-
-      socketRef.current.on('typing_end', (data) => {
-        if (data.userId !== student?.TenantID) {
-          setIsTyping(false);
+          socketRef.current.connect();
         }
       });
 
@@ -742,7 +709,6 @@ export default function ChatScreen() {
     } catch (err: any) {
       console.error('[Chat] Socket initialization error:', err);
       setError('Connection error. Retrying...');
-      // Retry with polling after short delay
       setTimeout(() => {
         if (socketRef.current) {
           socketRef.current.io.opts.transports = ['polling', 'websocket'];
@@ -751,6 +717,71 @@ export default function ChatScreen() {
       }, 1000);
     }
   };
+
+  // Update socket event handler for message order
+  useEffect(() => {
+    if (socketRef.current) {
+      console.log('[Chat] Setting up message handlers');
+
+      socketRef.current.on('new_message', (newMessage) => {
+        console.log('[Chat] Received new message:', newMessage);
+        const messageWithIST = {
+          ...newMessage,
+          CreatedAt: newMessage.CreatedAt.replace('Z', '')
+        };
+        
+        setMessages(prev => {
+          // Remove temp message if it exists using tempMessageId
+          const filtered = prev.filter(m => 
+            !(m.isPending && m.MessageID === messageWithIST.tempMessageId)
+          );
+          return [...filtered, messageWithIST];
+        });
+        scrollToBottom();
+      });
+
+      socketRef.current.on('message_sent', async (data) => {
+        try {
+          console.log('[Chat] Received message_sent event:', data);
+          
+          // Only fetch if it's not our own message
+          if (data.senderId !== student?.TenantID) {
+            console.log('[Chat] Fetching message details for ID:', data.messageId);
+            
+            const response = await api.get(`/api/messages/rooms/${id}/messages/${data.messageId}`, {
+              headers: {
+                Authorization: `Bearer ${await AsyncStorage.getItem('student_token')}`
+              }
+            });
+
+            if (response.data?.success && response.data.message) {
+              const messageWithIST = {
+                ...response.data.message,
+                CreatedAt: response.data.message.CreatedAt.replace('Z', '')
+              };
+              
+              setMessages(prev => {
+                const exists = prev.some(msg => msg.MessageID === messageWithIST.MessageID);
+                if (!exists) {
+                  return [...prev, messageWithIST];
+                }
+                return prev;
+              });
+            }
+          }
+        } catch (error) {
+          console.error('[Chat] Error fetching message:', error);
+        }
+      });
+
+      // Cleanup all message handlers
+      return () => {
+        console.log('[Chat] Cleaning up message handlers');
+        socketRef.current?.off('new_message');
+        socketRef.current?.off('message_sent');
+      };
+    }
+  }, [socketRef.current, id, student?.TenantID]);
 
   // Cleanup socket on unmount
   useEffect(() => {
@@ -1073,76 +1104,6 @@ export default function ChatScreen() {
       </Animated.View>
     );
   };
-
-  // Update socket event handler for message order
-  useEffect(() => {
-    if (socketRef.current) {
-      socketRef.current.on('message_sent', async (data) => {
-        try {
-          console.log('[Chat] Received message_sent event:', data);
-          
-          // Only fetch if it's not our own message
-          if (data.senderId !== student?.TenantID) {
-            console.log('[Chat] Fetching message details for ID:', data.messageId);
-            
-            const response = await api.get(`/api/messages/rooms/${id}/messages/${data.messageId}`, {
-              headers: {
-                Authorization: `Bearer ${await AsyncStorage.getItem('student_token')}`
-              }
-            });
-
-            console.log('[Chat] Message details response:', response.data);
-
-            if (response.data?.success && response.data.message) {
-              // Backend sends IST time, just ensure no 'Z' suffix
-              const messageWithIST = {
-                ...response.data.message,
-                CreatedAt: response.data.message.CreatedAt.replace('Z', '')
-              };
-              
-              setMessages(prev => {
-                // Check if message already exists
-                const exists = prev.some(msg => msg.MessageID === messageWithIST.MessageID);
-                console.log('[Chat] Message exists?', exists);
-                
-                if (!exists) {
-                  const updatedMessages = [...prev, messageWithIST];
-                  console.log('[Chat] Updated messages count:', updatedMessages.length);
-                  return updatedMessages;
-                }
-                return prev;
-              });
-            }
-          }
-        } catch (error) {
-          console.error('[Chat] Error fetching message:', error);
-        }
-      });
-
-      socketRef.current.on('new_message', (newMessage) => {
-        console.log('[Chat] Received new message:', newMessage);
-        // Backend sends IST time, just ensure no 'Z' suffix
-        const messageWithIST = {
-          ...newMessage,
-          CreatedAt: newMessage.CreatedAt.replace('Z', '')
-        };
-        
-        setMessages(prev => {
-          // Remove temp message if it exists
-          const filtered = prev.filter(m => 
-            !m.isPending && m.MessageID !== messageWithIST.MessageID
-          );
-          return [...filtered, messageWithIST];
-        });
-        scrollToBottom();
-      });
-
-      return () => {
-        socketRef.current?.off('message_sent');
-        socketRef.current?.off('new_message');
-      };
-    }
-  }, [socketRef.current, id, student?.TenantID]);
 
   // Add logging to messages state updates
   useEffect(() => {
