@@ -526,31 +526,33 @@ export default function ChatScreen() {
             room: id,
             messageId: newMessage.MessageID,
             senderId: newMessage.SenderID,
-            currentUser: student?.TenantID,
-            timestamp: new Date().toISOString()
+            currentUser: student?.TenantID
           });
           
+          // Skip if this is our own message (we'll handle it in message_sent)
+          if (newMessage.SenderID === student?.TenantID) {
+            console.log('[Chat] Skipping own message in new_message handler');
+            return;
+          }
+
           const messageWithIST = {
             ...newMessage,
-            CreatedAt: newMessage.CreatedAt.replace('Z', ''),
-            uniqueKey: `msg_${newMessage.MessageID}_${Date.now()}` // Add unique key
+            CreatedAt: newMessage.CreatedAt.replace('Z', '')
           };
           
           setMessages(prev => {
-            // Check for duplicates using MessageID
             const exists = prev.some(m => 
               m.MessageID === messageWithIST.MessageID || 
               (m.isPending && m.MessageID === messageWithIST.tempMessageId)
             );
 
             if (!exists) {
-              return [...prev, messageWithIST].sort((a, b) => 
-                new Date(a.CreatedAt).getTime() - new Date(b.CreatedAt).getTime()
-              );
+              const newMessages = [...prev, messageWithIST];
+              setTimeout(scrollToBottom, 100);
+              return newMessages;
             }
             return prev;
           });
-          scrollToBottom();
         } catch (error) {
           console.error('[Chat] Error handling new_message:', error);
         }
@@ -574,13 +576,10 @@ export default function ChatScreen() {
 
             const confirmedMessage = {
               ...data.message,
-              CreatedAt: data.message.CreatedAt.replace('Z', ''),
-              uniqueKey: `msg_${data.message.MessageID}_${Date.now()}` // Add unique key
+              CreatedAt: data.message.CreatedAt.replace('Z', '')
             };
 
-            return [...updated, confirmedMessage].sort((a, b) => 
-              new Date(a.CreatedAt).getTime() - new Date(b.CreatedAt).getTime()
-            );
+            return [...updated, confirmedMessage];
           });
         } catch (error) {
           console.error('[Chat] Error handling message_sent:', error);
@@ -689,7 +688,7 @@ export default function ChatScreen() {
       const messages = response.data.data.map((msg: Message) => {
         return {
           ...msg,
-          CreatedAt: msg.CreatedAt // Keep as string
+          CreatedAt: msg.CreatedAt
         };
       });
 
@@ -697,6 +696,11 @@ export default function ChatScreen() {
       const sortedMessages = [...messages].sort((a, b) => 
         new Date(a.CreatedAt).getTime() - new Date(b.CreatedAt).getTime()
       );
+
+      // If this is the initial load or refresh, scroll to bottom after a delay
+      if (refresh || currentPage === 1) {
+        setTimeout(scrollToBottom, 100);
+      }
 
       return {
         ...response.data,
@@ -861,17 +865,8 @@ export default function ChatScreen() {
         const tempId = `temp_${Date.now()}`;
         const roomId = parseInt(id as string);
         
-        // Send message with proper room format
-        socketRef.current?.emit('send_message', {
-          chatRoomId: roomId,
-          content: messageContent,
-          type: 'TEXT',
-          tempMessageId: tempId
-        });
-
-        // Create temp message with current time in IST format
+        // Create temp message first
         const now = new Date();
-        // Format the date manually to match backend IST format
         const timeString = `${now.getFullYear()}-` +
           `${String(now.getMonth() + 1).padStart(2, '0')}-` +
           `${String(now.getDate()).padStart(2, '0')}T` +
@@ -896,8 +891,19 @@ export default function ChatScreen() {
           isPending: true
         };
 
+        // Add temp message to state first
         setMessages(prev => [...prev, tempMessage]);
-        setTimeout(() => scrollToBottom(), 100);
+
+        // Then emit the socket event
+        socketRef.current?.emit('send_message', {
+          chatRoomId: roomId,
+          content: messageContent,
+          type: 'TEXT',
+          tempMessageId: tempId
+        });
+
+        // Always scroll to bottom after sending
+        setTimeout(scrollToBottom, 100);
       }
     } catch (error) {
       console.error('[Chat] Error sending message:', error);
