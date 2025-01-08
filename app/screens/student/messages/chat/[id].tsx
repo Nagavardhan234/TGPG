@@ -29,39 +29,21 @@ import Animated, {
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useStudentAuth } from '@/app/context/StudentAuthContext';
-import { io } from 'socket.io-client';
+import { io, Socket } from 'socket.io-client';
 import api from '@/app/services/api';
 import { format } from 'date-fns';
 import { authService } from '@/app/services/auth.service';
 import jwtDecode from 'jwt-decode';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-interface Message {
-  MessageID: number;
-  Content: string;
-  Type: 'TEXT' | 'IMAGE' | 'VOICE' | 'FILE';
-  MediaURL?: string;
-  Duration?: number;
-  CreatedAt: string;
-  SenderType: string;
-  SenderID: number;
-  SenderName: string;
-  ReadCount: number;
-  Reactions?: {
-    Emoji: string;
-    Count: number;
-    UserReacted: boolean;
-  }[];
-}
-
-interface ChatRoom {
-  ChatRoomID: number;
-  Name: string;
-  Type: string;
-  LastMessage?: string;
-  UnreadCount: number;
-  LastTypingUser?: string;
-}
+import {
+  Message,
+  ChatRoom,
+  ServerToClientEvents,
+  ClientToServerEvents,
+  NewMessageEvent,
+  MessageSentEvent,
+  ChatSocket
+} from '@/app/types/chat';
 
 const baseStyles = StyleSheet.create({
   container: {
@@ -373,23 +355,21 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const socketRef = useRef<any>(null);
+  const socketRef = useRef<ChatSocket | null>(null);
   const [isConnecting, setIsConnecting] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const formatMessageTime = (dateString: string) => {
     try {
-      console.log('[Chat] Formatting time for:', dateString);
+     
       
       // Create date from the string (it's already in IST)
       const date = new Date(dateString.replace('Z', ''));
-      console.log('[Chat] Date object:', date);
       
       // Get hours and minutes (local time)
       const hours = date.getHours();
       const minutes = date.getMinutes();
       
-      console.log('[Chat] Hours:', hours, 'Minutes:', minutes);
       
       // Format to 12-hour time
       const period = hours >= 12 ? 'pm' : 'am';
@@ -397,7 +377,6 @@ export default function ChatScreen() {
       const displayMinutes = minutes.toString().padStart(2, '0');
       
       const formattedTime = `${displayHours}:${displayMinutes}${period}`;
-      console.log('[Chat] Final formatted time:', formattedTime);
       
       return formattedTime;
     } catch (error) {
@@ -406,6 +385,7 @@ export default function ChatScreen() {
     }
   };
 
+  // Main initialization useEffect
   useEffect(() => {
     const initializeChat = async () => {
       try {
@@ -414,43 +394,14 @@ export default function ChatScreen() {
         setError(null);
         
         // First check token and student data
-        const [token, studentStr] = await Promise.all([
-          AsyncStorage.getItem('student_token'),
-          AsyncStorage.getItem('student')
-        ]);
-
-        if (!token || !studentStr) {
-          console.log('[Chat] Missing token or student data');
+        const token = await AsyncStorage.getItem('student_token');
+        if (!token) {
+          console.log('[Chat] No token found, redirecting to login');
           router.replace('/screens/student/login');
           return;
         }
 
-        try {
-          const studentData = JSON.parse(studentStr);
-          console.log('[Chat] Student data:', studentData);
-          
-          // Check if we have PG information (handle both pgId and PGID)
-          if (!studentData?.pgId && !studentData?.PGID) {
-            console.log('[Chat] No PG ID found, fetching student details');
-            // If PG ID is missing, try to fetch fresh student details
-            const studentResponse = await api.get('/api/student/profile', {
-              headers: { Authorization: `Bearer ${token}` }
-            });
-            
-            if (studentResponse.data?.success && 
-               (studentResponse.data?.data?.pgId || studentResponse.data?.data?.PGID)) {
-              // Update stored student data with fresh data
-              await AsyncStorage.setItem('student', JSON.stringify(studentResponse.data.data));
-            } else {
-              throw new Error('Could not retrieve PG information');
-            }
-          }
-        } catch (parseError) {
-          console.error('[Chat] Error parsing/fetching student data:', parseError);
-          throw new Error('Invalid student data');
-        }
-
-        // Load chat data and initialize socket in parallel
+        // Load chat room and messages
         const roomResponse = await loadChatRoom();
         if (!roomResponse) {
           setLoading(false);
@@ -459,33 +410,199 @@ export default function ChatScreen() {
 
         setChatRoom(roomResponse.data);
         
-        const [messagesResponse] = await Promise.all([
-          loadMessages(),
-          initializeSocket()
-        ]);
+        // Initialize socket
+        const socketUrl = 'http://localhost:3000';
         
+        // Clean up existing socket if any
+        if (socketRef.current) {
+          console.log('[Chat] Cleaning up existing socket connection');
+          socketRef.current.removeAllListeners();
+          socketRef.current.disconnect();
+          socketRef.current = null;
+        }
+
+        console.log('[Chat] Creating new socket connection');
+        socketRef.current = io(socketUrl, {
+          path: '/socket.io',
+          auth: { token },
+          transports: ['websocket', 'polling'],
+          reconnection: true,
+          reconnectionAttempts: Infinity,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
+          timeout: 5000,
+          forceNew: true,
+          query: { 
+            roomId: `room:${id}`,
+            userType: 'STUDENT',
+            userId: student?.TenantID
+          }
+        }) as ChatSocket;
+
+        // Set up connection event handlers
+        socketRef.current.on('connect', () => {
+          console.log('[Chat] Socket connected with ID:', socketRef.current?.id);
+          setIsConnecting(false);
+          
+          // Join room after connection with proper format
+          const roomId = parseInt(id as string);
+          console.log('[Chat] Joining room:', roomId);
+          socketRef.current?.emit('join_room', {
+            roomId: `room:${roomId}`,
+            userType: 'STUDENT',
+            userId: student?.TenantID,
+            userName: student?.FullName
+          });
+        });
+
+        socketRef.current.on('room_joined', (data) => {
+          console.log('[Chat] Successfully joined room:', data);
+          setIsConnecting(false);
+          // Fetch latest messages after joining room
+          loadMessages(true).then(response => {
+            if (response?.success) {
+              setMessages(response.data);
+              setHasMore(response.data.length === 50);
+              setPage(2);
+            }
+          });
+        });
+
+        socketRef.current.on('connect_error', (error) => {
+          console.error('[Chat] Socket connection error:', error);
+          setError('Connection error occurred');
+          // Try to reconnect with polling if websocket fails
+          if (socketRef.current?.io?.opts?.transports?.[0] === 'websocket') {
+            console.log('[Chat] Falling back to polling transport');
+            socketRef.current.io.opts.transports = ['polling', 'websocket'];
+          }
+        });
+
+        socketRef.current.on('disconnect', (reason) => {
+          console.log('[Chat] Socket disconnected. Reason:', reason);
+          setIsConnecting(true);
+        });
+
+        // Load initial messages
+        const messagesResponse = await loadMessages();
         if (messagesResponse?.success) {
           setMessages(messagesResponse.data);
           setHasMore(messagesResponse.data.length === 50);
           setPage(2);
         }
 
+        setLoading(false);
+        setIsConnecting(false);
+
       } catch (error: any) {
         console.error('[Chat] Error initializing chat:', error);
         setError(error.message || 'Failed to initialize chat');
-      } finally {
         setLoading(false);
       }
     };
 
     initializeChat();
 
+    // Cleanup on unmount
     return () => {
       if (socketRef.current) {
+        console.log('[Chat] Cleaning up socket connection');
+        socketRef.current.removeAllListeners();
         socketRef.current.disconnect();
+        socketRef.current = null;
       }
     };
-  }, [id]);
+  }, [id]); // Only re-run if chat room ID changes
+
+  // Message handling useEffect
+  useEffect(() => {
+    if (socketRef.current) {
+      console.log('[Chat] Setting up message handlers for room:', id);
+
+      // Handle new messages
+      const handleNewMessage = (newMessage: NewMessageEvent) => {
+        try {
+          console.log('[Chat] Received new_message event:', {
+            room: id,
+            messageId: newMessage.MessageID,
+            senderId: newMessage.SenderID,
+            currentUser: student?.TenantID,
+            timestamp: new Date().toISOString()
+          });
+          
+          const messageWithIST = {
+            ...newMessage,
+            CreatedAt: newMessage.CreatedAt.replace('Z', ''),
+            uniqueKey: `msg_${newMessage.MessageID}_${Date.now()}` // Add unique key
+          };
+          
+          setMessages(prev => {
+            // Check for duplicates using MessageID
+            const exists = prev.some(m => 
+              m.MessageID === messageWithIST.MessageID || 
+              (m.isPending && m.MessageID === messageWithIST.tempMessageId)
+            );
+
+            if (!exists) {
+              return [...prev, messageWithIST].sort((a, b) => 
+                new Date(a.CreatedAt).getTime() - new Date(b.CreatedAt).getTime()
+              );
+            }
+            return prev;
+          });
+          scrollToBottom();
+        } catch (error) {
+          console.error('[Chat] Error handling new_message:', error);
+        }
+      };
+
+      // Handle message sent confirmation
+      const handleMessageSent = (data: MessageSentEvent) => {
+        try {
+          console.log('[Chat] Received message_sent event:', data);
+          
+          if (!data?.message) {
+            console.error('[Chat] Invalid message_sent data:', data);
+            return;
+          }
+
+          setMessages(prev => {
+            // Remove temp message and add confirmed message
+            const updated = prev.filter(msg => 
+              !(msg.isPending && msg.MessageID === data.tempMessageId)
+            );
+
+            const confirmedMessage = {
+              ...data.message,
+              CreatedAt: data.message.CreatedAt.replace('Z', ''),
+              uniqueKey: `msg_${data.message.MessageID}_${Date.now()}` // Add unique key
+            };
+
+            return [...updated, confirmedMessage].sort((a, b) => 
+              new Date(a.CreatedAt).getTime() - new Date(b.CreatedAt).getTime()
+            );
+          });
+        } catch (error) {
+          console.error('[Chat] Error handling message_sent:', error);
+        }
+      };
+
+      socketRef.current.on('new_message', handleNewMessage);
+      socketRef.current.on('message_sent', handleMessageSent);
+
+      return () => {
+        console.log('[Chat] Cleaning up message handlers for room:', id);
+        socketRef.current?.off('new_message', handleNewMessage);
+        socketRef.current?.off('message_sent', handleMessageSent);
+        const roomId = parseInt(id as string);
+        socketRef.current?.emit('leave_room', {
+          roomId: roomId,
+          userType: 'STUDENT',
+          userId: student?.TenantID
+        });
+      };
+    }
+  }, [socketRef.current, id, student?.TenantID]);
 
   const loadChatRoom = async () => {
     try {
@@ -569,9 +686,7 @@ export default function ChatScreen() {
         throw new Error(response.data?.message || 'Failed to load messages');
       }
 
-      // Keep messages in UTC string format
       const messages = response.data.data.map((msg: Message) => {
-        console.log('[Chat] Original message timestamp:', msg.CreatedAt);
         return {
           ...msg,
           CreatedAt: msg.CreatedAt // Keep as string
@@ -618,181 +733,6 @@ export default function ChatScreen() {
       }
     }
   };
-
-  const initializeSocket = async () => {
-    try {
-      console.log('[Chat] Starting socket initialization');
-      const token = await AsyncStorage.getItem('student_token');
-      
-      if (!token) {
-        router.replace('/screens/student/login');
-        return;
-      }
-
-      // Use localhost for development
-      const socketUrl = 'http://localhost:3000';
-      
-      // Clean up existing socket if any
-      if (socketRef.current) {
-        socketRef.current.removeAllListeners();
-        socketRef.current.disconnect();
-        socketRef.current = null;
-      }
-
-      // Create new socket connection with optimized settings
-      socketRef.current = io(socketUrl, {
-        path: '/socket.io',
-        auth: { token },
-        transports: ['websocket'], // Use only websocket for faster connection
-        reconnection: true,
-        reconnectionAttempts: Infinity,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        timeout: 5000,
-        forceNew: true,
-        query: { 
-          roomId: id,
-          userType: 'STUDENT'
-        },
-        autoConnect: false // We'll manually connect for better control
-      });
-
-      // Set up event handlers before connecting
-      socketRef.current.on('connect', () => {
-        console.log('[Chat] Socket connected:', socketRef.current.id);
-        setIsConnecting(false);
-        setError(null);
-        
-        socketRef.current.emit('join_room', {
-          roomId: id,
-          userType: 'STUDENT',
-          userId: student?.TenantID,
-          userName: student?.FullName
-        });
-      });
-
-      socketRef.current.on('connect_error', (err) => {
-        console.error('[Chat] Connection error:', err.message);
-        // Fall back to polling if websocket fails
-        if (socketRef.current.io.opts.transports[0] === 'websocket') {
-          console.log('[Chat] Falling back to polling');
-          socketRef.current.io.opts.transports = ['polling', 'websocket'];
-          socketRef.current.connect();
-        }
-      });
-
-      socketRef.current.on('room_joined', (data) => {
-        console.log('[Chat] Joined room:', data);
-        setError(null);
-        setIsConnecting(false);
-      });
-
-      socketRef.current.on('room_join_error', (error) => {
-        console.error('[Chat] Room join error:', error);
-        // Retry immediately with polling if websocket fails
-        if (socketRef.current.io.opts.transports[0] === 'websocket') {
-          socketRef.current.io.opts.transports = ['polling', 'websocket'];
-          socketRef.current.connect();
-        }
-      });
-
-      socketRef.current.on('disconnect', (reason) => {
-        console.log('[Chat] Disconnected:', reason);
-        if (reason === 'io server disconnect' || reason === 'transport close') {
-          socketRef.current.connect();
-        }
-      });
-
-      // Start connection
-      socketRef.current.connect();
-
-    } catch (err: any) {
-      console.error('[Chat] Socket initialization error:', err);
-      setError('Connection error. Retrying...');
-      setTimeout(() => {
-        if (socketRef.current) {
-          socketRef.current.io.opts.transports = ['polling', 'websocket'];
-          socketRef.current.connect();
-        }
-      }, 1000);
-    }
-  };
-
-  // Update socket event handler for message order
-  useEffect(() => {
-    if (socketRef.current) {
-      console.log('[Chat] Setting up message handlers');
-
-      socketRef.current.on('new_message', (newMessage) => {
-        console.log('[Chat] Received new message:', newMessage);
-        const messageWithIST = {
-          ...newMessage,
-          CreatedAt: newMessage.CreatedAt.replace('Z', '')
-        };
-        
-        setMessages(prev => {
-          // Remove temp message if it exists using tempMessageId
-          const filtered = prev.filter(m => 
-            !(m.isPending && m.MessageID === messageWithIST.tempMessageId)
-          );
-          return [...filtered, messageWithIST];
-        });
-        scrollToBottom();
-      });
-
-      socketRef.current.on('message_sent', async (data) => {
-        try {
-          console.log('[Chat] Received message_sent event:', data);
-          
-          // Only fetch if it's not our own message
-          if (data.senderId !== student?.TenantID) {
-            console.log('[Chat] Fetching message details for ID:', data.messageId);
-            
-            const response = await api.get(`/api/messages/rooms/${id}/messages/${data.messageId}`, {
-              headers: {
-                Authorization: `Bearer ${await AsyncStorage.getItem('student_token')}`
-              }
-            });
-
-            if (response.data?.success && response.data.message) {
-              const messageWithIST = {
-                ...response.data.message,
-                CreatedAt: response.data.message.CreatedAt.replace('Z', '')
-              };
-              
-              setMessages(prev => {
-                const exists = prev.some(msg => msg.MessageID === messageWithIST.MessageID);
-                if (!exists) {
-                  return [...prev, messageWithIST];
-                }
-                return prev;
-              });
-            }
-          }
-        } catch (error) {
-          console.error('[Chat] Error fetching message:', error);
-        }
-      });
-
-      // Cleanup all message handlers
-      return () => {
-        console.log('[Chat] Cleaning up message handlers');
-        socketRef.current?.off('new_message');
-        socketRef.current?.off('message_sent');
-      };
-    }
-  }, [socketRef.current, id, student?.TenantID]);
-
-  // Cleanup socket on unmount
-  useEffect(() => {
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.removeAllListeners();
-        socketRef.current.disconnect();
-        socketRef.current = null;
-      }
-    };
-  }, []);
 
   const checkTokenAndRedirect = async () => {
     try {
@@ -919,9 +859,11 @@ export default function ChatScreen() {
         console.log('[Chat] Sending new message');
         
         const tempId = `temp_${Date.now()}`;
+        const roomId = parseInt(id as string);
         
+        // Send message with proper room format
         socketRef.current?.emit('send_message', {
-          chatRoomId: parseInt(id as string),
+          chatRoomId: roomId,
           content: messageContent,
           type: 'TEXT',
           tempMessageId: tempId
@@ -942,13 +884,13 @@ export default function ChatScreen() {
 
         const tempMessage = {
           MessageID: tempId,
-          ChatRoomID: parseInt(id as string),
+          ChatRoomID: roomId,
           Content: messageContent,
-          Type: 'TEXT',
+          Type: 'TEXT' as const,
           CreatedAt: timeString,
-          SenderType: 'TENANT',
-          SenderID: student?.TenantID,
-          SenderName: student?.FullName,
+          SenderType: 'TENANT' as const,
+          SenderID: student?.TenantID || 0,
+          SenderName: student?.FullName || '',
           ReadCount: 0,
           Reactions: [],
           isPending: true
@@ -1056,9 +998,12 @@ export default function ChatScreen() {
         : message.CreatedAt.toISOString()
     );
 
+    // Use unique key for the message
+    const messageKey = message.uniqueKey || `msg_${message.MessageID}_${index}`;
+
     return (
       <Animated.View
-        key={message.MessageID}
+        key={messageKey}
         entering={isOwnMessage ? SlideInRight.springify() : FadeIn.springify()}
         style={[
           baseStyles.messageWrapper,
@@ -1124,6 +1069,95 @@ export default function ChatScreen() {
     }
   }, [messages]);
 
+  // Add initializeSocket function
+  const initializeSocket = async () => {
+    try {
+      setError(null);
+      setIsConnecting(true);
+
+      // Check token
+      const token = await AsyncStorage.getItem('student_token');
+      if (!token) {
+        console.log('[Chat] No token found, redirecting to login');
+        router.replace('/screens/student/login');
+        return;
+      }
+
+      // Clean up existing socket if any
+      if (socketRef.current) {
+        console.log('[Chat] Cleaning up existing socket connection');
+        socketRef.current.removeAllListeners();
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+
+      // Initialize socket
+      const socketUrl = 'http://localhost:3000';
+      console.log('[Chat] Creating new socket connection');
+      socketRef.current = io(socketUrl, {
+        path: '/socket.io',
+        auth: { token },
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 5000,
+        forceNew: true,
+        query: { 
+          roomId: `room:${id}`,
+          userType: 'STUDENT',
+          userId: student?.TenantID
+        }
+      }) as ChatSocket;
+
+      // Set up connection event handlers
+      socketRef.current.on('connect', () => {
+        console.log('[Chat] Socket connected with ID:', socketRef.current?.id);
+        setIsConnecting(false);
+        
+        // Join room after connection
+        const roomId = parseInt(id as string);
+        console.log('[Chat] Joining room:', roomId);
+        socketRef.current?.emit('join_room', {
+          roomId: `room:${roomId}`,
+          userType: 'STUDENT',
+          userId: student?.TenantID,
+          userName: student?.FullName
+        });
+      });
+
+      socketRef.current.on('room_joined', (data) => {
+        console.log('[Chat] Successfully joined room:', data);
+        setIsConnecting(false);
+        // Fetch latest messages after joining room
+        loadMessages(true).then(response => {
+          if (response?.success) {
+            setMessages(response.data);
+            setHasMore(response.data.length === 50);
+            setPage(2);
+          }
+        });
+      });
+
+      socketRef.current.on('connect_error', (error) => {
+        console.error('[Chat] Socket connection error:', error);
+        setError('Connection error occurred');
+        // Try to reconnect with polling if websocket fails
+        if (socketRef.current?.io?.opts?.transports?.[0] === 'websocket') {
+          console.log('[Chat] Falling back to polling transport');
+          socketRef.current.io.opts.transports = ['polling', 'websocket'];
+        }
+      });
+
+    } catch (error: any) {
+      console.error('[Chat] Error initializing socket:', error);
+      setError(error.message || 'Failed to initialize socket connection');
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
   if (isConnecting || loading) {
     return (
       <StudentDashboardLayout title="Chat">
@@ -1178,11 +1212,29 @@ export default function ChatScreen() {
   if (error) {
     return (
       <StudentDashboardLayout title="Chat">
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <Text style={{ color: theme?.colors?.error, marginBottom: 16 }}>{error}</Text>
-          <Button mode="contained" onPress={() => initializeSocket()}>
-            Retry Connection
-          </Button>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Surface style={{ 
+            padding: 20, 
+            borderRadius: 12,
+            backgroundColor: theme?.dark ? theme?.colors?.surface : '#FFFFFF',
+            elevation: 4
+          }}>
+            <Text style={{ 
+              color: theme?.colors?.error, 
+              marginBottom: 16,
+              textAlign: 'center',
+              fontSize: 16
+            }}>
+              {error}
+            </Text>
+            <Button 
+              mode="contained" 
+              onPress={initializeSocket}
+              style={{ marginTop: 8 }}
+            >
+              Retry Connection
+            </Button>
+          </Surface>
         </View>
       </StudentDashboardLayout>
     );
