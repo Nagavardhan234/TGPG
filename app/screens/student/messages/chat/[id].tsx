@@ -56,59 +56,63 @@ const baseStyles = StyleSheet.create({
   messageWrapper: {
     marginHorizontal: 8,
     marginVertical: 2,
+    maxWidth: '85%',
   },
   messageContainer: {
-    borderRadius: 20,
+    borderRadius: 24,
     padding: 12,
-    paddingBottom: 8,
+    paddingVertical: 10,
     minWidth: 80,
     maxWidth: '100%',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   messageText: {
-    fontSize: 15,
-    lineHeight: 20,
-    marginBottom: 4,
+    fontSize: 15.5,
+    lineHeight: 22,
+    letterSpacing: 0.2,
   },
   timestamp: {
     fontSize: 11,
-    marginTop: 2,
-    alignSelf: 'flex-end',
+    marginTop: 4,
+    letterSpacing: 0.1,
   },
   messageImage: {
     width: '100%',
     height: 200,
-    borderRadius: 12,
+    borderRadius: 16,
     marginBottom: 8,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
   },
   input: {
     flex: 1,
-    marginHorizontal: 12,
+    marginHorizontal: 8,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    fontSize: 15,
+    fontSize: 15.5,
+    letterSpacing: 0.2,
+    lineHeight: 22,
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     justifyContent: 'center',
     alignItems: 'center',
   },
   attachButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
   }
@@ -427,10 +431,10 @@ export default function ChatScreen() {
           auth: { token },
           transports: ['websocket', 'polling'],
           reconnection: true,
-          reconnectionAttempts: Infinity,
-          reconnectionDelay: 1000,
-          reconnectionDelayMax: 5000,
-          timeout: 5000,
+          reconnectionAttempts: 5,  // Limit reconnection attempts
+          reconnectionDelay: 2000,  // Increase initial delay
+          reconnectionDelayMax: 10000,  // Increase max delay
+          timeout: 10000,
           forceNew: true,
           query: { 
             roomId: `room:${id}`,
@@ -448,7 +452,7 @@ export default function ChatScreen() {
           const roomId = parseInt(id as string);
           console.log('[Chat] Joining room:', roomId);
           socketRef.current?.emit('join_room', {
-            roomId: `room:${roomId}`,
+            roomId: roomId,  // Send just the room ID, server will format it
             userType: 'STUDENT',
             userId: student?.TenantID,
             userName: student?.FullName
@@ -470,7 +474,18 @@ export default function ChatScreen() {
 
         socketRef.current.on('connect_error', (error) => {
           console.error('[Chat] Socket connection error:', error);
-          setError('Connection error occurred');
+          
+          if (error.message.includes('rate limit') || error.message.includes('Too many requests')) {
+            setError('Too many connection attempts. Please wait a moment...');
+            // Increase reconnection delay on rate limit
+            if (socketRef.current?.io?.opts) {
+              socketRef.current.io.opts.reconnectionDelay = 5000;
+              socketRef.current.io.opts.reconnectionDelayMax = 20000;
+            }
+          } else {
+            setError('Connection error occurred');
+          }
+
           // Try to reconnect with polling if websocket fails
           if (socketRef.current?.io?.opts?.transports?.[0] === 'websocket') {
             console.log('[Chat] Falling back to polling transport');
@@ -481,6 +496,29 @@ export default function ChatScreen() {
         socketRef.current.on('disconnect', (reason) => {
           console.log('[Chat] Socket disconnected. Reason:', reason);
           setIsConnecting(true);
+        });
+
+        // Add reconnect attempt handler
+        socketRef.current.on('reconnect_attempt', (attempt) => {
+          console.log(`[Chat] Reconnection attempt ${attempt}`);
+          if (attempt > 2) {
+            // Increase delays for subsequent attempts
+            if (socketRef.current?.io?.opts) {
+              socketRef.current.io.opts.reconnectionDelay *= 1.5;
+              socketRef.current.io.opts.reconnectionDelayMax *= 1.5;
+            }
+          }
+        });
+
+        // Add reconnect handler
+        socketRef.current.on('reconnect', (attempt) => {
+          console.log(`[Chat] Reconnected after ${attempt} attempts`);
+          setError(null);
+          // Reset delays after successful reconnection
+          if (socketRef.current?.io?.opts) {
+            socketRef.current.io.opts.reconnectionDelay = 2000;
+            socketRef.current.io.opts.reconnectionDelayMax = 10000;
+          }
         });
 
         // Load initial messages
@@ -524,11 +562,18 @@ export default function ChatScreen() {
         try {
           console.log('[Chat] Received new_message event:', {
             room: id,
+            messageRoom: newMessage.ChatRoomID,
             messageId: newMessage.MessageID,
             senderId: newMessage.SenderID,
             currentUser: student?.TenantID
           });
           
+          // Skip if message is not for this room
+          if (newMessage.ChatRoomID.toString() !== id.toString()) {
+            console.log('[Chat] Skipping message from different room:', newMessage.ChatRoomID);
+            return;
+          }
+
           // Skip if this is our own message (we'll handle it in message_sent)
           if (newMessage.SenderID === student?.TenantID) {
             console.log('[Chat] Skipping own message in new_message handler');
@@ -561,10 +606,20 @@ export default function ChatScreen() {
       // Handle message sent confirmation
       const handleMessageSent = (data: MessageSentEvent) => {
         try {
-          console.log('[Chat] Received message_sent event:', data);
+          console.log('[Chat] Received message_sent event:', {
+            room: id,
+            messageRoom: data.message?.ChatRoomID,
+            tempId: data.tempMessageId
+          });
           
           if (!data?.message) {
             console.error('[Chat] Invalid message_sent data:', data);
+            return;
+          }
+
+          // Skip if message is not for this room
+          if (data.message.ChatRoomID.toString() !== id.toString()) {
+            console.log('[Chat] Skipping message_sent from different room:', data.message.ChatRoomID);
             return;
           }
 
@@ -931,62 +986,70 @@ export default function ChatScreen() {
   const getThemedStyles = () => ({
     ownMessage: {
       backgroundColor: theme?.colors?.primary,
-      borderRadius: 20,
-      borderBottomRightRadius: 4,
+      borderRadius: 24,
+      borderBottomRightRadius: 8,
       marginLeft: 'auto',
       borderWidth: 0,
       shadowColor: theme?.colors?.primary,
-      shadowOffset: { width: 0, height: 2 },
+      shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.2,
-      shadowRadius: 4,
-      elevation: 3,
+      shadowRadius: 8,
+      elevation: 4,
     },
     otherMessage: {
-      backgroundColor: theme?.dark ? 'rgba(255,255,255,0.08)' : '#F0F2F5',
-      borderRadius: 20,
-      borderBottomLeftRadius: 4,
+      backgroundColor: theme?.dark ? 'rgba(255,255,255,0.08)' : '#F5F7FA',
+      borderRadius: 24,
+      borderBottomLeftRadius: 8,
       marginRight: 'auto',
       borderWidth: 0,
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
+      shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.1,
-      shadowRadius: 2,
+      shadowRadius: 4,
       elevation: 2,
     },
     senderName: {
-      fontSize: 13,
+      fontSize: 13.5,
       color: theme?.colors?.primary,
-      marginBottom: 2,
+      marginBottom: 4,
       fontWeight: '600',
+      letterSpacing: 0.2,
       opacity: 0.9,
+      paddingHorizontal: 4,
     },
     ownMessageText: {
       color: '#FFFFFF',
       fontWeight: '400',
     },
     otherMessageText: {
-      color: theme?.dark ? '#FFFFFF' : '#000000',
+      color: theme?.dark ? '#FFFFFF' : '#2C3E50',
       fontWeight: '400',
     },
     ownTimestamp: {
-      color: 'rgba(255,255,255,0.7)',
+      color: 'rgba(255,255,255,0.8)',
       fontSize: 11,
+      letterSpacing: 0.1,
     },
     otherTimestamp: {
-      color: theme?.dark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)',
+      color: theme?.dark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)',
       fontSize: 11,
+      letterSpacing: 0.1,
     },
     themedInput: {
-      backgroundColor: theme?.dark ? 'rgba(255,255,255,0.08)' : '#F0F2F5',
+      backgroundColor: theme?.dark ? 'rgba(255,255,255,0.08)' : '#F5F7FA',
       borderRadius: 24,
       borderWidth: 0,
       color: theme?.colors?.text,
       elevation: 2,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
     },
     themedInputContainer: {
       backgroundColor: theme?.dark ? theme?.colors?.surface : '#FFFFFF',
       borderTopWidth: 1,
-      borderTopColor: theme?.dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+      borderTopColor: theme?.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
       paddingVertical: 8,
     }
   });
@@ -1004,23 +1067,26 @@ export default function ChatScreen() {
         : message.CreatedAt.toISOString()
     );
 
-    // Use unique key for the message
-    const messageKey = message.uniqueKey || `msg_${message.MessageID}_${index}`;
-
     return (
       <Animated.View
-        key={messageKey}
-        entering={isOwnMessage ? SlideInRight.springify() : FadeIn.springify()}
+        key={`msg_${message.MessageID}_${index}`}
+        entering={isOwnMessage ? 
+          SlideInRight.springify().mass(0.8).damping(12).stiffness(100) : 
+          FadeIn.springify().mass(0.8).damping(12).stiffness(100)
+        }
         style={[
           baseStyles.messageWrapper,
           isOwnMessage ? { alignSelf: 'flex-end' } : { alignSelf: 'flex-start' },
-          { maxWidth: '80%', marginVertical: 4 }
+          { marginVertical: 4 }
         ]}
       >
         {!isOwnMessage && showSenderInfo && (
-          <Text style={[themedStyles.senderName, { marginLeft: 12 }]}>
+          <Animated.Text 
+            entering={FadeIn.springify()}
+            style={[themedStyles.senderName, { marginLeft: 12 }]}
+          >
             {message.SenderName}
-          </Text>
+          </Animated.Text>
         )}
 
         <View style={[
@@ -1029,25 +1095,24 @@ export default function ChatScreen() {
           { marginTop: showSenderInfo && !isOwnMessage ? 4 : 0 }
         ]}>
           {message.Type === 'IMAGE' && message.MediaURL && (
-            <Image
+            <Animated.Image
+              entering={FadeIn.duration(300)}
               source={{ uri: message.MediaURL }}
-              style={[baseStyles.messageImage, { borderRadius: 12 }]}
+              style={[baseStyles.messageImage]}
               resizeMode="cover"
             />
           )}
           
           <Text style={[
             baseStyles.messageText,
-            isOwnMessage ? themedStyles.ownMessageText : themedStyles.otherMessageText,
-            { fontSize: 15, lineHeight: 20 }
+            isOwnMessage ? themedStyles.ownMessageText : themedStyles.otherMessageText
           ]}>
             {message.Content}
           </Text>
 
           <Text style={[
             baseStyles.timestamp,
-            isOwnMessage ? themedStyles.ownTimestamp : themedStyles.otherTimestamp,
-            { fontSize: 11, marginTop: 4 }
+            isOwnMessage ? themedStyles.ownTimestamp : themedStyles.otherTimestamp
           ]}>
             {messageTime}
           </Text>
@@ -1105,10 +1170,10 @@ export default function ChatScreen() {
         auth: { token },
         transports: ['websocket', 'polling'],
         reconnection: true,
-        reconnectionAttempts: Infinity,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        timeout: 5000,
+        reconnectionAttempts: 5,  // Limit reconnection attempts
+        reconnectionDelay: 2000,  // Increase initial delay
+        reconnectionDelayMax: 10000,  // Increase max delay
+        timeout: 10000,
         forceNew: true,
         query: { 
           roomId: `room:${id}`,
@@ -1126,7 +1191,7 @@ export default function ChatScreen() {
         const roomId = parseInt(id as string);
         console.log('[Chat] Joining room:', roomId);
         socketRef.current?.emit('join_room', {
-          roomId: `room:${roomId}`,
+          roomId: roomId,
           userType: 'STUDENT',
           userId: student?.TenantID,
           userName: student?.FullName
@@ -1148,11 +1213,45 @@ export default function ChatScreen() {
 
       socketRef.current.on('connect_error', (error) => {
         console.error('[Chat] Socket connection error:', error);
-        setError('Connection error occurred');
+        
+        if (error.message.includes('rate limit') || error.message.includes('Too many requests')) {
+          setError('Too many connection attempts. Please wait a moment...');
+          // Increase reconnection delay on rate limit
+          if (socketRef.current?.io?.opts) {
+            socketRef.current.io.opts.reconnectionDelay = 5000;
+            socketRef.current.io.opts.reconnectionDelayMax = 20000;
+          }
+        } else {
+          setError('Connection error occurred');
+        }
+
         // Try to reconnect with polling if websocket fails
         if (socketRef.current?.io?.opts?.transports?.[0] === 'websocket') {
           console.log('[Chat] Falling back to polling transport');
           socketRef.current.io.opts.transports = ['polling', 'websocket'];
+        }
+      });
+
+      // Add reconnect attempt handler
+      socketRef.current.on('reconnect_attempt', (attempt) => {
+        console.log(`[Chat] Reconnection attempt ${attempt}`);
+        if (attempt > 2) {
+          // Increase delays for subsequent attempts
+          if (socketRef.current?.io?.opts) {
+            socketRef.current.io.opts.reconnectionDelay *= 1.5;
+            socketRef.current.io.opts.reconnectionDelayMax *= 1.5;
+          }
+        }
+      });
+
+      // Add reconnect handler
+      socketRef.current.on('reconnect', (attempt) => {
+        console.log(`[Chat] Reconnected after ${attempt} attempts`);
+        setError(null);
+        // Reset delays after successful reconnection
+        if (socketRef.current?.io?.opts) {
+          socketRef.current.io.opts.reconnectionDelay = 2000;
+          socketRef.current.io.opts.reconnectionDelayMax = 10000;
         }
       });
 
