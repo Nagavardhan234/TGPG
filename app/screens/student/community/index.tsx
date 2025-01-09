@@ -127,51 +127,89 @@ export default function CommunityScreen() {
 
   const handleVote = async (pollId: number, optionId: number) => {
     try {
-      const response = await api.post(`/api/community/polls/options/${optionId}/vote`);
-      if (response.data.success) {
-        setPosts(posts.map(post => {
-          if (post.Type === 'POLL' && post.AdditionalData?.PollID === pollId) {
-            const updatedOptions = response.data.data;
-            return {
+      // Check if user has already voted
+      const hasVoted = posts.find(post => 
+        post.Type === 'POLL' && 
+        post.PostID === pollId && 
+        post.AdditionalData?.Options?.some((opt: any) => opt.HasVoted)
+      );
+
+      if (hasVoted) {
+        return; // Prevent voting if already voted
+      }
+
+      // Optimistically update the UI
+      setPosts(posts.map(post => {
+        if (post.Type === 'POLL' && post.PostID === pollId) {
+          const updatedOptions = post.AdditionalData.Options.map((opt: any) => ({
+            ...opt,
+            Votes: opt.OptionID === optionId ? opt.Votes + 1 : opt.Votes,
+            HasVoted: opt.OptionID === optionId
+          }));
+          return {
             ...post,
-              AdditionalData: {
-                ...post.AdditionalData,
-                Options: updatedOptions
-              }
-            };
-          }
-          return post;
-        }));
+            AdditionalData: {
+              ...post.AdditionalData,
+              Options: updatedOptions
+            }
+          };
+        }
+        return post;
+      }));
+
+      const response = await api.post(`/api/community/polls/options/${optionId}/vote`);
+      if (!response.data.success) {
+        // Revert changes if request fails
+        loadData();
       }
     } catch (error) {
       console.error('Error voting on poll:', error);
+      loadData(); // Reload data if error occurs
     }
   };
 
   const handleEventStatus = async (eventId: number, status: 'interested' | 'going') => {
     try {
+      // Optimistically update the UI
+      setPosts(posts.map(post => {
+        if (post.Type === 'EVENT' && post.PostID === eventId) {
+          const currentResponse = post.AdditionalData.UserResponse;
+          const updates = {
+            InterestedCount: post.AdditionalData.InterestedCount || 0,
+            GoingCount: post.AdditionalData.GoingCount || 0
+          };
+
+          // Remove count from previous response
+          if (currentResponse === 'INTERESTED') updates.InterestedCount--;
+          if (currentResponse === 'GOING') updates.GoingCount--;
+
+          // Add count to new response
+          if (status === 'interested') updates.InterestedCount++;
+          if (status === 'going') updates.GoingCount++;
+
+          return {
+            ...post,
+            AdditionalData: {
+              ...post.AdditionalData,
+              ...updates,
+              UserResponse: status.toUpperCase()
+            }
+          };
+        }
+        return post;
+      }));
+
       const response = await api.post(`/api/community/events/${eventId}/respond`, {
         response: status.toUpperCase()
       });
       
-      if (response.data.success) {
-        setPosts(posts.map(post => {
-          if (post.Type === 'EVENT' && post.AdditionalData?.EventID === eventId) {
-            return {
-            ...post,
-              AdditionalData: {
-                ...post.AdditionalData,
-                InterestedCount: response.data.data.interested || 0,
-                GoingCount: response.data.data.going || 0,
-                UserResponse: status.toUpperCase()
-              }
-            };
-          }
-          return post;
-        }));
+      if (!response.data.success) {
+        // Revert changes if request fails
+        loadData();
       }
     } catch (error) {
       console.error('Error updating event response:', error);
+      loadData(); // Reload data if error occurs
     }
   };
 
@@ -849,15 +887,26 @@ const styles = StyleSheet.create({
   },
   card: {
     marginBottom: 16,
-    borderRadius: 16,
+    borderRadius: 24,
     overflow: 'hidden',
-    elevation: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backdropFilter: 'blur(12px)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
   userInfo: {
     flexDirection: 'row',
@@ -914,76 +963,105 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   pollQuestion: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 16,
-    lineHeight: 24,
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 20,
+    lineHeight: 28,
     paddingHorizontal: 16,
+    color: '#1a1a1a',
+    textShadowColor: 'rgba(0, 0, 0, 0.1)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   pollTimeRemaining: {
     fontSize: 12,
   },
   pollOptions: {
-    gap: 8,
-    marginBottom: 12,
+    gap: 12,
+    marginBottom: 16,
     paddingHorizontal: 16,
   },
   pollOption: {
-    height: 48,
-    borderRadius: 24,
+    height: 56,
+    borderRadius: 28,
     overflow: 'hidden',
     position: 'relative',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   pollOptionProgress: {
     position: 'absolute',
     top: 0,
     left: 0,
     bottom: 0,
-    transition: 'width 0.3s ease-out',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
   },
   pollOptionContent: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     zIndex: 1,
   },
   pollOptionText: {
     fontSize: 16,
+    fontWeight: '600',
+    color: '#1a1a1a',
   },
   pollOptionPercentage: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#007AFF',
   },
   pollTotalVotes: {
-    fontSize: 12,
+    fontSize: 14,
     textAlign: 'right',
     paddingHorizontal: 16,
-    marginTop: 4,
+    marginTop: 8,
+    marginBottom: 16,
+    color: 'rgba(0, 0, 0, 0.6)',
   },
   eventTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    marginBottom: 4,
+    textShadowColor: 'rgba(0, 0, 0, 0.1)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   eventInfo: {
-    marginVertical: 12,
-    gap: 8,
+    marginVertical: 16,
+    gap: 12,
     paddingHorizontal: 16,
   },
   eventInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   eventInfoText: {
-    fontSize: 14,
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#1a1a1a',
   },
   eventDescription: {
-    fontSize: 14,
-    opacity: 0.9,
-    marginBottom: 16,
-    lineHeight: 20,
+    fontSize: 16,
+    lineHeight: 24,
+    color: 'rgba(0, 0, 0, 0.8)',
+    marginBottom: 20,
     paddingHorizontal: 16,
   },
   eventActions: {
@@ -998,11 +1076,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 12,
-    borderRadius: 24,
+    paddingVertical: 14,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   eventActionText: {
-    fontSize: 14,
+    fontSize: 15,
+    fontWeight: '600',
   },
   centerContent: {
     flex: 1,
