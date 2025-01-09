@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, ImageBackground, Dimensions, Image } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, ImageBackground, Dimensions, Image, ActivityIndicator } from 'react-native';
 import { Surface, Text, Button, IconButton, Portal, Modal, TextInput, Chip, Avatar, FAB } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import { StudentDashboardLayout } from '@/app/components/layouts';
@@ -23,10 +23,9 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AddModal from './AddModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const TAB_WIDTH = SCREEN_WIDTH / 3;
+const TAB_WIDTH = SCREEN_WIDTH / 2;
 const TABS = [
   { key: 'ALL', icon: 'grid', label: 'All' },
-  { key: 'TRENDING', icon: 'fire', label: 'Trending' },
   { key: 'MY_POSTS', icon: 'file-document-outline', label: 'My Posts' },
 ] as const;
 
@@ -40,11 +39,14 @@ const NEON_COLORS = {
 
 export default function CommunityScreen() {
   const { theme, isDarkMode } = useTheme();
-  const { student } = useStudentAuth();
+  const { student, isLoading: isStudentLoading } = useStudentAuth();
   const [activeTab, setActiveTab] = useState<typeof TABS[number]['key']>('ALL');
   const [showAddModal, setShowAddModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [posts, setPosts] = useState<any[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const scrollY = useSharedValue(0);
   const addButtonScale = useSharedValue(1);
   const tabPosition = useSharedValue(0);
@@ -55,100 +57,122 @@ export default function CommunityScreen() {
   }, [activeTab]);
 
   useEffect(() => {
+    if (!isStudentLoading) {
+      if (student?.pgId) {
+        setPosts([]);
+        setPage(1);
+        setHasMore(true);
+        setError(null);
     loadData();
-  }, [activeTab]);
+      } else {
+        setError('Unable to load your PG information. Please try logging in again.');
+      }
+    }
+  }, [activeTab, student?.pgId, isStudentLoading]);
 
-  const loadData = async () => {
+  const loadData = async (loadMore = false) => {
     try {
+      if (!hasMore && loadMore) return;
+      if (!student?.pgId) {
+        setError('Unable to load your PG information. Please try logging in again.');
+        return;
+      }
+      
       setLoading(true);
-      // Simulated data for now
-      setPosts([
-        {
-          id: 1,
-          type: 'POST',
-          user: 'John Doe',
-          time: '10 minutes ago',
-          visibility: 'Public',
-          content: 'Exploring the beauty of nature today! 🌲🌄',
-          media: 'https://picsum.photos/400/300',
-          likes: 145,
-          comments: 12,
-          hasLiked: false,
-        },
-        {
-          id: 2,
-          type: 'POLL',
-          user: 'Emily',
-          time: '1 hour ago',
-          visibility: 'PG',
-          question: 'Which programming language do you prefer for mobile app development?',
-          options: [
-            { id: 1, text: 'Flutter', votes: 120 },
-            { id: 2, text: 'React Native', votes: 150 },
-            { id: 3, text: 'Swift', votes: 50 },
-          ],
-          totalVotes: 320,
-          timeRemaining: '23 hours left',
-          hasVoted: false,
-        },
-        {
-          id: 3,
-          type: 'EVENT',
-          user: 'Tech Meetup Group',
-          title: 'AI & Blockchain Conference 2025',
-          time: 'January 15, 2025 – 10:00 AM',
-          location: 'Berlin Tech Hub',
-          description: 'Join us for a deep dive into AI innovations and blockchain technology with industry leaders.',
-          interested: 89,
-          going: 45,
-          status: 'interested', // null, 'interested', or 'going'
-        },
-      ]);
-    } catch (error) {
+      setError(null);
+      const currentPage = loadMore ? page + 1 : 1;
+      
+      const response = await api.get(`/api/community/pg/${student.pgId}/posts`, {
+        params: {
+          page: currentPage,
+          limit: 10,
+          filter: activeTab === 'MY_POSTS' ? 'my_posts' : undefined
+        }
+      });
+
+      if (response.data.success) {
+        const newPosts = response.data.data;
+        setPosts(prev => loadMore ? [...prev, ...newPosts] : newPosts);
+        setHasMore(newPosts.length === 10);
+        setPage(currentPage);
+      } else {
+        setError(response.data.message || 'Failed to load posts');
+      }
+    } catch (error: any) {
       console.error('Error loading data:', error);
+      setError(error.response?.data?.message || 'Failed to load posts. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleLike = async (postId: number) => {
+    try {
+      const response = await api.post(`/api/community/posts/${postId}/like`);
+      if (response.data.success) {
     setPosts(posts.map(post => 
-      post.id === postId 
+          post.PostID === postId 
         ? { 
             ...post, 
-            hasLiked: !post.hasLiked,
-            likes: post.likes + (post.hasLiked ? -1 : 1)
+                HasLiked: !post.HasLiked,
+                LikesCount: post.LikesCount + (post.HasLiked ? -1 : 1)
           }
         : post
     ));
+      }
+    } catch (error) {
+      console.error('Error liking post:', error);
+    }
   };
 
   const handleVote = async (pollId: number, optionId: number) => {
-    setPosts(posts.map(post => 
-      post.id === pollId 
-        ? {
+    try {
+      const response = await api.post(`/api/community/polls/options/${optionId}/vote`);
+      if (response.data.success) {
+        setPosts(posts.map(post => {
+          if (post.Type === 'POLL' && post.AdditionalData?.PollID === pollId) {
+            const updatedOptions = response.data.data;
+            return {
             ...post,
-            hasVoted: true,
-            options: post.options.map((opt: any) => ({
-              ...opt,
-              votes: opt.id === optionId ? opt.votes + 1 : opt.votes
-            })),
-            totalVotes: post.totalVotes + 1
+              AdditionalData: {
+                ...post.AdditionalData,
+                Options: updatedOptions
+              }
+            };
           }
-        : post
-    ));
+          return post;
+        }));
+      }
+    } catch (error) {
+      console.error('Error voting on poll:', error);
+    }
   };
 
   const handleEventStatus = async (eventId: number, status: 'interested' | 'going') => {
-    setPosts(posts.map(post =>
-      post.id === eventId
-        ? {
+    try {
+      const response = await api.post(`/api/community/events/${eventId}/respond`, {
+        response: status.toUpperCase()
+      });
+      
+      if (response.data.success) {
+        setPosts(posts.map(post => {
+          if (post.Type === 'EVENT' && post.AdditionalData?.EventID === eventId) {
+            return {
             ...post,
-            status: post.status === status ? null : status,
-            [status]: post[status] + (post.status === status ? -1 : 1)
+              AdditionalData: {
+                ...post.AdditionalData,
+                InterestedCount: response.data.data.interested || 0,
+                GoingCount: response.data.data.going || 0,
+                UserResponse: status.toUpperCase()
+              }
+            };
           }
-        : post
-    ));
+          return post;
+        }));
+      }
+    } catch (error) {
+      console.error('Error updating event response:', error);
+    }
   };
 
   const headerStyle = useAnimatedStyle(() => {
@@ -179,29 +203,24 @@ export default function CommunityScreen() {
         <View style={styles.userInfo}>
           <Avatar.Text
             size={40}
-            label={post.user.substring(0, 2)}
+            label={post.UserName?.substring(0, 2) || '?'}
             style={[styles.avatar, { backgroundColor: theme.colors.primary + '20' }]}
           />
           <View>
-            <Text style={[styles.userName, { color: theme.colors.text }]}>{post.user}</Text>
-            <Text style={[styles.postTime, { color: theme.colors.textSecondary }]}>{post.time}</Text>
+            <Text style={[styles.userName, { color: theme.colors.text }]}>{post.UserName}</Text>
+            <Text style={[styles.postTime, { color: theme.colors.textSecondary }]}>
+              {format(new Date(post.CreatedAt), 'PPp')}
+            </Text>
           </View>
         </View>
-        <Chip 
-          mode="outlined" 
-          style={[styles.visibilityChip, { borderColor: theme.colors.primary }]}
-          textStyle={{ color: theme.colors.primary }}
-        >
-          {post.visibility}
-        </Chip>
       </View>
 
-      <Text style={[styles.postContent, { color: theme.colors.text }]}>{post.content}</Text>
+      <Text style={[styles.postContent, { color: theme.colors.text }]}>{post.Content}</Text>
 
-      {post.media && (
+      {post.MediaURL && (
         <View style={styles.postMediaContainer}>
           <Image
-            source={{ uri: post.media }}
+            source={{ uri: post.MediaURL }}
             style={styles.postMedia}
             resizeMode="cover"
           />
@@ -211,14 +230,14 @@ export default function CommunityScreen() {
       <View style={[styles.interactionBar, { borderTopColor: theme.colors.outline }]}>
         <Pressable
           style={styles.interactionButton}
-          onPress={() => handleLike(post.id)}
+          onPress={() => handleLike(post.PostID)}
         >
           <MaterialCommunityIcons
-            name={post.hasLiked ? 'heart' : 'heart-outline'}
+            name={post.HasLiked ? 'heart' : 'heart-outline'}
             size={24}
-            color={post.hasLiked ? theme.colors.error : theme.colors.text}
+            color={post.HasLiked ? theme.colors.error : theme.colors.text}
           />
-          <Text style={[styles.interactionText, { color: theme.colors.text }]}>{post.likes}</Text>
+          <Text style={[styles.interactionText, { color: theme.colors.text }]}>{post.LikesCount}</Text>
         </Pressable>
 
         <Pressable style={styles.interactionButton}>
@@ -227,15 +246,7 @@ export default function CommunityScreen() {
             size={24}
             color={theme.colors.text}
           />
-          <Text style={[styles.interactionText, { color: theme.colors.text }]}>{post.comments}</Text>
-        </Pressable>
-
-        <Pressable style={styles.interactionButton}>
-          <MaterialCommunityIcons
-            name="share-outline"
-            size={24}
-            color={theme.colors.text}
-          />
+          <Text style={[styles.interactionText, { color: theme.colors.text }]}>{post.CommentsCount}</Text>
         </Pressable>
       </View>
     </Animated.View>
@@ -394,9 +405,64 @@ export default function CommunityScreen() {
     transform: [{ translateX: tabPosition.value }],
   }));
 
+  const handleSubmit = async (data: any) => {
+    try {
+      if (!student?.pgId) {
+        setError('Unable to load your PG information. Please try logging in again.');
+        return;
+      }
+
+      setLoading(true);
+      const response = await api.post(`/api/community/pg/${student.pgId}/posts`, data);
+
+      if (response.data.success) {
+        setShowAddModal(false);
+        // Refresh the posts list
+        setPosts([]);
+        setPage(1);
+        setHasMore(true);
+        loadData();
+      } else {
+        alert(response.data.message || 'Failed to create post');
+      }
+    } catch (error: any) {
+      console.error('Error creating post:', error);
+      alert(error.response?.data?.message || 'Failed to create post. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <StudentDashboardLayout title="Community">
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        {isStudentLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={[styles.loadingText, { color: theme.colors.text }]}>
+              Loading your information...
+            </Text>
+          </View>
+        ) : !student?.pgId ? (
+          <View style={styles.errorContainer}>
+            <MaterialCommunityIcons
+              name="alert-circle-outline"
+              size={48}
+              color={theme.colors.error}
+            />
+            <Text style={[styles.errorText, { color: theme.colors.error }]}>
+              Unable to load your PG information. Please try logging in again.
+            </Text>
+            <Button
+              mode="contained"
+              onPress={() => router.replace('/screens/student/login')}
+              style={styles.retryButton}
+            >
+              Login Again
+            </Button>
+          </View>
+        ) : (
+          <>
         <Surface style={[styles.tabContainer, { backgroundColor: theme.colors.surface }]} elevation={2}>
           <View style={styles.tabBar}>
             <Animated.View 
@@ -443,7 +509,10 @@ export default function CommunityScreen() {
 
         <ScrollView
           style={styles.content}
-          contentContainerStyle={styles.contentContainer}
+              contentContainerStyle={[
+                styles.contentContainer,
+                (!posts.length) && styles.centerContent
+              ]}
           onScroll={(e) => {
             scrollY.value = e.nativeEvent.contentOffset.y;
             addButtonScale.value = withSpring(
@@ -451,40 +520,260 @@ export default function CommunityScreen() {
             );
           }}
           scrollEventThrottle={16}
-        >
-          {posts.map(post => {
-            switch (post.type) {
+              onEndReached={() => hasMore && !loading && loadData(true)}
+              onEndReachedThreshold={0.5}
+            >
+              {loading && !posts.length ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={theme.colors.primary} />
+                  <Text style={[styles.loadingText, { color: theme.colors.text }]}>
+                    Loading posts...
+                  </Text>
+                </View>
+              ) : error ? (
+                <View style={styles.errorContainer}>
+                  <MaterialCommunityIcons
+                    name="alert-circle-outline"
+                    size={48}
+                    color={theme.colors.error}
+                  />
+                  <Text style={[styles.errorText, { color: theme.colors.error }]}>
+                    {error}
+                  </Text>
+                  <Button
+                    mode="contained"
+                    onPress={() => loadData()}
+                    style={styles.retryButton}
+                  >
+                    Retry
+                  </Button>
+                </View>
+              ) : posts.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <MaterialCommunityIcons
+                    name="message-text-outline"
+                    size={64}
+                    color={theme.colors.primary}
+                    style={{ opacity: 0.8 }}
+                  />
+                  <Text style={[styles.emptyTitle, { color: theme.colors.primary }]}>
+                    No Posts Yet
+                  </Text>
+                  <Text style={[styles.emptyText, { color: theme.colors.text }]}>
+                    {activeTab === 'ALL' 
+                      ? 'Be the first to start a conversation in your PG community!'
+                      : 'You haven\'t shared any posts yet. Click the + button to get started!'}
+                  </Text>
+                  <Button
+                    mode="contained"
+                    onPress={() => setShowAddModal(true)}
+                    style={styles.startPostButton}
+                    labelStyle={{ color: '#fff' }}
+                  >
+                    Create First Post
+                  </Button>
+                </View>
+              ) : (
+                posts.map(post => {
+                  switch (post.Type) {
               case 'POST':
                 return renderPostCard(post);
               case 'POLL':
-                return renderPollCard(post);
+                      return (
+                        <Animated.View
+                          key={post.PostID}
+                          entering={FadeIn.duration(500)}
+                          style={[styles.card, { backgroundColor: theme.colors.surface }]}
+                        >
+                          <View style={styles.cardHeader}>
+                            <View style={styles.userInfo}>
+                              <Avatar.Text
+                                size={40}
+                                label={post.UserName?.substring(0, 2) || '?'}
+                                style={[styles.avatar, { backgroundColor: theme.colors.primary + '20' }]}
+                              />
+                              <View>
+                                <Text style={[styles.userName, { color: theme.colors.text }]}>{post.UserName}</Text>
+                                <Text style={[styles.postTime, { color: theme.colors.textSecondary }]}>
+                                  {format(new Date(post.CreatedAt), 'PPp')}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+
+                          <Text style={[styles.pollQuestion, { color: theme.colors.text }]}>
+                            {post.AdditionalData?.Question}
+                          </Text>
+
+                          <View style={styles.pollOptions}>
+                            {post.AdditionalData?.Options?.map((option: any) => {
+                              const totalVotes = post.AdditionalData.Options.reduce(
+                                (sum: number, opt: any) => sum + opt.Votes, 0
+                              );
+                              const percentage = totalVotes > 0 
+                                ? Math.round((option.Votes / totalVotes) * 100) 
+                                : 0;
+                              
+                              return (
+                                <Pressable
+                                  key={option.OptionID}
+                                  style={[
+                                    styles.pollOption,
+                                    { backgroundColor: theme.colors.surfaceVariant }
+                                  ]}
+                                  onPress={() => !option.HasVoted && handleVote(post.PostID, option.OptionID)}
+                                >
+                                  <View 
+                                    style={[
+                                      styles.pollOptionProgress,
+                                      { 
+                                        backgroundColor: theme.colors.primary + '20',
+                                        width: `${percentage}%`
+                                      }
+                                    ]} 
+                                  />
+                                  <View style={styles.pollOptionContent}>
+                                    <Text style={[styles.pollOptionText, { color: theme.colors.text }]}>
+                                      {option.Text}
+                                    </Text>
+                                    <Text style={[styles.pollOptionPercentage, { color: theme.colors.primary }]}>
+                                      {percentage}%
+                                    </Text>
+                                  </View>
+                                </Pressable>
+                              );
+                            })}
+                          </View>
+
+                          <Text style={[styles.pollTotalVotes, { color: theme.colors.textSecondary }]}>
+                            {post.AdditionalData?.Options?.reduce(
+                              (sum: number, opt: any) => sum + opt.Votes, 0
+                            )} total votes
+                          </Text>
+                        </Animated.View>
+                      );
               case 'EVENT':
-                return renderEventCard(post);
+                      return (
+                        <Animated.View
+                          key={post.PostID}
+                          entering={FadeIn.duration(500)}
+                          style={[styles.card, { backgroundColor: theme.colors.surface }]}
+                        >
+                          <View style={styles.cardHeader}>
+                            <View style={styles.userInfo}>
+                              <Avatar.Text
+                                size={40}
+                                label={post.UserName?.substring(0, 2) || '?'}
+                                style={[styles.avatar, { backgroundColor: theme.colors.primary + '20' }]}
+                              />
+                              <View>
+                                <Text style={[styles.userName, { color: theme.colors.text }]}>{post.UserName}</Text>
+                                <Text style={[styles.eventTitle, { color: theme.colors.text }]}>
+                                  {post.AdditionalData?.Title}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+
+                          <View style={styles.eventInfo}>
+                            <View style={styles.eventInfoRow}>
+                              <MaterialCommunityIcons
+                                name="clock-outline"
+                                size={20}
+                                color={theme.colors.primary}
+                              />
+                              <Text style={[styles.eventInfoText, { color: theme.colors.text }]}>
+                                {format(new Date(post.AdditionalData?.EventDate), 'PPp')}
+                              </Text>
+                            </View>
+
+                            <View style={styles.eventInfoRow}>
+                              <MaterialCommunityIcons
+                                name="map-marker-outline"
+                                size={20}
+                                color={theme.colors.primary}
+                              />
+                              <Text style={[styles.eventInfoText, { color: theme.colors.text }]}>
+                                {post.AdditionalData?.Location}
+                              </Text>
+                            </View>
+                          </View>
+
+                          <Text style={[styles.eventDescription, { color: theme.colors.text }]}>
+                            {post.AdditionalData?.Description}
+                          </Text>
+
+                          <View style={styles.eventActions}>
+                            <Pressable
+                              style={[
+                                styles.eventActionButton,
+                                { backgroundColor: theme.colors.surfaceVariant },
+                                post.AdditionalData?.UserResponse === 'INTERESTED' && 
+                                { backgroundColor: theme.colors.primary + '20' }
+                              ]}
+                              onPress={() => handleEventStatus(post.PostID, 'interested')}
+                            >
+                              <MaterialCommunityIcons
+                                name="star"
+                                size={20}
+                                color={post.AdditionalData?.UserResponse === 'INTERESTED' 
+                                  ? theme.colors.primary 
+                                  : theme.colors.text}
+                              />
+                              <Text style={[
+                                styles.eventActionText,
+                                { color: theme.colors.text },
+                                post.AdditionalData?.UserResponse === 'INTERESTED' && 
+                                { color: theme.colors.primary }
+                              ]}>
+                                Interested ({post.AdditionalData?.InterestedCount || 0})
+                              </Text>
+                            </Pressable>
+
+                            <Pressable
+                              style={[
+                                styles.eventActionButton,
+                                { backgroundColor: theme.colors.surfaceVariant },
+                                post.AdditionalData?.UserResponse === 'GOING' && 
+                                { backgroundColor: theme.colors.primary + '20' }
+                              ]}
+                              onPress={() => handleEventStatus(post.PostID, 'going')}
+                            >
+                              <MaterialCommunityIcons
+                                name="check"
+                                size={20}
+                                color={post.AdditionalData?.UserResponse === 'GOING' 
+                                  ? theme.colors.primary 
+                                  : theme.colors.text}
+                              />
+                              <Text style={[
+                                styles.eventActionText,
+                                { color: theme.colors.text },
+                                post.AdditionalData?.UserResponse === 'GOING' && 
+                                { color: theme.colors.primary }
+                              ]}>
+                                Going ({post.AdditionalData?.GoingCount || 0})
+                              </Text>
+                            </Pressable>
+                          </View>
+                        </Animated.View>
+                      );
               default:
                 return null;
             }
-          })}
+                })
+              )}
+              {loading && posts.length > 0 && (
+                <ActivityIndicator style={styles.loadingMore} color={theme.colors.primary} />
+              )}
         </ScrollView>
 
-        <Portal>
-          <Modal
-            visible={showAddModal}
-            onDismiss={() => setShowAddModal(false)}
-            contentContainerStyle={[
-              styles.addModal,
-              { backgroundColor: theme.colors.surface }
-            ]}
-          >
             <AddModal
               visible={showAddModal}
               onDismiss={() => setShowAddModal(false)}
-              onSubmit={async (data) => {
-                console.log('New post:', data);
-                setShowAddModal(false);
-              }}
+              onSubmit={handleSubmit}
+              pgId={student.pgId}
             />
-          </Modal>
-        </Portal>
 
         <Animated.View style={[styles.fabContainer, { transform: [{ scale: addButtonScale }] }]}>
           <FAB
@@ -500,6 +789,8 @@ export default function CommunityScreen() {
             color="#fff"
           />
         </Animated.View>
+          </>
+        )}
       </View>
     </StudentDashboardLayout>
   );
@@ -712,5 +1003,62 @@ const styles = StyleSheet.create({
   },
   eventActionText: {
     fontSize: 14,
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 8,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+    padding: 32,
+    minHeight: 400,
+  },
+  emptyTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginTop: 16,
+  },
+  emptyText: {
+    fontSize: 16,
+    textAlign: 'center',
+    opacity: 0.7,
+    lineHeight: 22,
+    marginBottom: 8,
+  },
+  startPostButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    borderRadius: 24,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    opacity: 0.7,
+  },
+  loadingMore: {
+    padding: 16,
   },
 }); 

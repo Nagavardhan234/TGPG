@@ -1,414 +1,492 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
-import { Portal, Modal, Text, TextInput, Button, IconButton } from 'react-native-paper';
-import { useTheme } from '@/app/context/ThemeContext';
+import { View, StyleSheet, Dimensions, TouchableOpacity, ScrollView } from 'react-native';
+import { Text, useTheme, Portal, Modal, TextInput, Button } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  SlideInDown,
+  SlideOutDown,
+  interpolate,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  useSharedValue,
+} from 'react-native-reanimated';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { FadeIn } from 'react-native-reanimated';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 
-const NEON_COLORS = {
-  blue: '#00FFFF',
-  purple: '#FF00FF',
-  teal: '#00FFA3',
-  dark: '#0A0A1F',
-  darkBlue: '#0A1A3F',
-};
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+const POST_TYPES = [
+  {
+    key: 'POST',
+    icon: 'post-outline',
+    label: 'Share Update',
+    color: '#FF6B6B',
+    description: 'Share a message or photo with your PG'
+  },
+  {
+    key: 'POLL',
+    icon: 'poll',
+    label: 'Create Poll',
+    color: '#4ECDC4',
+    description: 'Get opinions from your PG mates'
+  },
+  {
+    key: 'EVENT',
+    icon: 'calendar-star',
+    label: 'Plan Event',
+    color: '#45B7D1',
+    description: 'Organize an event or meetup'
+  }
+] as const;
 
 interface AddModalProps {
   visible: boolean;
   onDismiss: () => void;
-  onSubmit: (data: any) => Promise<void>;
+  onSubmit: (data: any) => void;
+  pgId: number | undefined;
 }
 
-export default function AddModal({ visible, onDismiss, onSubmit }: AddModalProps) {
-  const { theme } = useTheme();
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [date, setDate] = useState(new Date());
-  const [location, setLocation] = useState('');
+export default function AddModal({ visible, onDismiss, onSubmit, pgId }: AddModalProps) {
+  const { colors, dark } = useTheme();
+  const [selectedType, setSelectedType] = useState<typeof POST_TYPES[number]['key'] | null>(null);
+  const [content, setContent] = useState('');
+  const [pollOptions, setPollOptions] = useState(['', '']);
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollExpiry, setPollExpiry] = useState(new Date(Date.now() + 24 * 60 * 60 * 1000));
+  const [eventTitle, setEventTitle] = useState('');
+  const [eventDescription, setEventDescription] = useState('');
+  const [eventDate, setEventDate] = useState(new Date());
+  const [eventLocation, setEventLocation] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [visibility, setVisibility] = useState<'Public' | 'PG'>('Public');
-  const [media, setMedia] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [datePickerMode, setDatePickerMode] = useState<'date' | 'time'>('date');
 
-  const handleSubmit = async () => {
+  const modalScale = useSharedValue(visible ? 1 : 0.8);
+  const modalOpacity = useSharedValue(visible ? 1 : 0);
+
+  React.useEffect(() => {
+    if (visible) {
+      modalScale.value = withSpring(1);
+      modalOpacity.value = withTiming(1);
+    } else {
+      modalScale.value = withSpring(0.8);
+      modalOpacity.value = withTiming(0);
+    }
+  }, [visible]);
+
+  const modalStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: modalScale.value }],
+    opacity: modalOpacity.value,
+  }));
+
+  const handleSubmit = () => {
+    if (!pgId) {
+      console.error('No PG ID available');
+      return;
+    }
+
+    let data: any = {
+      type: selectedType,
+      content: content.trim(),
+    };
+
     try {
-      setLoading(true);
-      await onSubmit({
-        title,
-        description,
-        date: date.toISOString(),
-        location,
-        visibility,
-        media,
-      });
-      handleDismiss();
+      if (selectedType === 'POLL') {
+        const validOptions = pollOptions.filter(opt => opt.trim());
+        if (validOptions.length < 2) {
+          alert('Please add at least 2 poll options');
+          return;
+        }
+        if (!pollQuestion.trim()) {
+          alert('Please enter a poll question');
+          return;
+        }
+
+        data.additionalData = {
+          poll: {
+            question: pollQuestion.trim(),
+            options: validOptions,
+            expiresAt: pollExpiry.toISOString()
+          }
+        };
+      } else if (selectedType === 'EVENT') {
+        if (!eventTitle.trim()) {
+          alert('Please enter an event title');
+          return;
+        }
+        if (!eventDescription.trim()) {
+          alert('Please enter an event description');
+          return;
+        }
+        if (!eventLocation.trim()) {
+          alert('Please enter an event location');
+          return;
+        }
+
+        data.additionalData = {
+          event: {
+            title: eventTitle.trim(),
+            description: eventDescription.trim(),
+            eventDate: eventDate.toISOString(),
+            location: eventLocation.trim()
+          }
+        };
+      } else if (!content.trim()) {
+        alert('Please enter your message');
+        return;
+      }
+
+      onSubmit(data);
+      resetForm();
+      onDismiss();
     } catch (error) {
-      console.error('Error submitting:', error);
-    } finally {
-      setLoading(false);
+      console.error('Error submitting post:', error);
+      alert('Failed to create post. Please try again.');
     }
   };
 
-  const handleDismiss = () => {
-    setTitle('');
-    setDescription('');
-    setDate(new Date());
-    setLocation('');
-    setVisibility('Public');
-    setMedia(null);
-    onDismiss();
+  const resetForm = () => {
+    setSelectedType(null);
+    setContent('');
+    setPollOptions(['', '']);
+    setPollQuestion('');
+    setPollExpiry(new Date(Date.now() + 24 * 60 * 60 * 1000));
+    setEventTitle('');
+    setEventDescription('');
+    setEventDate(new Date());
+    setEventLocation('');
   };
 
-  const handleImagePick = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 1,
-    });
+  const renderTypeSelection = () => (
+    <Animated.View 
+      entering={FadeIn.duration(300)} 
+      style={styles.typeContainer}
+    >
+      <Text style={[styles.title, { color: colors.primary }]}>Create New Post</Text>
+      <View style={styles.typeGrid}>
+        {POST_TYPES.map((type) => (
+          <TouchableOpacity
+            key={type.key}
+            style={[styles.typeCard, { backgroundColor: type.color + '15' }]}
+            onPress={() => setSelectedType(type.key)}
+          >
+            <MaterialCommunityIcons
+              name={type.icon}
+              size={32}
+              color={type.color}
+            />
+            <Text style={[styles.typeLabel, { color: colors.text }]}>{type.label}</Text>
+            <Text style={[styles.typeDescription, { color: colors.text + '99' }]}>
+              {type.description}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </Animated.View>
+  );
 
-    if (!result.canceled) {
-      setMedia(result.assets[0].uri);
-    }
-  };
+  const renderPostForm = () => (
+    <Animated.View 
+      entering={SlideInDown.duration(300)} 
+      exiting={SlideOutDown.duration(300)}
+      style={styles.formContainer}
+    >
+      <TextInput
+        mode="outlined"
+        placeholder="What's on your mind?"
+        value={content}
+        onChangeText={setContent}
+        multiline
+        numberOfLines={4}
+        style={styles.input}
+      />
+    </Animated.View>
+  );
 
-  const renderInput = (props: any) => (
+  const renderPollForm = () => (
+    <Animated.View 
+      entering={SlideInDown.duration(300)} 
+      exiting={SlideOutDown.duration(300)}
+      style={styles.formContainer}
+    >
+      <TextInput
+        mode="outlined"
+        placeholder="Ask a question..."
+        value={pollQuestion}
+        onChangeText={setPollQuestion}
+        style={styles.input}
+      />
+      {pollOptions.map((option, index) => (
+        <View key={index} style={styles.pollOptionContainer}>
     <TextInput
-      {...props}
-      mode="flat"
-      style={[styles.input, props.style]}
-      theme={{
-        colors: {
-          primary: NEON_COLORS.blue,
-          text: '#fff',
-          placeholder: 'rgba(255,255,255,0.5)',
-          background: 'transparent',
-        },
-      }}
-      underlineColor="rgba(255,255,255,0.1)"
-      activeUnderlineColor={NEON_COLORS.blue}
-      textColor="#fff"
-    />
+            mode="outlined"
+            placeholder={`Option ${index + 1}`}
+            value={option}
+            onChangeText={(text) => {
+              const newOptions = [...pollOptions];
+              newOptions[index] = text;
+              setPollOptions(newOptions);
+            }}
+            style={styles.pollOptionInput}
+          />
+          {index > 1 && (
+            <TouchableOpacity
+              onPress={() => {
+                setPollOptions(pollOptions.filter((_, i) => i !== index));
+              }}
+              style={styles.removeOptionButton}
+            >
+              <MaterialCommunityIcons name="close" size={20} color={colors.error} />
+            </TouchableOpacity>
+          )}
+        </View>
+      ))}
+      {pollOptions.length < 5 && (
+        <Button
+          mode="outlined"
+          onPress={() => setPollOptions([...pollOptions, ''])}
+          style={styles.addOptionButton}
+          icon="plus"
+        >
+          Add Option
+        </Button>
+      )}
+      <TouchableOpacity
+        onPress={() => {
+          setDatePickerMode('date');
+          setShowDatePicker(true);
+        }}
+        style={styles.dateButton}
+      >
+        <MaterialCommunityIcons name="clock-outline" size={20} color={colors.primary} />
+        <Text style={[styles.dateButtonText, { color: colors.primary }]}>
+          Poll ends {format(pollExpiry, 'PPp')}
+        </Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+
+  const renderEventForm = () => (
+    <Animated.View 
+      entering={SlideInDown.duration(300)} 
+      exiting={SlideOutDown.duration(300)}
+      style={styles.formContainer}
+    >
+      <TextInput
+        mode="outlined"
+        placeholder="Event Title"
+        value={eventTitle}
+        onChangeText={setEventTitle}
+        style={styles.input}
+      />
+      <TextInput
+        mode="outlined"
+        placeholder="Event Description"
+        value={eventDescription}
+        onChangeText={setEventDescription}
+        multiline
+        numberOfLines={3}
+        style={styles.input}
+      />
+      <TextInput
+        mode="outlined"
+        placeholder="Location"
+        value={eventLocation}
+        onChangeText={setEventLocation}
+        style={styles.input}
+      />
+      <TouchableOpacity
+        onPress={() => {
+          setDatePickerMode('date');
+          setShowDatePicker(true);
+        }}
+        style={styles.dateButton}
+      >
+        <MaterialCommunityIcons name="calendar" size={20} color={colors.primary} />
+        <Text style={[styles.dateButtonText, { color: colors.primary }]}>
+          {format(eventDate, 'PPP')}
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={() => {
+          setDatePickerMode('time');
+          setShowDatePicker(true);
+        }}
+        style={styles.dateButton}
+      >
+        <MaterialCommunityIcons name="clock-outline" size={20} color={colors.primary} />
+        <Text style={[styles.dateButtonText, { color: colors.primary }]}>
+          {format(eventDate, 'p')}
+        </Text>
+      </TouchableOpacity>
+    </Animated.View>
   );
 
   return (
     <Portal>
       <Modal
         visible={visible}
-        onDismiss={handleDismiss}
-        contentContainerStyle={styles.modalContainer}
+        onDismiss={onDismiss}
+        contentContainerStyle={[
+          styles.modal,
+          { backgroundColor: colors.surface }
+        ]}
       >
-        <BlurView intensity={20} tint="dark" style={styles.modalBlur}>
-          <LinearGradient
-            colors={['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.05)']}
-            style={styles.modalGradient}
-          >
-            <Animated.View entering={FadeIn.duration(300)}>
-              <ScrollView style={styles.scrollView}>
+        <Animated.View style={[styles.container, modalStyle]}>
                 <View style={styles.header}>
-                  <Text style={styles.title}>Create Post</Text>
-                  <IconButton
-                    icon="close"
-                    iconColor="#fff"
-                    style={styles.closeButton}
-                    onPress={handleDismiss}
-                  />
-                </View>
-
-                {renderInput({
-                  label: 'Title',
-                  value: title,
-                  onChangeText: setTitle,
-                })}
-
-                {renderInput({
-                  label: 'Description',
-                  value: description,
-                  onChangeText: setDescription,
-                  multiline: true,
-                  numberOfLines: 3,
-                })}
-
-                <View style={styles.mediaSection}>
-                  <Text style={styles.sectionTitle}>Media</Text>
-                  <View style={styles.mediaButtons}>
-                    <Pressable
-                      style={styles.mediaButton}
-                      onPress={handleImagePick}
+            <TouchableOpacity
+              onPress={() => {
+                if (selectedType) {
+                  setSelectedType(null);
+                } else {
+                  resetForm();
+                  onDismiss();
+                }
+              }}
+              style={styles.backButton}
                     >
                       <MaterialCommunityIcons
-                        name="image"
+                name={selectedType ? 'arrow-left' : 'close'}
                         size={24}
-                        color={NEON_COLORS.blue}
-                      />
-                      <Text style={styles.mediaButtonText}>Image</Text>
-                    </Pressable>
-
-                    <Pressable style={styles.mediaButton}>
-                      <MaterialCommunityIcons
-                        name="video"
-                        size={24}
-                        color={NEON_COLORS.purple}
-                      />
-                      <Text style={styles.mediaButtonText}>Video</Text>
-                    </Pressable>
-                  </View>
-
-                  {media && (
-                    <View style={styles.selectedMedia}>
-                      <Text style={styles.selectedMediaText}>
-                        Image selected
-                      </Text>
-                      <IconButton
-                        icon="close"
-                        size={20}
-                        iconColor="#fff"
-                        onPress={() => setMedia(null)}
-                      />
-                    </View>
-                  )}
-                </View>
-
-                <View style={styles.visibilitySection}>
-                  <Text style={styles.sectionTitle}>Visibility</Text>
-                  <View style={styles.visibilityButtons}>
-                    <Pressable
+                color={colors.text}
+              />
+            </TouchableOpacity>
+            {selectedType && (
+              <TouchableOpacity
+                onPress={handleSubmit}
                       style={[
-                        styles.visibilityButton,
-                        visibility === 'Public' && styles.visibilityButtonActive
-                      ]}
-                      onPress={() => setVisibility('Public')}
-                    >
-                      <MaterialCommunityIcons
-                        name="earth"
-                        size={24}
-                        color={visibility === 'Public' ? NEON_COLORS.blue : '#fff'}
-                      />
-                      <Text style={[
-                        styles.visibilityButtonText,
-                        visibility === 'Public' && styles.visibilityButtonTextActive
-                      ]}>
-                        Public
+                  styles.submitButton,
+                  { backgroundColor: colors.primary }
+                ]}
+              >
+                <Text style={[styles.submitButtonText, { color: colors.surface }]}>
+                  Post
                       </Text>
-                    </Pressable>
-
-                    <Pressable
-                      style={[
-                        styles.visibilityButton,
-                        visibility === 'PG' && styles.visibilityButtonActive
-                      ]}
-                      onPress={() => setVisibility('PG')}
-                    >
-                      <MaterialCommunityIcons
-                        name="account-group"
-                        size={24}
-                        color={visibility === 'PG' ? NEON_COLORS.blue : '#fff'}
-                      />
-                      <Text style={[
-                        styles.visibilityButtonText,
-                        visibility === 'PG' && styles.visibilityButtonTextActive
-                      ]}>
-                        PG Only
-                      </Text>
-                    </Pressable>
+              </TouchableOpacity>
+            )}
                   </View>
-                </View>
-
-                <View style={styles.dateSection}>
-                  <Text style={styles.sectionTitle}>Date & Time</Text>
-                  <Button
-                    mode="outlined"
-                    onPress={() => setShowDatePicker(true)}
-                    style={styles.dateButton}
-                    textColor={NEON_COLORS.blue}
-                  >
-                    {format(date, 'MMM d, yyyy h:mm a')}
-                  </Button>
-                </View>
-
+          <ScrollView style={styles.content}>
+            {!selectedType && renderTypeSelection()}
+            {selectedType === 'POST' && renderPostForm()}
+            {selectedType === 'POLL' && renderPollForm()}
+            {selectedType === 'EVENT' && renderEventForm()}
+          </ScrollView>
                 {showDatePicker && (
                   <DateTimePicker
-                    value={date}
-                    mode="datetime"
-                    is24Hour={false}
+              value={datePickerMode === 'date' ? eventDate : pollExpiry}
+              mode={datePickerMode}
+              is24Hour={true}
                     onChange={(event, selectedDate) => {
                       setShowDatePicker(false);
                       if (selectedDate) {
-                        setDate(selectedDate);
+                  if (datePickerMode === 'date') {
+                    setEventDate(selectedDate);
+                  } else {
+                    setPollExpiry(selectedDate);
+                  }
                       }
                     }}
                   />
                 )}
-
-                <View style={styles.actions}>
-                  <Button
-                    mode="outlined"
-                    onPress={handleDismiss}
-                    style={[styles.actionButton, styles.cancelButton]}
-                    textColor="#fff"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    mode="contained"
-                    onPress={handleSubmit}
-                    loading={loading}
-                    disabled={loading || !title}
-                    style={[styles.actionButton, styles.submitButton]}
-                    contentStyle={styles.submitButtonContent}
-                    labelStyle={styles.submitButtonLabel}
-                  >
-                    Post
-                  </Button>
-                </View>
-              </ScrollView>
             </Animated.View>
-          </LinearGradient>
-        </BlurView>
       </Modal>
     </Portal>
   );
 }
 
 const styles = StyleSheet.create({
-  modalContainer: {
-    margin: 20,
-    borderRadius: 20,
+  modal: {
+    margin: 0,
+    justifyContent: 'flex-end',
+  },
+  container: {
+    maxHeight: SCREEN_HEIGHT * 0.9,
+    width: '100%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     overflow: 'hidden',
-    maxHeight: '80%',
-  },
-  modalBlur: {
-    overflow: 'hidden',
-  },
-  modalGradient: {
-    padding: 20,
-  },
-  scrollView: {
-    flex: 1,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    padding: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  backButton: {
+    padding: 8,
+    borderRadius: 20,
+  },
+  submitButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  submitButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  content: {
+    flex: 1,
+  },
+  typeContainer: {
+    padding: 16,
   },
   title: {
     fontSize: 24,
-    fontWeight: '600',
-    color: NEON_COLORS.blue,
-    textShadowColor: NEON_COLORS.blue,
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
+    fontWeight: 'bold',
+    marginBottom: 24,
   },
-  closeButton: {
-    margin: -8,
+  typeGrid: {
+    gap: 16,
+  },
+  typeCard: {
+    padding: 16,
+    borderRadius: 16,
+    gap: 8,
+  },
+  typeLabel: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  typeDescription: {
+    fontSize: 14,
+    opacity: 0.7,
+  },
+  formContainer: {
+    padding: 16,
+    gap: 16,
   },
   input: {
-    marginBottom: 16,
     backgroundColor: 'transparent',
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
-    marginBottom: 12,
-  },
-  mediaSection: {
-    marginBottom: 16,
-  },
-  mediaButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  mediaButton: {
-    flex: 1,
+  pollOptionContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 8,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.1)',
   },
-  mediaButtonText: {
-    color: '#fff',
-    fontSize: 14,
+  pollOptionInput: {
+    flex: 1,
+    backgroundColor: 'transparent',
   },
-  selectedMedia: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 12,
+  removeOptionButton: {
     padding: 8,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.1)',
   },
-  selectedMediaText: {
-    color: '#fff',
-    fontSize: 14,
-  },
-  visibilitySection: {
-    marginBottom: 16,
-  },
-  visibilityButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  visibilityButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  visibilityButtonActive: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-  },
-  visibilityButtonText: {
-    color: '#fff',
-    fontSize: 14,
-  },
-  visibilityButtonTextActive: {
-    fontWeight: '600',
-  },
-  dateSection: {
-    marginBottom: 16,
+  addOptionButton: {
+    marginTop: 8,
   },
   dateButton: {
-    borderColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'flex-start',
-  },
-  actions: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    alignItems: 'center',
     gap: 8,
-    marginTop: 16,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.05)',
   },
-  actionButton: {
-    minWidth: 100,
-  },
-  cancelButton: {
-    borderColor: 'rgba(255,255,255,0.2)',
-  },
-  submitButton: {
-    backgroundColor: NEON_COLORS.blue,
-    borderRadius: 20,
-    elevation: 0,
-  },
-  submitButtonContent: {
-    height: 40,
-  },
-  submitButtonLabel: {
+  dateButtonText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: NEON_COLORS.dark,
   },
 }); 
