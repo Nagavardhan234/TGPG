@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Dimensions, TouchableOpacity, ScrollView } from 'react-native';
+import { View, StyleSheet, Dimensions, TouchableOpacity, ScrollView, Image } from 'react-native';
 import { Text, useTheme, Portal, Modal, TextInput, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, {
@@ -15,6 +15,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import api from '@/app/services/api';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -49,6 +52,13 @@ interface AddModalProps {
   pgId: number | undefined;
 }
 
+// Add supported file types
+const SUPPORTED_FILES = {
+  IMAGE: ['image/jpeg', 'image/png', 'image/gif'],
+  VIDEO: ['video/mp4'],
+  AUDIO: ['audio/mpeg', 'audio/mp3']
+};
+
 export default function AddModal({ visible, onDismiss, onSubmit, pgId }: AddModalProps) {
   const { colors, dark } = useTheme();
   const [selectedType, setSelectedType] = useState<typeof POST_TYPES[number]['key'] | null>(null);
@@ -62,6 +72,8 @@ export default function AddModal({ visible, onDismiss, onSubmit, pgId }: AddModa
   const [eventLocation, setEventLocation] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [datePickerMode, setDatePickerMode] = useState<'date' | 'time'>('date');
+  const [mediaFile, setMediaFile] = useState<any>(null);
+  const [mediaType, setMediaType] = useState<'IMAGE' | 'VIDEO' | 'AUDIO' | null>(null);
 
   const modalScale = useSharedValue(visible ? 1 : 0.8);
   const modalOpacity = useSharedValue(visible ? 1 : 0);
@@ -81,18 +93,90 @@ export default function AddModal({ visible, onDismiss, onSubmit, pgId }: AddModa
     opacity: modalOpacity.value,
   }));
 
-  const handleSubmit = () => {
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      const asset = result.assets[0];
+      setMediaFile(asset);
+      setMediaType(asset.type === 'video' ? 'VIDEO' : 'IMAGE');
+    }
+  };
+
+  const pickAudio = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['audio/mpeg', 'audio/mp3'],
+      });
+
+      if (result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        setMediaFile(asset);
+        setMediaType('AUDIO');
+      }
+    } catch (err) {
+      console.error('Error picking audio:', err);
+    }
+  };
+
+  const handleSubmit = async () => {
     if (!pgId) {
       console.error('No PG ID available');
       return;
     }
 
-    let data: any = {
-      type: selectedType,
-      content: content.trim(),
-    };
-
     try {
+      let mediaUrl = null;
+      if (mediaFile) {
+        // Create form data
+        const formData = new FormData();
+        
+        // Get file extension from uri
+        const uriParts = mediaFile.uri.split('.');
+        const fileType = uriParts[uriParts.length - 1];
+
+        // Create file object
+        const file = {
+          uri: mediaFile.uri,
+          name: `file.${fileType}`,
+          type: mediaFile.type || `${mediaType.toLowerCase()}/${fileType}`
+        };
+
+        formData.append('file', file as any);
+
+        try {
+          const uploadResponse = await api.post('/api/upload', formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            },
+            transformRequest: (data, headers) => {
+              return formData; // Return FormData directly
+            },
+          });
+
+          if (uploadResponse.data.success) {
+            mediaUrl = uploadResponse.data.url;
+          } else {
+            throw new Error('Upload failed');
+          }
+        } catch (uploadError) {
+          console.error('Error uploading file:', uploadError);
+          alert('Failed to upload file. Please try again.');
+          return;
+        }
+      }
+
+      let data: any = {
+        type: selectedType,
+        content: content.trim(),
+        mediaUrl,
+        mediaType
+      };
+
       if (selectedType === 'POLL') {
         const validOptions = pollOptions.filter(opt => opt.trim());
         if (validOptions.length < 2) {
@@ -202,6 +286,47 @@ export default function AddModal({ visible, onDismiss, onSubmit, pgId }: AddModa
         numberOfLines={4}
         style={styles.input}
       />
+      
+      {mediaFile && (
+        <View style={styles.mediaPreview}>
+          {mediaType === 'IMAGE' && (
+            <Image source={{ uri: mediaFile.uri }} style={styles.mediaPreviewImage} />
+          )}
+          {mediaType === 'VIDEO' && (
+            <View style={styles.mediaPreviewVideo}>
+              <MaterialCommunityIcons name="video" size={32} color={colors.primary} />
+              <Text>Video selected</Text>
+            </View>
+          )}
+          {mediaType === 'AUDIO' && (
+            <View style={styles.mediaPreviewAudio}>
+              <MaterialCommunityIcons name="music" size={32} color={colors.primary} />
+              <Text>Audio selected</Text>
+            </View>
+          )}
+          <TouchableOpacity 
+            style={styles.removeMediaButton}
+            onPress={() => {
+              setMediaFile(null);
+              setMediaType(null);
+            }}
+          >
+            <MaterialCommunityIcons name="close-circle" size={24} color={colors.error} />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <View style={styles.mediaButtons}>
+        <TouchableOpacity style={styles.mediaButton} onPress={pickImage}>
+          <MaterialCommunityIcons name="image-plus" size={24} color={colors.primary} />
+          <Text style={{ color: colors.primary }}>Photo/Video</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.mediaButton} onPress={pickAudio}>
+          <MaterialCommunityIcons name="music" size={24} color={colors.primary} />
+          <Text style={{ color: colors.primary }}>Audio</Text>
+        </TouchableOpacity>
+      </View>
     </Animated.View>
   );
 
@@ -541,5 +666,58 @@ const styles = StyleSheet.create({
   dateButtonText: {
     fontSize: 15,
     fontWeight: '500',
+  },
+  mediaPreview: {
+    position: 'relative',
+    marginTop: 12,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  mediaPreviewImage: {
+    width: '100%',
+    height: 200,
+    resizeMode: 'cover',
+  },
+  mediaPreviewVideo: {
+    width: '100%',
+    height: 200,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  mediaPreviewAudio: {
+    width: '100%',
+    padding: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  removeMediaButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 12,
+  },
+  mediaButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  mediaButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
 }); 

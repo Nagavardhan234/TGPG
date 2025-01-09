@@ -22,7 +22,7 @@ import Animated, {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AddModal from './AddModal';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const TAB_WIDTH = SCREEN_WIDTH / 2;
 const TABS = [
   { key: 'ALL', icon: 'grid', label: 'All' },
@@ -50,6 +50,11 @@ export default function CommunityScreen() {
   const scrollY = useSharedValue(0);
   const addButtonScale = useSharedValue(1);
   const tabPosition = useSharedValue(0);
+  const [selectedPost, setSelectedPost] = useState<any>(null);
+  const [showComments, setShowComments] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const [comments, setComments] = useState<any[]>([]);
+  const [loadingComments, setLoadingComments] = useState(false);
 
   useEffect(() => {
     const index = TABS.findIndex(tab => tab.key === activeTab);
@@ -278,7 +283,14 @@ export default function CommunityScreen() {
           <Text style={[styles.interactionText, { color: theme.colors.text }]}>{post.LikesCount}</Text>
         </Pressable>
 
-        <Pressable style={styles.interactionButton}>
+        <Pressable 
+          style={styles.interactionButton}
+          onPress={() => {
+            setSelectedPost(post);
+            setShowComments(true);
+            loadComments(post.PostID);
+          }}
+        >
           <MaterialCommunityIcons
             name="comment-outline"
             size={24}
@@ -468,6 +480,60 @@ export default function CommunityScreen() {
       alert(error.response?.data?.message || 'Failed to create post. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadComments = async (postId: number) => {
+    try {
+      setLoadingComments(true);
+      const response = await api.get(`/api/community/posts/${postId}/comments`);
+      if (response.data.success) {
+        setComments(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error loading comments:', error);
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  const addComment = async (postId: number) => {
+    if (!commentText.trim()) return;
+    
+    try {
+      const response = await api.post(`/api/community/posts/${postId}/comments`, {
+        content: commentText.trim()
+      });
+
+      if (response.data.success) {
+        setComments([response.data.data, ...comments]);
+        setCommentText('');
+        // Update the comment count in the posts list
+        setPosts(posts.map(post => 
+          post.PostID === postId 
+            ? { ...post, CommentsCount: post.CommentsCount + 1 }
+            : post
+        ));
+      }
+    } catch (error) {
+      console.error('Error adding comment:', error);
+    }
+  };
+
+  const deleteComment = async (postId: number, commentId: number) => {
+    try {
+      const response = await api.delete(`/api/community/comments/${commentId}`);
+      if (response.data.success) {
+        setComments(comments.filter(comment => comment.CommentID !== commentId));
+        // Update the comment count in the posts list
+        setPosts(posts.map(post => 
+          post.PostID === postId 
+            ? { ...post, CommentsCount: post.CommentsCount - 1 }
+            : post
+        ));
+      }
+    } catch (error) {
+      console.error('Error deleting comment:', error);
     }
   };
 
@@ -827,6 +893,102 @@ export default function CommunityScreen() {
             color="#fff"
           />
         </Animated.View>
+
+        {showComments && selectedPost && (
+          <Portal>
+            <Modal
+              visible={showComments}
+              onDismiss={() => {
+                setShowComments(false);
+                setSelectedPost(null);
+                setComments([]);
+              }}
+              contentContainerStyle={[styles.commentsModal]}
+            >
+              <View style={[styles.commentsContainer, { backgroundColor: theme.colors.surface }]}>
+                <View style={styles.commentsHeader}>
+                  <IconButton
+                    icon="close"
+                    size={24}
+                    onPress={() => {
+                      setShowComments(false);
+                      setSelectedPost(null);
+                      setComments([]);
+                    }}
+                  />
+                  <Text style={[styles.commentsTitle, { color: theme.colors.text }]}>Comments</Text>
+                  <View style={{ width: 40 }} />
+                </View>
+
+                <ScrollView style={styles.commentsList}>
+                  {loadingComments ? (
+                    <ActivityIndicator style={{ marginTop: 20 }} />
+                  ) : comments.length === 0 ? (
+                    <View style={styles.noComments}>
+                      <MaterialCommunityIcons
+                        name="comment-outline"
+                        size={48}
+                        color={theme.colors.primary}
+                        style={{ opacity: 0.5 }}
+                      />
+                      <Text style={[styles.noCommentsText, { color: theme.colors.text }]}>
+                        No comments yet. Be the first to comment!
+                      </Text>
+                    </View>
+                  ) : (
+                    comments.map((comment) => (
+                      <View key={comment.CommentID} style={styles.commentItem}>
+                        <Avatar.Text
+                          size={36}
+                          label={comment.UserName?.substring(0, 2) || '?'}
+                          style={[styles.commentAvatar, { backgroundColor: theme.colors.primary + '20' }]}
+                        />
+                        <View style={styles.commentContent}>
+                          <View style={styles.commentHeader}>
+                            <Text style={[styles.commentUserName, { color: theme.colors.text }]}>
+                              {comment.UserName}
+                            </Text>
+                            <Text style={[styles.commentTime, { color: theme.colors.textSecondary }]}>
+                              {format(new Date(comment.CreatedAt), 'PPp')}
+                            </Text>
+                          </View>
+                          <Text style={[styles.commentText, { color: theme.colors.text }]}>
+                            {comment.Content}
+                          </Text>
+                        </View>
+                        {comment.UserID === student?.id && (
+                          <IconButton
+                            icon="delete-outline"
+                            size={20}
+                            onPress={() => deleteComment(selectedPost.PostID, comment.CommentID)}
+                            style={styles.deleteComment}
+                          />
+                        )}
+                      </View>
+                    ))
+                  )}
+                </ScrollView>
+
+                <View style={styles.commentInput}>
+                  <TextInput
+                    mode="outlined"
+                    placeholder="Write a comment..."
+                    value={commentText}
+                    onChangeText={setCommentText}
+                    right={
+                      <TextInput.Icon
+                        icon="send"
+                        disabled={!commentText.trim()}
+                        onPress={() => addComment(selectedPost.PostID)}
+                      />
+                    }
+                    style={{ flex: 1 }}
+                  />
+                </View>
+              </View>
+            </Modal>
+          </Portal>
+        )}
           </>
         )}
       </View>
@@ -1147,5 +1309,81 @@ const styles = StyleSheet.create({
   },
   loadingMore: {
     padding: 16,
+  },
+  commentsModal: {
+    margin: 0,
+    justifyContent: 'flex-end',
+  },
+  commentsContainer: {
+    maxHeight: SCREEN_HEIGHT * 0.8,
+    width: '100%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backdropFilter: 'blur(20px)',
+  },
+  commentsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  commentsTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  commentsList: {
+    maxHeight: SCREEN_HEIGHT * 0.6,
+  },
+  commentItem: {
+    flexDirection: 'row',
+    padding: 16,
+    gap: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  commentAvatar: {
+    marginTop: 4,
+  },
+  commentContent: {
+    flex: 1,
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  commentUserName: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  commentTime: {
+    fontSize: 12,
+  },
+  commentText: {
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  deleteComment: {
+    margin: -8,
+  },
+  commentInput: {
+    padding: 16,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.1)',
+  },
+  noComments: {
+    padding: 32,
+    alignItems: 'center',
+    gap: 12,
+  },
+  noCommentsText: {
+    textAlign: 'center',
+    opacity: 0.7,
   },
 }); 
