@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { jwtDecode } from 'jwt-decode';
 
 interface StudentResponse {
-  id: number;
+  id: string;
   name: string;
   email: string | null;
   phone: string;
@@ -21,7 +21,7 @@ interface LoginResponse {
 }
 
 interface TokenPayload {
-  id: number;
+  id: string;
   role: string;
   pgId: number;
   iat: number;

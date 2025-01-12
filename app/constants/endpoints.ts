@@ -5,6 +5,18 @@ export const ENDPOINTS = {
   MANAGER_REGISTER: '/api/managers/register',
   STUDENT_LOGIN: '/api/students/login',
   
+  // Complaints endpoints
+  COMPLAINTS: {
+    SUBMIT_COMPLAINT: '/api/complaints/submit',
+    MY_COMPLAINTS: '/api/complaints/my',
+    CATEGORIES: '/api/complaints/categories',
+    RESPONSE: '/api/complaints/:complaintId/response',
+    STATUS: '/api/complaints/:complaintId/status',
+    FEEDBACK: '/api/complaints/:complaintId/feedback',
+    MANAGER_COMPLAINTS: '/api/complaints/manager',
+    STATS: '/api/complaints/stats'
+  },
+  
   // Amenities endpoint
   AMENITIES: '/api/amenities',
   

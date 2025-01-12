@@ -59,6 +59,8 @@ export const StudentAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
     try {
       await AsyncStorage.setItem('student_token', token);
       await AsyncStorage.setItem('student', JSON.stringify(studentData));
+      // Set token in axios headers
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       setIsAuthenticated(true);
       setStudent(studentData);
     } catch (error) {

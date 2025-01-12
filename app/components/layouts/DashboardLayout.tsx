@@ -27,6 +27,12 @@ const menuItems = [
     route: '/screens/dashboard/rooms'
   },
   {
+    key: 'complaints',
+    title: 'Complaints',
+    icon: 'alert-circle-outline',
+    route: '/screens/dashboard/complaints'
+  },
+  {
     key: 'payments',
     title: 'Payments Overview',
     icon: 'credit-card-outline',
