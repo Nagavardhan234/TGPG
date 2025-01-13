@@ -81,6 +81,23 @@ export const ENDPOINTS = {
   CHAT_ROOM_MESSAGES: '/api/messages/rooms/:chatRoomId/messages',
   CHAT_MESSAGE_REACTIONS: '/api/messages/messages/:messageId/reactions',
   CHAT_ROOM_READ: '/api/messages/rooms/:chatRoomId/read',
+  
+  PROFILE: {
+    GET: '/api/managers/profile',
+    UPDATE: '/api/managers/profile',
+    UPDATE_PG: '/api/managers/pg-details',
+    UPDATE_IMAGE: '/api/managers/profile-image'
+  },
+  
+  SETTINGS: {
+    GET: '/api/settings',
+    UPDATE: '/api/settings/update',
+    UPDATE_PAYMENT: '/api/settings/payment/update',
+  },
+  
+  AUTH: {
+    VERIFY_PASSWORD: '/api/auth/verify-password',
+  },
 };
 
 export const BASE_URL = 'http://localhost:3000'
