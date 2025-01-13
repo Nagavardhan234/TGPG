@@ -37,6 +37,13 @@ export default function Layout() {
           }}
         />
         <Stack.Screen 
+          name="complaints"
+          options={{
+            title: "Complaints Management",
+            headerShown: false 
+          }}
+        />
+        <Stack.Screen 
           name="payments"
           options={{
             title: "Payments Overview",

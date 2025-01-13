@@ -5,16 +5,27 @@ export const ENDPOINTS = {
   MANAGER_REGISTER: '/api/managers/register',
   STUDENT_LOGIN: '/api/students/login',
   
-  // Complaints endpoints
+  // Complaints endpoints with clear role separation
   COMPLAINTS: {
-    SUBMIT_COMPLAINT: '/api/complaints/submit',
-    MY_COMPLAINTS: '/api/complaints/my',
+    // Student-specific endpoints
+    STUDENT: {
+      SUBMIT: '/api/complaints/submit',
+      MY_COMPLAINTS: '/api/complaints/my',
+      FEEDBACK: '/api/complaints/:complaintId/feedback',
+    },
+    
+    // Manager-specific endpoints
+    MANAGER: {
+      LIST: '/api/complaints/manager/:pgId',
+      STATS: '/api/complaints/manager/:pgId/stats',
+      UPDATE_STATUS: '/api/complaints/manager/:complaintId/status',
+      ASSIGN: '/api/complaints/manager/:complaintId/assign',
+      RESPONSE: '/api/complaints/manager/:complaintId/response',
+    },
+    
+    // Shared endpoints
     CATEGORIES: '/api/complaints/categories',
-    RESPONSE: '/api/complaints/:complaintId/response',
-    STATUS: '/api/complaints/:complaintId/status',
-    FEEDBACK: '/api/complaints/:complaintId/feedback',
-    MANAGER_COMPLAINTS: '/api/complaints/manager',
-    STATS: '/api/complaints/stats'
+    ATTACHMENTS: '/api/complaints/:complaintId/attachments',
   },
   
   // Amenities endpoint
@@ -72,7 +83,7 @@ export const ENDPOINTS = {
   CHAT_ROOM_READ: '/api/messages/rooms/:chatRoomId/read',
 };
 
-export const BASE_URL = 'http://localhost:3000';
+export const BASE_URL = 'http://localhost:3000'
 
 export const API_TIMEOUT = 10000; // 10 seconds
  

@@ -2,14 +2,15 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 
-interface Manager {
+export interface Manager {
   id: number;
   fullName: string;
   email: string;
   phone: string;
+  role: 'manager';
 }
 
-interface PG {
+export interface PG {
   PGID: number;
   PGName: string;
   Status: string;
@@ -17,9 +18,9 @@ interface PG {
 
 interface AuthContextType {
   isAuthenticated: boolean;
+  token: string | null;
   manager: Manager | null;
   pg: PG | null;
-  token: string | null;
   login: (token: string, manager: Manager, pg: PG | null) => Promise<void>;
   logout: () => Promise<void>;
 }

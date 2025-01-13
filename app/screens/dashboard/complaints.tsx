@@ -1,333 +1,245 @@
 import React, { useEffect, useState } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
-import { useTheme, Text, Button, Card, Portal, Dialog, TextInput, SegmentedButtons, Chip, DataTable } from 'react-native-paper';
-import { useAuth } from '../../hooks/useAuth';
-import DashboardLayout from '@/app/components/layouts/DashboardLayout';
-import { complaintsService, type Complaint, type ComplaintCategory } from '@/app/services/complaints.service';
-import { format } from 'date-fns';
+import { View, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { Text, Button, useTheme } from 'react-native-paper';
+import * as DocumentPicker from 'expo-document-picker';
+import { useAuth } from '@/app/context/AuthContext';
+import { managerComplaintsService } from '@/app/services/manager.complaints.service';
+import ComplaintsAnalytics from '@/app/components/dashboard/ComplaintsAnalytics';
+import ComplaintsList from '@/app/components/dashboard/ComplaintsList';
+import { ApiError } from '@/app/services/student.service';
+import { Link } from 'expo-router';
 
-export default function ManagerComplaintsScreen() {
-  const { theme } = useTheme();
-  const { user } = useAuth();
+type Complaint = {
+  id: number;
+  title: string;
+  status: string;
+};
+
+type Stats = {
+  total: number;
+  resolved: number;
+  pending: number;
+};
+
+export default function ComplaintsScreen() {
+  const { colors } = useTheme();
+  const { manager, pg, isAuthenticated, token } = useAuth();
   const [complaints, setComplaints] = useState<Complaint[]>([]);
-  const [categories, setCategories] = useState<ComplaintCategory[]>([]);
-  const [stats, setStats] = useState<{
-    total: number;
-    pending: number;
-    inProgress: number;
-    resolved: number;
-    cancelled: number;
-    byCategory: { categoryId: number; count: number }[];
-    byPriority: { priority: string; count: number }[];
-    avgResolutionTime: number;
-    avgRating: number;
-  }>();
-  const [isLoading, setIsLoading] = useState(true);
-  const [dialogVisible, setDialogVisible] = useState(false);
-  const [selectedComplaint, setSelectedComplaint] = useState<Complaint>();
-  
-  // Response form state
-  const [message, setMessage] = useState('');
-  const [selectedFiles, setSelectedFiles] = useState<any[]>([]);
-  const [newStatus, setNewStatus] = useState<'submitted' | 'in_progress' | 'resolved' | 'cancelled'>();
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  // Debug logs for auth state
   useEffect(() => {
-    loadComplaints();
-    loadCategories();
-    loadStats();
-  }, []);
+    console.log('Auth State:', {
+      isAuthenticated,
+      hasManager: !!manager,
+      managerDetails: manager ? {
+        id: manager.id,
+        role: manager.role,
+      } : null,
+      hasPG: !!pg,
+      pgDetails: pg ? {
+        PGID: pg.PGID,
+        Status: pg.Status,
+      } : null,
+      hasToken: !!token,
+    });
+  }, [isAuthenticated, manager, pg, token]);
 
-  const loadComplaints = async () => {
-    try {
-      const data = await complaintsService.getManagerComplaints(user.pgId);
-      setComplaints(data);
-    } catch (error) {
-      console.error('Error loading complaints:', error);
-    } finally {
-      setIsLoading(false);
+  // Load complaints and stats
+  useEffect(() => {
+    if (!isAuthenticated || !manager || !pg?.PGID) {
+      return;
     }
-  };
+    console.log('Loading complaints for PG:', pg.PGID);
+    loadComplaintsAndStats();
+  }, [isAuthenticated, manager, pg?.PGID]);
 
-  const loadCategories = async () => {
+  const loadComplaintsAndStats = async () => {
+    if (!pg?.PGID) return;
+    
+    setLoading(true);
+    setError(null);
     try {
-      const data = await complaintsService.getCategories();
-      setCategories(data);
-    } catch (error) {
-      console.error('Error loading categories:', error);
-    }
-  };
-
-  const loadStats = async () => {
-    try {
-      const data = await complaintsService.getStats(user.pgId);
-      setStats(data);
-    } catch (error) {
-      console.error('Error loading stats:', error);
-    }
-  };
-
-  const handleFilePick = async () => {
-    try {
-      const result = await DocumentPicker.pickMultiple({
-        type: ['image/*', 'application/pdf'],
-      });
-      setSelectedFiles(result);
-    } catch (err) {
-      if (!DocumentPicker.isCancel(err)) {
-        console.error('Error picking file:', err);
-      }
-    }
-  };
-
-  const handleSubmitResponse = async () => {
-    if (!selectedComplaint) return;
-
-    try {
-      setIsLoading(true);
-      const formData = new FormData();
-      formData.append('message', message);
-      formData.append('respondedBy', user.managerId.toString());
-      formData.append('respondedByType', 'manager');
-
-      selectedFiles.forEach((file, index) => {
-        formData.append(`attachments[${index}]`, file);
+      console.log('Fetching complaints and stats for PG:', pg.PGID, {
+        managerRole: manager?.role,
+        token: token ? 'present' : 'missing',
       });
 
-      await complaintsService.addResponse(selectedComplaint.complaintId, formData);
+      const [complaintsData, statsData] = await Promise.all([
+        managerComplaintsService.getComplaints(pg.PGID),
+        managerComplaintsService.getStats(pg.PGID)
+      ]);
 
-      if (newStatus) {
-        await complaintsService.updateStatus(selectedComplaint.complaintId, {
-          status: newStatus,
-          comment: message,
-          changedBy: user.managerId,
-          changedByType: 'manager',
+      console.log('Data loaded successfully:', {
+        complaintsCount: complaintsData.length,
+        hasStats: !!statsData,
+      });
+
+      setComplaints(complaintsData);
+      setStats(statsData);
+    } catch (err: unknown) {
+      const error = err instanceof ApiError ? err : new ApiError((err as Error).message);
+      console.error('Error loading data:', {
+        error: error.message,
+        status: error.status,
+        response: error.response?.data,
+      });
+
+      if (error.status === 403) {
+        console.error('Permission denied:', {
+          managerRole: manager?.role,
+          pgId: pg.PGID,
+          hasToken: !!token,
         });
+        return;
       }
-      
-      // Reset form
-      setMessage('');
-      setSelectedFiles([]);
-      setNewStatus(undefined);
-      setDialogVisible(false);
-      setSelectedComplaint(undefined);
-      
-      // Reload data
-      await Promise.all([loadComplaints(), loadStats()]);
-    } catch (error) {
-      console.error('Error submitting response:', error);
+      setError(error.message || 'Failed to load data');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const renderStats = () => (
-    <Card style={styles.statsCard}>
-      <Card.Content>
-        <Text variant="titleLarge" style={styles.statsTitle}>Complaints Overview</Text>
-        <View style={styles.statsGrid}>
-          <View style={styles.statItem}>
-            <Text variant="headlineMedium">{stats?.total || 0}</Text>
-            <Text>Total</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text variant="headlineMedium">{stats?.pending || 0}</Text>
-            <Text>Pending</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text variant="headlineMedium">{stats?.inProgress || 0}</Text>
-            <Text>In Progress</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text variant="headlineMedium">{stats?.resolved || 0}</Text>
-            <Text>Resolved</Text>
-          </View>
+  const handleFileSelect = async (complaintId: number) => {
+    try {
+      console.log('Selecting file for complaint:', complaintId);
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/*', 'application/pdf'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) {
+        console.log('File selection cancelled');
+        return;
+      }
+
+      console.log('File selected:', {
+        name: result.assets[0].name,
+        type: result.assets[0].mimeType,
+        size: result.assets[0].size,
+      });
+
+      const formData = new FormData();
+      const file = result.assets[0];
+      formData.append('file', {
+        uri: file.uri,
+        type: file.mimeType || 'application/octet-stream',
+        name: file.name,
+      } as any);
+
+      console.log('Adding response with file for complaint:', complaintId);
+      await managerComplaintsService.addResponse(complaintId, formData);
+      console.log('Response added successfully');
+      await loadComplaintsAndStats();
+    } catch (err: unknown) {
+      const error = err instanceof ApiError ? err : new ApiError((err as Error).message);
+      console.error('Error handling file:', {
+        error: error.message,
+        status: error.status,
+        response: error.response?.data,
+      });
+      setError(error.message || 'Failed to upload file');
+    }
+  };
+
+  const handleStatusUpdate = async (complaintId: number, status: string, comment: string) => {
+    try {
+      if (!manager?.id) {
+        throw new Error('Manager ID not found');
+      }
+      await managerComplaintsService.updateStatus(complaintId, {
+        status,
+        comment,
+        managerId: manager.id
+      });
+      await loadComplaintsAndStats();
+    } catch (error) {
+      console.error('Error updating status:', error);
+      setError('Failed to update status');
+    }
+  };
+
+  const handleAssignManager = async (complaintId: number) => {
+    try {
+      await managerComplaintsService.assignManager(complaintId);
+      await loadComplaintsAndStats();
+    } catch (error) {
+      console.error('Error assigning manager:', error);
+      setError('Failed to assign manager');
+    }
+  };
+
+  // Handle authentication and PG selection first
+  if (!isAuthenticated || !manager) {
+    console.log('Not authenticated or no manager, redirecting to login');
+    return (
+      <Link href="/screens/LoginScreen" asChild>
+        <View style={{ ...styles.container, backgroundColor: colors.background }}>
+          <Text>Redirecting to login...</Text>
         </View>
-        {stats?.avgRating && (
-          <View style={styles.avgRating}>
-            <Text>Average Rating: {stats.avgRating.toFixed(1)}/5</Text>
-          </View>
-        )}
-      </Card.Content>
-    </Card>
-  );
+      </Link>
+    );
+  }
 
-  const renderComplaint = (complaint: Complaint) => (
-    <Card 
-      key={complaint.complaintId} 
-      style={styles.card}
-      onPress={() => {
-        setSelectedComplaint(complaint);
-        setDialogVisible(true);
-      }}
-    >
-      <Card.Title
-        title={complaint.title}
-        subtitle={`Status: ${complaint.status} • Priority: ${complaint.priority}`}
-        right={(props) => (
-          <Chip 
-            mode="flat" 
-            style={[
-              styles.statusChip,
-              { backgroundColor: getStatusColor(complaint.status) }
-            ]}
-          >
-            {complaint.status}
-          </Chip>
-        )}
-      />
-      <Card.Content>
-        <Text>{complaint.description}</Text>
-        {complaint.category && (
-          <Text style={styles.category}>Category: {complaint.category.name}</Text>
-        )}
-        <Text style={styles.timestamp}>
-          Submitted: {format(new Date(complaint.createdAt), 'PPp')}
-        </Text>
-        {complaint.resolvedAt && (
-          <Text style={styles.timestamp}>
-            Resolved: {format(new Date(complaint.resolvedAt), 'PPp')}
-          </Text>
-        )}
-      </Card.Content>
-    </Card>
-  );
+  if (!pg?.PGID) {
+    console.log('No PG selected');
+    return (
+      <View style={{ ...styles.container, backgroundColor: colors.background }}>
+        <Text>Please select a PG to continue</Text>
+      </View>
+    );
+  }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'submitted':
-        return theme.colors.error;
-      case 'in_progress':
-        return theme.colors.warning;
-      case 'resolved':
-        return theme.colors.success;
-      default:
-        return theme.colors.surfaceVariant;
-    }
-  };
+  if (loading) {
+    return (
+      <View style={{ ...styles.container, ...styles.centered }}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={{ ...styles.container, ...styles.centered }}>
+        <Text style={styles.error}>{error}</Text>
+        <Button mode="contained" onPress={loadComplaintsAndStats} style={styles.retryButton}>
+          Retry
+        </Button>
+      </View>
+    );
+  }
 
   return (
-    <DashboardLayout>
-      <ScrollView style={styles.container}>
-        {renderStats()}
-        <Text variant="headlineMedium" style={styles.title}>All Complaints</Text>
-        {complaints.map(renderComplaint)}
-      </ScrollView>
-
-      <Portal>
-        <Dialog visible={dialogVisible} onDismiss={() => setDialogVisible(false)}>
-          <Dialog.Title>Respond to Complaint</Dialog.Title>
-          <Dialog.Content>
-            {selectedComplaint && (
-              <>
-                <Card style={styles.selectedComplaint}>
-                  <Card.Title title={selectedComplaint.title} />
-                  <Card.Content>
-                    <Text>{selectedComplaint.description}</Text>
-                  </Card.Content>
-                </Card>
-                <TextInput
-                  label="Response Message"
-                  value={message}
-                  onChangeText={setMessage}
-                  multiline
-                  numberOfLines={4}
-                  style={styles.input}
-                />
-                <SegmentedButtons
-                  value={newStatus || ''}
-                  onValueChange={(value) => setNewStatus(value as any)}
-                  buttons={[
-                    { value: 'in_progress', label: 'In Progress' },
-                    { value: 'resolved', label: 'Resolved' },
-                    { value: 'cancelled', label: 'Cancel' },
-                  ]}
-                  style={styles.statusButtons}
-                />
-                <Button
-                  mode="outlined"
-                  onPress={handleFilePick}
-                  style={styles.fileButton}
-                >
-                  Attach Files
-                </Button>
-                {selectedFiles.map((file, index) => (
-                  <Text key={index} style={styles.fileName}>{file.name}</Text>
-                ))}
-              </>
-            )}
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setDialogVisible(false)}>Cancel</Button>
-            <Button
-              mode="contained"
-              onPress={handleSubmitResponse}
-              loading={isLoading}
-              disabled={!message}
-            >
-              Submit Response
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
-    </DashboardLayout>
+    <ScrollView style={styles.container}>
+      {stats && <ComplaintsAnalytics stats={stats} />}
+      <ComplaintsList
+        complaints={complaints}
+        onStatusUpdate={handleStatusUpdate}
+        onAssignManager={handleAssignManager}
+        onFileSelect={handleFileSelect}
+        currentManagerId={manager?.id}
+      />
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
+    backgroundColor: '#fff',
   },
-  title: {
-    marginBottom: 16,
-  },
-  statsCard: {
-    marginBottom: 24,
-  },
-  statsTitle: {
-    marginBottom: 16,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  statItem: {
+  centered: {
+    justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
-  avgRating: {
-    alignItems: 'center',
+  error: {
+    color: 'red',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
     marginTop: 8,
-  },
-  card: {
-    marginBottom: 16,
-  },
-  selectedComplaint: {
-    marginBottom: 16,
-  },
-  category: {
-    marginTop: 8,
-    opacity: 0.7,
-  },
-  timestamp: {
-    marginTop: 4,
-    fontSize: 12,
-    opacity: 0.7,
-  },
-  input: {
-    marginBottom: 16,
-  },
-  statusButtons: {
-    marginBottom: 16,
-  },
-  fileButton: {
-    marginBottom: 8,
-  },
-  fileName: {
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  statusChip: {
-    marginRight: 16,
   },
 }); 

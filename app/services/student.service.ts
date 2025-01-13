@@ -17,19 +17,29 @@ export class ValidationError extends Error {
   }
 }
 
-export class ApiError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ApiError';
-  }
-}
-
-// Response Types
-export interface ApiResponse<T> {
+export interface ApiResponse<T = any> {
   success: boolean;
-  data: T;
+  data?: T;
   message?: string;
   error?: string;
+}
+
+export class ApiError extends Error {
+  status?: number;
+  response?: {
+    data?: {
+      success: boolean;
+      error?: string;
+      message?: string;
+    };
+  };
+
+  constructor(message: string, status?: number, response?: any) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.response = response;
+  }
 }
 
 export interface Student {
