@@ -127,7 +127,7 @@ class ComplaintsService {
     try {
       console.log('Fetching complaints from API');
       const response = await api.get<ApiResponse<Complaint[]>>(
-        ENDPOINTS.COMPLAINTS.MY_COMPLAINTS
+        ENDPOINTS.COMPLAINTS.STUDENT.MY_COMPLAINTS
       );
 
       console.log('Raw API response:', response.data);
