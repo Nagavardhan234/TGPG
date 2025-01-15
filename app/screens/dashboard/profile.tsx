@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import { Surface, Text, IconButton, TextInput, Button, ActivityIndicator, Portal, Dialog, Snackbar } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, Image } from 'react-native';
+import { Surface, Text, IconButton, TextInput, Button, ActivityIndicator, Portal, Dialog, Snackbar, Avatar, Divider } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import { getProfileData, updateProfileData, updatePGDetails } from '@/app/services/profile.service';
 import { validateEmail, validatePhone } from '@/app/utils/validation';
+import * as ImagePicker from 'expo-image-picker';
 
 export default function ProfileScreen() {
   const { theme, isDarkMode } = useTheme();
@@ -14,28 +15,50 @@ export default function ProfileScreen() {
 
   // Personal Information State
   const [personalInfo, setPersonalInfo] = useState({
+    managerId: '',
     fullName: '',
     email: '',
     phone: '',
+    alternatePhone: '',
+    profileImage: '',
+    address: '',
+    joinedDate: ''
   });
   const [editingPersonal, setEditingPersonal] = useState(false);
   const [personalErrors, setPersonalErrors] = useState({
     fullName: '',
     email: '',
     phone: '',
+    alternatePhone: '',
+    address: ''
   });
 
   // PG Details State
   const [pgDetails, setPgDetails] = useState({
+    pgId: '',
     name: '',
     address: '',
-    numRooms: 0,
-    numStudents: 0,
+    city: '',
+    state: '',
+    pincode: '',
+    type: '',
+    totalRooms: '',
+    costPerBed: '',
+    contactNumber: '',
+    totalTenants: 0,
+    description: '',
+    createdAt: '',
+    amenities: []
   });
   const [editingPG, setEditingPG] = useState(false);
   const [pgErrors, setPgErrors] = useState({
     name: '',
     address: '',
+    city: '',
+    state: '',
+    pincode: '',
+    type: '',
+    contactNumber: ''
   });
 
   useEffect(() => {
@@ -46,21 +69,59 @@ export default function ProfileScreen() {
     try {
       setLoading(true);
       const data = await getProfileData();
+      
+      // Update personal info
       setPersonalInfo({
-        fullName: data.fullName,
-        email: data.email,
-        phone: data.phone,
+        managerId: data.personalInfo.managerId,
+        fullName: data.personalInfo.fullName,
+        email: data.personalInfo.email,
+        phone: data.personalInfo.phone,
+        alternatePhone: data.personalInfo.alternatePhone,
+        profileImage: data.personalInfo.profileImage,
+        address: data.personalInfo.address,
+        joinedDate: data.personalInfo.joinedDate
       });
-      setPgDetails({
-        name: data.pg.name,
-        address: data.pg.address,
-        numRooms: data.pg.numRooms,
-        numStudents: data.pg.numStudents,
-      });
+
+      // Update PG details if available
+      if (data.pg) {
+        setPgDetails({
+          pgId: data.pg.pgId,
+          name: data.pg.name,
+          address: data.pg.address,
+          city: data.pg.city,
+          state: data.pg.state,
+          pincode: data.pg.pincode,
+          type: data.pg.type,
+          totalRooms: data.pg.totalRooms.toString(),
+          costPerBed: data.pg.costPerBed.toString(),
+          contactNumber: data.pg.contactNumber,
+          totalTenants: data.pg.totalTenants,
+          description: data.pg.description,
+          createdAt: data.pg.createdAt,
+          amenities: data.pg.amenities
+        });
+      }
     } catch (error: any) {
       setError(error.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      // TODO: Implement image upload logic
+      setPersonalInfo(prev => ({
+        ...prev,
+        profileImage: result.assets[0].uri
+      }));
     }
   };
 
@@ -69,6 +130,8 @@ export default function ProfileScreen() {
       fullName: '',
       email: '',
       phone: '',
+      alternatePhone: '',
+      address: ''
     };
     
     if (!personalInfo.fullName) {
@@ -80,6 +143,9 @@ export default function ProfileScreen() {
     if (!validatePhone(personalInfo.phone)) {
       errors.phone = 'Invalid phone number';
     }
+    if (personalInfo.alternatePhone && !validatePhone(personalInfo.alternatePhone)) {
+      errors.alternatePhone = 'Invalid alternate phone number';
+    }
 
     setPersonalErrors(errors);
     return !Object.values(errors).some(error => error);
@@ -89,13 +155,21 @@ export default function ProfileScreen() {
     const errors = {
       name: '',
       address: '',
+      city: '',
+      state: '',
+      pincode: '',
+      type: '',
+      contactNumber: ''
     };
     
-    if (!pgDetails.name) {
-      errors.name = 'PG name is required';
-    }
-    if (!pgDetails.address) {
-      errors.address = 'Address is required';
+    if (!pgDetails.name) errors.name = 'PG name is required';
+    if (!pgDetails.address) errors.address = 'Address is required';
+    if (!pgDetails.city) errors.city = 'City is required';
+    if (!pgDetails.state) errors.state = 'State is required';
+    if (!pgDetails.pincode) errors.pincode = 'Pincode is required';
+    if (!pgDetails.type) errors.type = 'PG type is required';
+    if (!validatePhone(pgDetails.contactNumber)) {
+      errors.contactNumber = 'Invalid contact number';
     }
 
     setPgErrors(errors);
@@ -138,6 +212,36 @@ export default function ProfileScreen() {
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      {/* Profile Header */}
+      <Surface style={[styles.header, { backgroundColor: theme.colors.surface }]}>
+        <View style={styles.profileImageContainer}>
+          {personalInfo.profileImage ? (
+            <Image 
+              source={{ uri: personalInfo.profileImage }} 
+              style={styles.profileImage}
+            />
+          ) : (
+            <Avatar.Text 
+              size={100} 
+              label={personalInfo.fullName.substring(0, 2).toUpperCase()} 
+              style={{ backgroundColor: theme.colors.primary }}
+            />
+          )}
+          <IconButton
+            icon="camera"
+            size={24}
+            style={styles.editImageButton}
+            onPress={pickImage}
+          />
+        </View>
+        <Text style={[styles.profileName, { color: theme.colors.primary }]}>
+          {personalInfo.fullName}
+        </Text>
+        <Text style={styles.joinDate}>
+          Member since {new Date(personalInfo.joinedDate).toLocaleDateString()}
+        </Text>
+      </Surface>
+
       {/* Personal Information Section */}
       <Surface style={[styles.section, { backgroundColor: theme.colors.surface }]}>
         <View style={styles.sectionHeader}>
@@ -184,6 +288,32 @@ export default function ProfileScreen() {
           <Text style={styles.errorText}>{personalErrors.phone}</Text>
         ) : null}
 
+        <TextInput
+          label="Alternate Phone"
+          value={personalInfo.alternatePhone}
+          onChangeText={text => setPersonalInfo({ ...personalInfo, alternatePhone: text })}
+          disabled={!editingPersonal}
+          error={!!personalErrors.alternatePhone}
+          style={styles.input}
+        />
+        {personalErrors.alternatePhone ? (
+          <Text style={styles.errorText}>{personalErrors.alternatePhone}</Text>
+        ) : null}
+
+        <TextInput
+          label="Address"
+          value={personalInfo.address}
+          onChangeText={text => setPersonalInfo({ ...personalInfo, address: text })}
+          disabled={!editingPersonal}
+          error={!!personalErrors.address}
+          style={styles.input}
+          multiline
+          numberOfLines={3}
+        />
+        {personalErrors.address ? (
+          <Text style={styles.errorText}>{personalErrors.address}</Text>
+        ) : null}
+
         {editingPersonal && (
           <Button mode="contained" onPress={handleSavePersonal} style={styles.saveButton}>
             Save Changes
@@ -214,6 +344,18 @@ export default function ProfileScreen() {
         ) : null}
 
         <TextInput
+          label="Contact Number"
+          value={pgDetails.contactNumber}
+          onChangeText={text => setPgDetails({ ...pgDetails, contactNumber: text })}
+          disabled={!editingPG}
+          error={!!pgErrors.contactNumber}
+          style={styles.input}
+        />
+        {pgErrors.contactNumber ? (
+          <Text style={styles.errorText}>{pgErrors.contactNumber}</Text>
+        ) : null}
+
+        <TextInput
           label="Address"
           value={pgDetails.address}
           onChangeText={text => setPgDetails({ ...pgDetails, address: text })}
@@ -221,19 +363,93 @@ export default function ProfileScreen() {
           error={!!pgErrors.address}
           style={styles.input}
           multiline
+          numberOfLines={3}
         />
         {pgErrors.address ? (
           <Text style={styles.errorText}>{pgErrors.address}</Text>
         ) : null}
 
-        <View style={styles.statsRow}>
+        <View style={styles.inputRow}>
+          <TextInput
+            label="City"
+            value={pgDetails.city}
+            onChangeText={text => setPgDetails({ ...pgDetails, city: text })}
+            disabled={!editingPG}
+            error={!!pgErrors.city}
+            style={[styles.input, styles.halfInput]}
+          />
+          <TextInput
+            label="State"
+            value={pgDetails.state}
+            onChangeText={text => setPgDetails({ ...pgDetails, state: text })}
+            disabled={!editingPG}
+            error={!!pgErrors.state}
+            style={[styles.input, styles.halfInput]}
+          />
+        </View>
+
+        <View style={styles.inputRow}>
+          <TextInput
+            label="Pincode"
+            value={pgDetails.pincode}
+            onChangeText={text => setPgDetails({ ...pgDetails, pincode: text })}
+            disabled={!editingPG}
+            error={!!pgErrors.pincode}
+            style={[styles.input, styles.halfInput]}
+          />
+          <TextInput
+            label="PG Type"
+            value={pgDetails.type}
+            onChangeText={text => setPgDetails({ ...pgDetails, type: text })}
+            disabled={!editingPG}
+            error={!!pgErrors.type}
+            style={[styles.input, styles.halfInput]}
+          />
+        </View>
+
+        <View style={styles.inputRow}>
+          <TextInput
+            label="Total Rooms"
+            value={pgDetails.totalRooms}
+            onChangeText={text => setPgDetails({ ...pgDetails, totalRooms: text })}
+            disabled={!editingPG}
+            keyboardType="numeric"
+            style={[styles.input, styles.halfInput]}
+          />
+          <TextInput
+            label="Cost per Bed"
+            value={pgDetails.costPerBed}
+            onChangeText={text => setPgDetails({ ...pgDetails, costPerBed: text })}
+            disabled={!editingPG}
+            keyboardType="numeric"
+            style={[styles.input, styles.halfInput]}
+          />
+        </View>
+
+        <TextInput
+          label="Description"
+          value={pgDetails.description}
+          onChangeText={text => setPgDetails({ ...pgDetails, description: text })}
+          disabled={!editingPG}
+          style={styles.input}
+          multiline
+          numberOfLines={4}
+        />
+
+        <Divider style={styles.divider} />
+
+        <View style={styles.statsContainer}>
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Rooms</Text>
-            <Text style={styles.statValue}>{pgDetails.numRooms}</Text>
+            <Text style={styles.statValue}>{pgDetails.totalRooms}</Text>
+            <Text style={styles.statLabel}>Total Rooms</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Students</Text>
-            <Text style={styles.statValue}>{pgDetails.numStudents}</Text>
+            <Text style={styles.statValue}>{pgDetails.totalTenants}</Text>
+            <Text style={styles.statLabel}>Total Tenants</Text>
+          </View>
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>₹{pgDetails.costPerBed}</Text>
+            <Text style={styles.statLabel}>Cost per Bed</Text>
           </View>
         </View>
 
@@ -270,17 +486,47 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    padding: 16,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  section: {
-    margin: 16,
-    padding: 16,
+  header: {
+    padding: 20,
+    alignItems: 'center',
+    marginBottom: 16,
     borderRadius: 8,
-    elevation: 2,
+  },
+  profileImageContainer: {
+    position: 'relative',
+    marginBottom: 16,
+  },
+  profileImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+  },
+  editImageButton: {
+    position: 'absolute',
+    right: -8,
+    bottom: -8,
+    backgroundColor: 'white',
+    elevation: 4,
+  },
+  profileName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  joinDate: {
+    opacity: 0.7,
+  },
+  section: {
+    padding: 16,
+    marginBottom: 16,
+    borderRadius: 8,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -295,6 +541,14 @@ const styles = StyleSheet.create({
   input: {
     marginBottom: 8,
   },
+  inputRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  halfInput: {
+    flex: 0.48,
+  },
   errorText: {
     color: 'red',
     fontSize: 12,
@@ -303,21 +557,23 @@ const styles = StyleSheet.create({
   saveButton: {
     marginTop: 16,
   },
-  statsRow: {
+  divider: {
+    marginVertical: 16,
+  },
+  statsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginTop: 16,
+    marginTop: 8,
   },
   statItem: {
     alignItems: 'center',
   },
-  statLabel: {
-    fontSize: 14,
-    color: '#666',
-  },
   statValue: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
-    marginTop: 4,
+    marginBottom: 4,
+  },
+  statLabel: {
+    opacity: 0.7,
   },
 }); 

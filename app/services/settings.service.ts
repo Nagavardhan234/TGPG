@@ -1,73 +1,54 @@
-import api from './api';
+import api from '@/app/config/axios.config';
 import { ENDPOINTS } from '../constants/endpoints';
 
-export interface Settings {
-  paymentMethod: string;
-  paymentHistory: PaymentRecord[];
-  emailNotifications: boolean;
-  smsNotifications: boolean;
+export interface PaymentSettings {
+  paymentMethod: 'upi' | 'bank';
+  upiId?: string;
+  bankDetails?: {
+    bankName: string;
+    accountNumber: string;
+    ifscCode: string;
+  };
 }
 
-export interface PaymentRecord {
-  date: string;
-  amount: number;
-  status: string;
+export interface UserSettings extends PaymentSettings {
+  email: string;
+  fullName: string;
+  phone: string;
 }
 
-export interface PaymentDetails {
-  accountNumber: string;
-  ifscCode: string;
-  accountHolderName: string;
-}
-
-export interface GeneralSettings {
-  emailNotifications: boolean;
-  smsNotifications: boolean;
-}
-
-export const getSettings = async (): Promise<Settings> => {
+export const getSettings = async (): Promise<UserSettings> => {
   try {
     const response = await api.get(ENDPOINTS.SETTINGS.GET);
-    if (!response.data.success) {
-      throw new Error(response.data.message || 'Failed to fetch settings');
-    }
     return response.data.data;
   } catch (error: any) {
-    console.error('Error fetching settings:', error);
-    throw new Error(error.response?.data?.message || error.message || 'Failed to fetch settings');
+    throw new Error(error.response?.data?.message || 'Failed to fetch settings');
   }
 };
 
-export const updateSettings = async (settings: GeneralSettings): Promise<void> => {
+export const verifyPassword = async (password: string): Promise<void> => {
   try {
-    const response = await api.put(ENDPOINTS.SETTINGS.UPDATE, settings);
-    if (!response.data.success) {
-      throw new Error(response.data.message || 'Failed to update settings');
-    }
+    await api.post(ENDPOINTS.SETTINGS.VERIFY_PASSWORD, { password });
   } catch (error: any) {
-    console.error('Error updating settings:', error);
-    throw new Error(error.response?.data?.message || error.message || 'Failed to update settings');
+    throw new Error(error.response?.data?.message || 'Invalid password');
   }
 };
 
-export const updatePaymentDetails = async (details: PaymentDetails): Promise<void> => {
+export const updatePaymentSettings = async (settings: PaymentSettings): Promise<void> => {
   try {
-    const response = await api.put(ENDPOINTS.SETTINGS.UPDATE_PAYMENT, details);
-    if (!response.data.success) {
-      throw new Error(response.data.message || 'Failed to update payment details');
-    }
+    await api.put(ENDPOINTS.SETTINGS.UPDATE_PAYMENT, settings);
   } catch (error: any) {
-    console.error('Error updating payment details:', error);
-    throw new Error(error.response?.data?.message || error.message || 'Failed to update payment details');
+    throw new Error(error.response?.data?.message || 'Failed to update payment settings');
   }
 };
 
-export const verifyPassword = async (password: string): Promise<boolean> => {
+export const changePassword = async (oldPassword: string, newPassword: string): Promise<void> => {
   try {
-    const response = await api.post(ENDPOINTS.AUTH.VERIFY_PASSWORD, { password });
-    return response.data.success;
+    await api.put(ENDPOINTS.SETTINGS.CHANGE_PASSWORD, {
+      oldPassword,
+      newPassword
+    });
   } catch (error: any) {
-    console.error('Error verifying password:', error);
-    throw new Error(error.response?.data?.message || error.message || 'Failed to verify password');
+    throw new Error(error.response?.data?.message || 'Failed to change password');
   }
 }; 

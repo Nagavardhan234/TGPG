@@ -90,13 +90,15 @@ export const ENDPOINTS = {
   },
   
   SETTINGS: {
-    GET: '/api/settings',
-    UPDATE: '/api/settings/update',
-    UPDATE_PAYMENT: '/api/settings/payment/update',
+    GET: '/api/managers/settings',
+    UPDATE: '/api/managers/settings',
+    UPDATE_PAYMENT: '/api/managers/settings/payment',
+    CHANGE_PASSWORD: '/api/managers/settings/password',
+    VERIFY_PASSWORD: '/api/managers/settings/verify-password'
   },
   
   AUTH: {
-    VERIFY_PASSWORD: '/api/auth/verify-password',
+    VERIFY_PASSWORD: '/api/managers/verify-password'
   },
 };
 

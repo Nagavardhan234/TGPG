@@ -5,13 +5,27 @@ export interface ProfileData {
   fullName: string;
   email: string;
   phone: string;
+  alternatePhone?: string;
+  profileImage?: string;
   pg: {
     name: string;
     address: string;
-    numRooms: number;
-    numStudents: number;
-    latitude: number;
-    longitude: number;
+    city: string;
+    state: string;
+    pincode: string;
+    type: string;
+    contactNumber: string;
+    totalRooms: number;
+    costPerBed: number;
+    totalTenants: number;
+    description?: string;
+    amenities: Array<{id: number, name: string}>;
+    roomTypes: Array<{
+      id: number,
+      name: string,
+      capacity: number,
+      cost: number
+    }>;
   };
 }
 
@@ -19,15 +33,29 @@ export interface PersonalInfo {
   fullName: string;
   email: string;
   phone: string;
+  alternatePhone?: string;
+  profileImage?: string;
 }
 
 export interface PGDetails {
   name: string;
   address: string;
-  numRooms: number;
-  numStudents: number;
-  latitude: number;
-  longitude: number;
+  city: string;
+  state: string;
+  pincode: string;
+  type: string;
+  contactNumber: string;
+  totalRooms: number;
+  costPerBed: number;
+  totalTenants: number;
+  description?: string;
+  amenities: number[];
+  roomTypes?: Array<{
+    id: number,
+    name: string,
+    capacity: number,
+    cost: number
+  }>;
 }
 
 export const getProfileData = async (): Promise<ProfileData> => {
