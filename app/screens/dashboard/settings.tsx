@@ -97,12 +97,23 @@ export default function SettingsScreen() {
         return;
       }
 
-      await verifyPassword(password);
-      setIsPasswordVerified(true);
-      // Show actual values after password verification
-      setPaymentSettings(actualPaymentSettings);
-      setShowPasswordDialog(false);
-      setPassword('');
+      const result = await verifyPassword(password);
+      if (result?.success && result?.data) {
+        setIsPasswordVerified(true);
+        setPaymentSettings({
+          paymentMethod: result.data.paymentMethod || 'upi',
+          upiId: result.data.upiId || '',
+          bankDetails: {
+            bankName: result.data.bankDetails?.bankName || '',
+            accountNumber: result.data.bankDetails?.accountNumber || '',
+            ifscCode: result.data.bankDetails?.ifscCode || ''
+          }
+        });
+        setShowPasswordDialog(false);
+        setPassword('');
+      } else {
+        setPasswordError('Failed to verify password');
+      }
     } catch (error: any) {
       setPasswordError(error.message);
     }

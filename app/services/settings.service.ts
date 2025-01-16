@@ -17,6 +17,19 @@ export interface UserSettings extends PaymentSettings {
   phone: string;
 }
 
+export interface VerifyPasswordResponse {
+  success: boolean;
+  data: {
+    paymentMethod: 'upi' | 'bank';
+    upiId: string;
+    bankDetails: {
+      bankName: string;
+      accountNumber: string;
+      ifscCode: string;
+    };
+  };
+}
+
 export const getSettings = async (): Promise<UserSettings> => {
   try {
     const response = await api.get(ENDPOINTS.SETTINGS.GET);
@@ -26,9 +39,10 @@ export const getSettings = async (): Promise<UserSettings> => {
   }
 };
 
-export const verifyPassword = async (password: string): Promise<void> => {
+export const verifyPassword = async (password: string): Promise<VerifyPasswordResponse> => {
   try {
-    await api.post(ENDPOINTS.SETTINGS.VERIFY_PASSWORD, { password });
+    const response = await api.post(ENDPOINTS.SETTINGS.VERIFY_PASSWORD, { password });
+    return response.data;
   } catch (error: any) {
     throw new Error(error.response?.data?.message || 'Invalid password');
   }

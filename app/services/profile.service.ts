@@ -7,26 +7,7 @@ export interface ProfileData {
   phone: string;
   alternatePhone?: string;
   profileImage?: string;
-  pg: {
-    name: string;
-    address: string;
-    city: string;
-    state: string;
-    pincode: string;
-    type: string;
-    contactNumber: string;
-    totalRooms: number;
-    costPerBed: number;
-    totalTenants: number;
-    description?: string;
-    amenities: Array<{id: number, name: string}>;
-    roomTypes: Array<{
-      id: number,
-      name: string,
-      capacity: number,
-      cost: number
-    }>;
-  };
+  pg: PGDetails;
 }
 
 export interface PersonalInfo {
@@ -43,13 +24,20 @@ export interface PGDetails {
   city: string;
   state: string;
   pincode: string;
-  type: string;
+  type: 'Boys' | 'Girls' | 'Co-ed';
   contactNumber: string;
   totalRooms: number;
   costPerBed: number;
+  capacity: number;  // tenants per room
   totalTenants: number;
   description?: string;
-  amenities: number[];
+  amenities: Array<{id: number, name: string}>;
+  selectedAmenityNames?: string[];
+  otherAmenities?: string;
+  images?: string[];
+  seasonalPrice?: string;
+  rating?: number;
+  occupancyRate?: number;
   roomTypes?: Array<{
     id: number,
     name: string,
@@ -58,16 +46,12 @@ export interface PGDetails {
   }>;
 }
 
-export const getProfileData = async (): Promise<ProfileData> => {
+export const getProfileData = async () => {
   try {
     const response = await api.get(ENDPOINTS.PROFILE.GET);
-    if (!response.data.success) {
-      throw new Error(response.data.message || 'Failed to fetch profile data');
-    }
     return response.data.data;
   } catch (error: any) {
-    console.error('Error fetching profile data:', error);
-    throw new Error(error.response?.data?.message || error.message || 'Failed to fetch profile data');
+    throw new Error(error.response?.data?.message || 'Failed to fetch profile data');
   }
 };
 
@@ -83,14 +67,16 @@ export const updateProfileData = async (data: PersonalInfo): Promise<void> => {
   }
 };
 
-export const updatePGDetails = async (data: PGDetails): Promise<void> => {
+export const updatePGDetails = async (details: PGDetails) => {
   try {
-    const response = await api.put(ENDPOINTS.PROFILE.UPDATE_PG, data);
-    if (!response.data.success) {
-      throw new Error(response.data.message || 'Failed to update PG details');
-    }
+    // Calculate total tenants before sending
+    const totalTenants = (details.totalRooms || 0) * (details.capacity || 0);
+    const response = await api.put(ENDPOINTS.PROFILE.UPDATE_PG, {
+      ...details,
+      totalTenants
+    });
+    return response.data;
   } catch (error: any) {
-    console.error('Error updating PG details:', error);
-    throw new Error(error.response?.data?.message || error.message || 'Failed to update PG details');
+    throw new Error(error.response?.data?.message || 'Failed to update PG details');
   }
 }; 
