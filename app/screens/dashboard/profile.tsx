@@ -82,6 +82,16 @@ export default function ProfileScreen() {
   const [availableAmenities, setAvailableAmenities] = useState<Amenity[]>([]);
   const [selectedAmenityIds, setSelectedAmenityIds] = useState<number[]>([]);
 
+  // Add only the theme-dependent styles inside the component
+  const themedStyles = {
+    selectedAmenityButton: {
+      backgroundColor: theme.colors.primary,
+    },
+    selectedAmenityLabel: {
+      color: 'white',
+    }
+  };
+
   useEffect(() => {
     loadProfileData();
     loadAmenities();
@@ -122,16 +132,16 @@ export default function ProfileScreen() {
           description: data.pg.description || '',
           createdAt: data.pg.createdAt,
           amenities: data.pg.amenities || [],
-          selectedAmenityNames: data.pg.selectedAmenityNames || [],
+          selectedAmenityNames: data.pg.amenities?.map(a => a.name) || [],
           otherAmenities: data.pg.otherAmenities || '',
           images: data.pg.images || [],
           seasonalPrice: data.pg.seasonalPrice || '',
           rating: data.pg.rating || 0,
           occupancyRate: data.pg.occupancyRate || 0
         });
-        setSelectedAmenities(data.pg.amenities || []);
-        setOtherAmenities(data.pg.otherAmenities || '');
-        setPgImages(data.pg.images || []);
+
+        // Set selected amenity IDs from the loaded amenities
+        setSelectedAmenityIds(data.pg.amenities?.map(a => a.id) || []);
       }
     } catch (error: any) {
       setError(error.message);
@@ -622,27 +632,43 @@ export default function ProfileScreen() {
               key={amenity.id}
               mode={selectedAmenityIds.includes(amenity.id) ? "contained" : "outlined"}
               onPress={() => {
+                if (!editingPG) return;
+                
                 if (selectedAmenityIds.includes(amenity.id)) {
                   setSelectedAmenityIds(prev => prev.filter(id => id !== amenity.id));
                   setPgDetails(prev => ({
                     ...prev,
-                    amenities: prev.amenities.filter(a => a.id !== amenity.id)
+                    amenities: prev.amenities.filter(a => a.id !== amenity.id),
+                    selectedAmenityNames: prev.selectedAmenityNames.filter(name => name !== amenity.name)
                   }));
                 } else {
                   setSelectedAmenityIds(prev => [...prev, amenity.id]);
                   setPgDetails(prev => ({
                     ...prev,
-                    amenities: [...prev.amenities, { id: amenity.id, name: amenity.name }]
+                    amenities: [...prev.amenities, { id: amenity.id, name: amenity.name }],
+                    selectedAmenityNames: [...prev.selectedAmenityNames, amenity.name]
                   }));
                 }
               }}
-              style={styles.amenityButton}
+              icon={amenity.icon || 'check'}
+              style={[
+                styles.amenityButton,
+                selectedAmenityIds.includes(amenity.id) && styles.selectedAmenityButton
+              ]}
               disabled={!editingPG}
+              labelStyle={selectedAmenityIds.includes(amenity.id) ? styles.selectedAmenityLabel : undefined}
             >
               {amenity.name}
             </Button>
           ))}
         </View>
+
+        {pgDetails.otherAmenities && (
+          <View style={styles.otherAmenitiesContainer}>
+            <Text style={styles.otherAmenitiesLabel}>Other Amenities:</Text>
+            <Text>{pgDetails.otherAmenities}</Text>
+          </View>
+        )}
 
         <TextInput
           label="Other Amenities"
@@ -860,5 +886,6 @@ const styles = StyleSheet.create({
   amenityButton: {
     marginBottom: 8,
     marginRight: 8,
-  },
+    borderRadius: 20,
+  }
 }); 
