@@ -12,7 +12,8 @@ import {
   Portal,
   Dialog,
   HelperText,
-  useTheme as usePaperTheme
+  useTheme as usePaperTheme,
+  FAB
 } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import { useStudentAuth } from '@/app/context/StudentAuthContext';
@@ -73,7 +74,8 @@ export default function ProfileScreen() {
     try {
       const updateRequest: UpdateProfileRequest = {
         fullName: profileData.FullName,
-        roomNumber: profileData.Room_No
+        guardianName: profileData.GuardianName,
+        guardianNumber: profileData.GuardianNumber
       };
       const response = await studentProfileService.updateProfile(updateRequest);
       if (response.success) {
@@ -127,155 +129,175 @@ export default function ProfileScreen() {
   };
 
   return (
-    <ScrollView 
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      {/* Profile Header */}
-      <Surface style={[styles.header, { backgroundColor: theme.colors.surface }]}>
-        <View style={styles.profileHeader}>
-          <View style={styles.avatarContainer}>
+    <View style={styles.container}>
+      <ScrollView 
+        style={{ backgroundColor: theme.colors.background }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {/* Profile Header Card */}
+        <Surface style={[styles.headerCard, { backgroundColor: theme.colors.surface }]}>
+          <View style={styles.profileHeader}>
             <Avatar.Text 
               size={80} 
               label={profileData.FullName?.substring(0, 2).toUpperCase() || 'ST'}
-              style={{ backgroundColor: theme.colors.primary }}
+              style={[styles.avatar, { backgroundColor: theme.colors.primary }]}
             />
-          </View>
-          <View style={styles.headerInfo}>
-            <View style={styles.headerRow}>
-              <Text style={styles.label}>Full Name:</Text>
+            <View style={styles.nameSection}>
               {isEditing ? (
                 <TextInput
                   mode="outlined"
+                  label="Full Name"
                   value={profileData.FullName}
                   onChangeText={value => setProfileData({ ...profileData, FullName: value })}
-                  style={styles.input}
+                  style={styles.nameInput}
                 />
               ) : (
-                <Text style={styles.value}>{profileData.FullName}</Text>
+                <Text style={styles.nameText}>{profileData.FullName}</Text>
               )}
-            </View>
-            <View style={styles.headerRow}>
-              <Text style={styles.label}>Room Number:</Text>
-              {isEditing ? (
-                <TextInput
-                  mode="outlined"
-                  value={profileData.Room_No.toString()}
-                  onChangeText={value => setProfileData({ ...profileData, Room_No: parseInt(value) || 0 })}
-                  style={styles.input}
-                  keyboardType="numeric"
-                />
-              ) : (
-                <Text style={styles.value}>{profileData.Room_No}</Text>
-              )}
-            </View>
-            <View style={styles.headerRow}>
-              <Text style={styles.label}>Email:</Text>
-              <Text style={styles.value}>{profileData.Email}</Text>
-            </View>
-            <View style={styles.headerRow}>
-              <Text style={styles.label}>Phone:</Text>
-              <Text style={styles.value}>{profileData.Phone}</Text>
-            </View>
-            <View style={styles.headerRow}>
-              <Text style={styles.label}>Monthly Rent:</Text>
-              <Text style={styles.value}>{profileData.Monthly_Rent}</Text>
-            </View>
-            <View style={styles.headerRow}>
-              <Text style={styles.label}>Status:</Text>
-              <Text style={styles.value}>{profileData.Status}</Text>
+              <Text style={styles.statusText}>{profileData.Status || 'Active'}</Text>
             </View>
           </View>
-        </View>
+        </Surface>
 
-        <Divider style={styles.divider} />
-
-        {/* Guardian Information */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>Guardian Information</Text>
-          <View style={styles.guardianInfo}>
-            <View style={styles.contactRow}>
-              <Text style={styles.label}>Name:</Text>
-              <Text style={styles.value}>{profileData.GuardianName}</Text>
+        {/* Basic Info Card */}
+        <Card style={styles.card}>
+          <Card.Title title="Basic Information" />
+          <Card.Content style={styles.cardContent}>
+            <View style={styles.infoRow}>
+              <View style={styles.infoItem}>
+                <Text style={styles.infoLabel}>Room No</Text>
+                <Text style={styles.infoValue}>{profileData.Room_No}</Text>
+                <HelperText type="info">Contact manager to change</HelperText>
+              </View>
+              <View style={styles.infoItem}>
+                <Text style={styles.infoLabel}>Monthly Rent</Text>
+                <Text style={styles.infoValue}>₹{profileData.Monthly_Rent}</Text>
+                <HelperText type="info">Set by manager</HelperText>
+              </View>
             </View>
-            <View style={styles.contactRow}>
-              <Text style={styles.label}>Phone:</Text>
-              <Text style={styles.value}>{profileData.GuardianNumber}</Text>
+            <View style={styles.infoRow}>
+              <View style={styles.infoItem}>
+                <Text style={styles.infoLabel}>Phone</Text>
+                <Text style={styles.infoValue}>{profileData.Phone}</Text>
+                <HelperText type="info">Contact manager to update</HelperText>
+              </View>
+              <View style={styles.infoItem}>
+                <Text style={styles.infoLabel}>Email</Text>
+                <Text style={styles.infoValue}>{profileData.Email}</Text>
+                <HelperText type="info">Contact manager to update</HelperText>
+              </View>
             </View>
-          </View>
-        </View>
+          </Card.Content>
+        </Card>
 
-        {/* Action Buttons */}
-        <View style={styles.actionButtons}>
-          {isEditing ? (
-            <>
-              <Button 
-                mode="contained" 
-                onPress={handleSave}
-                style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
-              >
-                Save Changes
-              </Button>
-              <Button 
-                mode="outlined" 
-                onPress={() => setIsEditing(false)}
-                style={styles.actionButton}
-              >
-                Cancel
-              </Button>
-            </>
-          ) : (
-            <Button 
-              mode="contained" 
-              onPress={() => setIsEditing(true)}
-              style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
+        {/* Guardian Info Card */}
+        <Card style={styles.card}>
+          <Card.Title 
+            title="Guardian Information" 
+            right={(props) => !isEditing && (
+              <IconButton 
+                {...props} 
+                icon="pencil" 
+                onPress={() => setIsEditing(true)}
+              />
+            )}
+          />
+          <Card.Content style={styles.cardContent}>
+            <View style={styles.guardianSection}>
+              <View style={styles.guardianField}>
+                <Text style={styles.fieldLabel}>Guardian Name</Text>
+                {isEditing ? (
+                  <TextInput
+                    mode="outlined"
+                    value={profileData.GuardianName}
+                    onChangeText={value => setProfileData({ ...profileData, GuardianName: value })}
+                    style={styles.input}
+                  />
+                ) : (
+                  <Text style={styles.fieldValue}>{profileData.GuardianName || 'Not set'}</Text>
+                )}
+              </View>
+              <View style={styles.guardianField}>
+                <Text style={styles.fieldLabel}>Guardian Phone</Text>
+                {isEditing ? (
+                  <TextInput
+                    mode="outlined"
+                    value={profileData.GuardianNumber}
+                    onChangeText={value => setProfileData({ ...profileData, GuardianNumber: value })}
+                    style={styles.input}
+                    keyboardType="phone-pad"
+                  />
+                ) : (
+                  <Text style={styles.fieldValue}>{profileData.GuardianNumber || 'Not set'}</Text>
+                )}
+              </View>
+            </View>
+            {isEditing && (
+              <View style={styles.editActions}>
+                <Button 
+                  mode="contained" 
+                  onPress={handleSave}
+                  style={styles.saveButton}
+                >
+                  Save Changes
+                </Button>
+                <Button 
+                  mode="outlined" 
+                  onPress={() => setIsEditing(false)}
+                >
+                  Cancel
+                </Button>
+              </View>
+            )}
+          </Card.Content>
+        </Card>
+
+        {/* Account Actions Card */}
+        <Card style={styles.card}>
+          <Card.Title title="Account Settings" />
+          <Card.Content style={styles.cardContent}>
+            <Button
+              mode="outlined"
+              icon="key"
+              onPress={() => setShowPasswordChangeDialog(true)}
+              style={styles.actionButton}
+              contentStyle={styles.actionButtonContent}
             >
-              Edit Profile
+              Change Password
             </Button>
-          )}
-        </View>
-      </Surface>
+            <Button 
+              mode="outlined"
+              icon="logout"
+              onPress={logout}
+              style={styles.actionButton}
+              contentStyle={styles.actionButtonContent}
+            >
+              Logout
+            </Button>
+            <Button 
+              mode="outlined"
+              icon="delete"
+              onPress={() => setShowDeleteDialog(true)}
+              textColor={theme.colors.error}
+              style={[styles.actionButton, styles.deleteButton]}
+              contentStyle={styles.actionButtonContent}
+            >
+              Delete Account
+            </Button>
+          </Card.Content>
+        </Card>
 
-      {/* Account Actions */}
-      <Surface style={[styles.section, { backgroundColor: theme.colors.surface }]}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>Account Actions</Text>
-        <View style={styles.accountActions}>
-          <Button
-            mode="contained-tonal"
-            icon="key"
-            onPress={() => setShowPasswordChangeDialog(true)}
-            style={styles.accountButton}
-          >
-            Change Password
-          </Button>
-          <Button 
-            mode="contained-tonal"
-            icon="logout"
-            onPress={logout}
-            style={styles.accountButton}
-          >
-            Logout
-          </Button>
-          <Button 
-            mode="contained"
-            icon="delete"
-            onPress={() => setShowDeleteDialog(true)}
-            buttonColor={theme.colors.error}
-            style={styles.accountButton}
-          >
-            Delete Account
-          </Button>
-        </View>
-      </Surface>
+        <View style={styles.bottomPadding} />
+      </ScrollView>
 
       {/* Dialogs */}
       <Portal>
         <Dialog visible={showDeleteDialog} onDismiss={() => setShowDeleteDialog(false)}>
           <Dialog.Title>Delete Account</Dialog.Title>
           <Dialog.Content>
-            <Text>
+            <Text style={styles.dialogText}>
               Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently deleted.
             </Text>
           </Dialog.Content>
@@ -289,6 +311,7 @@ export default function ProfileScreen() {
           <Dialog.Title>Change Password</Dialog.Title>
           <Dialog.Content>
             <TextInput
+              mode="outlined"
               label="Current Password"
               value={oldPassword}
               onChangeText={setOldPassword}
@@ -296,6 +319,7 @@ export default function ProfileScreen() {
               style={styles.dialogInput}
             />
             <TextInput
+              mode="outlined"
               label="New Password"
               value={newPassword}
               onChangeText={setNewPassword}
@@ -303,6 +327,7 @@ export default function ProfileScreen() {
               style={styles.dialogInput}
             />
             <TextInput
+              mode="outlined"
               label="Confirm New Password"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
@@ -319,88 +344,115 @@ export default function ProfileScreen() {
           </Dialog.Actions>
         </Dialog>
       </Portal>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#f5f5f5'
   },
-  header: {
-    padding: 20,
-    elevation: 2,
+  headerCard: {
     margin: 16,
-    borderRadius: 12,
+    marginBottom: 8,
+    borderRadius: 16,
+    elevation: 2,
+    overflow: 'hidden'
   },
   profileHeader: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    marginBottom: 16,
+    padding: 24,
+    alignItems: 'center'
   },
-  avatarContainer: {
-    marginBottom: 16,
+  avatar: {
+    marginBottom: 16
   },
-  headerInfo: {
+  nameSection: {
+    alignItems: 'center'
+  },
+  nameText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 4
+  },
+  nameInput: {
     width: '100%',
-    gap: 12,
+    marginBottom: 4
   },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  label: {
+  statusText: {
     fontSize: 16,
-    fontWeight: 'bold',
-    minWidth: 100,
+    opacity: 0.7
   },
-  value: {
-    fontSize: 16,
-    flex: 1,
-  },
-  divider: {
-    marginVertical: 16,
-  },
-  section: {
+  card: {
     margin: 16,
-    padding: 16,
-    borderRadius: 12,
-    elevation: 2,
+    marginVertical: 8,
+    borderRadius: 16,
+    elevation: 2
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 16,
+  cardContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 16
   },
-  guardianInfo: {
-    gap: 12,
-  },
-  contactRow: {
+  infoRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    marginBottom: 16
+  },
+  infoItem: {
+    flex: 1,
+    marginHorizontal: 8
+  },
+  infoLabel: {
+    fontSize: 12,
+    opacity: 0.7,
+    marginBottom: 4
+  },
+  infoValue: {
+    fontSize: 16,
+    fontWeight: '500'
+  },
+  guardianSection: {
+    gap: 16
+  },
+  guardianField: {
+    marginBottom: 8
+  },
+  fieldLabel: {
+    fontSize: 14,
+    opacity: 0.7,
+    marginBottom: 8
+  },
+  fieldValue: {
+    fontSize: 16
   },
   input: {
-    flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: 'transparent'
   },
-  actionButtons: {
+  editActions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 16,
+    justifyContent: 'flex-end',
     gap: 12,
+    marginTop: 16
+  },
+  saveButton: {
+    minWidth: 120
   },
   actionButton: {
-    flex: 1,
+    marginBottom: 12
   },
-  accountActions: {
-    gap: 12,
+  actionButtonContent: {
+    justifyContent: 'flex-start',
+    height: 48
   },
-  accountButton: {
-    width: '100%',
+  deleteButton: {
+    borderColor: 'rgba(255, 0, 0, 0.2)'
   },
   dialogInput: {
-    marginBottom: 12,
+    marginBottom: 12
   },
+  dialogText: {
+    lineHeight: 20
+  },
+  bottomPadding: {
+    height: 24
+  }
 });

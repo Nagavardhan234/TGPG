@@ -20,7 +20,8 @@ export interface StudentProfile {
 
 export interface UpdateProfileRequest {
   fullName: string;
-  roomNumber: number;
+  guardianName: string;
+  guardianNumber: string;
 }
 
 export const studentProfileService = {
