@@ -26,8 +26,15 @@ export interface UpdateProfileRequest {
 
 export const studentProfileService = {
   getProfile: async () => {
-    const response = await axios.get(ENDPOINTS.STUDENT.PROFILE);
-    return response.data;
+    try {
+      console.log('Fetching student profile...');
+      const response = await axios.get(ENDPOINTS.STUDENT.PROFILE);
+      console.log('Profile response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      throw error;
+    }
   },
 
   verifyPassword: async (password: string) => {
@@ -36,11 +43,19 @@ export const studentProfileService = {
   },
 
   updateProfile: async (profileData: UpdateProfileRequest) => {
-    const response = await axios.put(ENDPOINTS.STUDENT.PROFILE, {
-      fullName: profileData.fullName,
-      roomNumber: profileData.roomNumber
-    });
-    return response.data;
+    try {
+      console.log('Updating profile with data:', profileData);
+      const response = await axios.put(ENDPOINTS.STUDENT.UPDATE_PROFILE, {
+        fullName: profileData.fullName,
+        guardianName: profileData.guardianName,
+        guardianNumber: profileData.guardianNumber
+      });
+      console.log('Update response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      throw error;
+    }
   },
 
   changePassword: async (oldPassword: string, newPassword: string) => {
@@ -49,7 +64,7 @@ export const studentProfileService = {
   },
 
   deleteAccount: async () => {
-    const response = await axios.delete(ENDPOINTS.STUDENT.PROFILE);
+    const response = await axios.delete(ENDPOINTS.STUDENT.DELETE_ACCOUNT);
     return response.data;
   }
 };
