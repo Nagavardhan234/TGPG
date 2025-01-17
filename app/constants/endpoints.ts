@@ -100,6 +100,13 @@ export const ENDPOINTS = {
   AUTH: {
     VERIFY_PASSWORD: '/api/managers/verify-password'
   },
+  
+  STUDENT: {
+    PROFILE: '/api/students/profile',
+    VERIFY_PASSWORD: '/api/students/profile/verify-password',
+    UPDATE_PROFILE: '/api/students/profile',
+    DELETE_ACCOUNT: '/api/students/profile'
+  }
 };
 
 export const BASE_URL = 'http://localhost:3000'

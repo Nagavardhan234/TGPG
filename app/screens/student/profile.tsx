@@ -1,8 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Surface, Text, Avatar, Button, TextInput, Card, IconButton, Divider } from 'react-native-paper';
+import { 
+  Surface, 
+  Text, 
+  Avatar, 
+  Button, 
+  TextInput, 
+  Card, 
+  IconButton, 
+  Divider,
+  Portal,
+  Dialog,
+  HelperText
+} from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import { useStudentAuth } from '@/app/context/StudentAuthContext';
+import { studentProfileService, StudentProfile } from '@/app/services/student.profile.service';
+import { router } from 'expo-router';
 
 interface ProfileStats {
   daysStayed: number;
@@ -35,8 +49,89 @@ export default function ProfileScreen() {
   const { theme } = useTheme();
   const { student, logout } = useStudentAuth();
   const [isEditing, setIsEditing] = useState(false);
-  const [feedback, setFeedback] = useState('');
-  const [rating, setRating] = useState(0);
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [password, setPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [profileData, setProfileData] = useState<StudentProfile>({
+    fullName: '',
+    email: '',
+    phone: '',
+    roomNumber: '',
+    emergencyContact: {
+      name: '',
+      phone: '',
+      relation: ''
+    }
+  });
+
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const loadProfile = async () => {
+    try {
+      const response = await studentProfileService.getProfile();
+      if (response.success) {
+        setProfileData({
+          fullName: response.data.FullName,
+          email: response.data.Email,
+          phone: response.data.Phone,
+          roomNumber: response.data.Room_No,
+          emergencyContact: {
+            name: response.data.EmergencyContactName,
+            phone: response.data.EmergencyContactPhone,
+            relation: response.data.EmergencyContactRelation
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error loading profile:', error);
+    }
+  };
+
+  const handleEdit = () => {
+    setShowPasswordDialog(true);
+  };
+
+  const handlePasswordSubmit = async () => {
+    try {
+      const response = await studentProfileService.verifyPassword(password);
+      if (response.success) {
+        setShowPasswordDialog(false);
+        setIsEditing(true);
+        setPassword('');
+        setPasswordError('');
+      }
+    } catch (error) {
+      setPasswordError('Invalid password');
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      const response = await studentProfileService.updateProfile(profileData);
+      if (response.success) {
+        setIsEditing(false);
+        loadProfile(); // Reload profile data
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error);
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      const response = await studentProfileService.deleteAccount();
+      if (response.success) {
+        setShowDeleteDialog(false);
+        logout();
+        router.replace('/screens/student/login' as const);
+      }
+    } catch (error) {
+      console.error('Error deleting account:', error);
+    }
+  };
 
   const StatCard = ({ title, value, icon }: { title: string; value: number | string; icon: string }) => (
     <Card style={styles.statCard}>
@@ -55,20 +150,20 @@ export default function ProfileScreen() {
         <View style={styles.profileHeader}>
           <Avatar.Text 
             size={80} 
-            label={student?.FullName?.substring(0, 2).toUpperCase() || 'ST'}
+            label={profileData.fullName?.substring(0, 2).toUpperCase() || 'ST'}
             style={{ backgroundColor: theme.colors.primary }}
           />
           <View style={styles.headerInfo}>
             <Text style={[styles.name, { color: theme.colors.text }]}>
-              {student?.FullName}
+              {profileData.fullName}
             </Text>
             <Text style={{ color: theme.colors.secondary }}>
-              Room {student?.Room_No}
+              Room {profileData.roomNumber}
             </Text>
           </View>
           <Button 
             mode="contained" 
-            onPress={() => setIsEditing(!isEditing)}
+            onPress={isEditing ? handleSave : handleEdit}
             style={styles.editButton}
           >
             {isEditing ? 'Save' : 'Edit Profile'}
@@ -81,11 +176,21 @@ export default function ProfileScreen() {
         <View style={styles.contactInfo}>
           <View style={styles.contactRow}>
             <IconButton icon="phone" size={20} />
-            <Text style={{ color: theme.colors.text }}>{student?.Phone}</Text>
+            <TextInput
+              value={profileData.phone}
+              onChangeText={value => setProfileData({ ...profileData, phone: value })}
+              disabled={!isEditing}
+              style={{ flex: 1 }}
+            />
           </View>
           <View style={styles.contactRow}>
             <IconButton icon="email" size={20} />
-            <Text style={{ color: theme.colors.text }}>{student?.Email}</Text>
+            <TextInput
+              value={profileData.email}
+              onChangeText={value => setProfileData({ ...profileData, email: value })}
+              disabled={!isEditing}
+              style={{ flex: 1 }}
+            />
           </View>
         </View>
       </Surface>
@@ -109,48 +214,93 @@ export default function ProfileScreen() {
             <View style={styles.emergencyContact}>
               <View>
                 <Text style={[styles.contactLabel, { color: theme.colors.secondary }]}>Name</Text>
-                <Text style={{ color: theme.colors.text }}>{emergencyContact.name}</Text>
+                <TextInput
+                  value={profileData.emergencyContact.name}
+                  onChangeText={value => setProfileData({
+                    ...profileData,
+                    emergencyContact: { ...profileData.emergencyContact, name: value }
+                  })}
+                  disabled={!isEditing}
+                />
               </View>
               <View>
                 <Text style={[styles.contactLabel, { color: theme.colors.secondary }]}>Relation</Text>
-                <Text style={{ color: theme.colors.text }}>{emergencyContact.relation}</Text>
+                <TextInput
+                  value={profileData.emergencyContact.relation}
+                  onChangeText={value => setProfileData({
+                    ...profileData,
+                    emergencyContact: { ...profileData.emergencyContact, relation: value }
+                  })}
+                  disabled={!isEditing}
+                />
               </View>
               <View>
                 <Text style={[styles.contactLabel, { color: theme.colors.secondary }]}>Phone</Text>
-                <Text style={{ color: theme.colors.text }}>{emergencyContact.phone}</Text>
+                <TextInput
+                  value={profileData.emergencyContact.phone}
+                  onChangeText={value => setProfileData({
+                    ...profileData,
+                    emergencyContact: { ...profileData.emergencyContact, phone: value }
+                  })}
+                  disabled={!isEditing}
+                  keyboardType="phone-pad"
+                />
               </View>
             </View>
           </Card.Content>
         </Card>
       </Surface>
 
-      {/* Feedback Section */}
+      {/* Delete Account Section */}
       <Surface style={[styles.section, { backgroundColor: theme.colors.surface }]}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>PG Feedback</Text>
-        <View style={styles.ratingContainer}>
-          {[1, 2, 3, 4, 5].map((star) => (
-            <IconButton
-              key={star}
-              icon={star <= rating ? 'star' : 'star-outline'}
-              size={32}
-              iconColor={star <= rating ? theme.colors.primary : theme.colors.secondary}
-              onPress={() => setRating(star)}
-            />
-          ))}
-        </View>
-        <TextInput
-          mode="outlined"
-          label="Your Feedback"
-          value={feedback}
-          onChangeText={setFeedback}
-          multiline
-          numberOfLines={4}
-          style={styles.feedbackInput}
-        />
-        <Button mode="contained" style={styles.submitButton}>
-          Submit Feedback
+        <Text style={[styles.sectionTitle, { color: theme.colors.error }]}>Delete Account</Text>
+        <Text style={{ color: theme.colors.textSecondary, marginBottom: 16 }}>
+          Warning: This action cannot be undone. All your data will be permanently deleted.
+        </Text>
+        <Button 
+          mode="contained"
+          onPress={() => setShowDeleteDialog(true)}
+          buttonColor={theme.colors.error}
+        >
+          Delete Account
         </Button>
       </Surface>
+
+      {/* Password Dialog */}
+      <Portal>
+        <Dialog visible={showPasswordDialog} onDismiss={() => setShowPasswordDialog(false)}>
+          <Dialog.Title>Enter Password</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              error={!!passwordError}
+            />
+            <HelperText type="error" visible={!!passwordError}>
+              {passwordError}
+            </HelperText>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowPasswordDialog(false)}>Cancel</Button>
+            <Button onPress={handlePasswordSubmit}>Confirm</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog visible={showDeleteDialog} onDismiss={() => setShowDeleteDialog(false)}>
+          <Dialog.Title>Delete Account</Dialog.Title>
+          <Dialog.Content>
+            <Text>
+              Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently deleted.
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowDeleteDialog(false)}>Cancel</Button>
+            <Button onPress={handleDelete} textColor={theme.colors.error}>Delete</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
 
       {/* Logout Button */}
       <Button 

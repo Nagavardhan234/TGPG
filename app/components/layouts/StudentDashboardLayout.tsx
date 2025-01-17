@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, ScrollView, Platform, useWindowDimensions, TouchableOpacity } from 'react-native';
 import { 
   Text, 
   Surface, 
@@ -14,7 +14,18 @@ import {
 } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import { useStudentAuth } from '@/app/context/StudentAuthContext';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
+
+type StudentRoutes = {
+  '/screens/student/dashboard': undefined;
+  '/screens/student/community': undefined;
+  '/screens/student/messages': undefined;
+  '/screens/student/meals': undefined;
+  '/screens/student/split-work': undefined;
+  '/screens/student/complaints': undefined;
+  '/screens/student/profile': undefined;
+  '/screens/student/login': undefined;
+};
 
 interface Props {
   children: React.ReactNode;
@@ -27,32 +38,32 @@ const studentMenuItems = [
   {
     icon: 'view-dashboard',
     label: 'Dashboard',
-    route: '/screens/student/dashboard'
+    route: '/screens/student/dashboard' as keyof StudentRoutes
   },
   {
     icon: 'account-group',
     label: 'Community',
-    route: '/screens/student/community'
+    route: '/screens/student/community' as keyof StudentRoutes
   },
   {
     icon: 'message-text',
     label: 'Messages',
-    route: '/screens/student/messages'
+    route: '/screens/student/messages' as keyof StudentRoutes
   },
   {
     icon: 'food',
     label: 'Meal Menu',
-    route: '/screens/student/meals'
+    route: '/screens/student/meals' as keyof StudentRoutes
   },
   {
     icon: 'account-group-outline',
     label: 'Split Work',
-    route: '/screens/student/split-work'
+    route: '/screens/student/split-work' as keyof StudentRoutes
   },
   {
     icon: 'alert-circle',
     label: 'Complaints',
-    route: '/screens/student/complaints'
+    route: '/screens/student/complaints' as keyof StudentRoutes
   }
 ];
 
@@ -63,6 +74,7 @@ export default function StudentDashboardLayout({ children, title, subtitle, head
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
   const [expandedMenu, setExpandedMenu] = React.useState<string | null>(null);
   const [isInitialized, setIsInitialized] = React.useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -73,7 +85,7 @@ export default function StudentDashboardLayout({ children, title, subtitle, head
 
   useEffect(() => {
     if (isInitialized && (!isAuthenticated || !student)) {
-      router.replace('/screens/student/login');
+      router.replace('/screens/student/login' as any);
     }
   }, [isInitialized, isAuthenticated, student]);
 
@@ -83,17 +95,18 @@ export default function StudentDashboardLayout({ children, title, subtitle, head
       title={item.label}
       left={props => <List.Icon {...props} icon={item.icon} />}
       onPress={() => {
-        router.push(item.route);
+        router.push(item.route as any);
         setIsDrawerOpen(false);
       }}
       style={[
-        router.pathname === item.route && { 
+        styles.menuItem,
+        item.route === '/screens/student/dashboard' && { 
           backgroundColor: theme.colors.primary + '20'
         }
       ]}
       titleStyle={[
         { color: theme.colors.text },
-        router.pathname === item.route && { 
+        item.route === '/screens/student/dashboard' && { 
           color: theme.colors.primary,
           fontWeight: '600'
         }
@@ -143,12 +156,14 @@ export default function StudentDashboardLayout({ children, title, subtitle, head
               style={[styles.headerIcon, { backgroundColor: theme.colors.surfaceVariant }]}
               iconColor={theme.colors.text}
             />
-            <Avatar.Text
-              size={35}
-              label={student?.FullName?.substring(0, 2).toUpperCase() || 'ST'}
-              style={{ backgroundColor: theme.colors.primary + '20' }}
-              color={theme.colors.primary}
-            />
+            <TouchableOpacity onPress={() => router.push('/screens/student/profile' as any)}>
+              <Avatar.Text
+                size={35}
+                label={student?.FullName?.substring(0, 2).toUpperCase() || 'ST'}
+                style={{ backgroundColor: theme.colors.primary + '20' }}
+                color={theme.colors.primary}
+              />
+            </TouchableOpacity>
           </View>
         </View>
       </Surface>
@@ -247,5 +262,8 @@ const styles = StyleSheet.create({
   },
   drawerHeaderInfo: {
     flex: 1,
+  },
+  menuItem: {
+    padding: 12,
   },
 }); 
