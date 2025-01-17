@@ -2,15 +2,25 @@ import axios from '../config/axios.config';
 import { ENDPOINTS } from '../constants/endpoints';
 
 export interface StudentProfile {
+  StudentID: number;
+  FullName: string;
+  Email: string;
+  Phone: string;
+  Room_No: number;
+  MoveInDate: string;
+  MoveOutDate: string | null;
+  PGID: number;
+  Status: string;
+  Monthly_Rent: string;
+  GuardianName: string;
+  GuardianNumber: string;
+  CreatedAt: string;
+  UpdatedAt: string;
+}
+
+export interface UpdateProfileRequest {
   fullName: string;
-  email: string;
-  phone: string;
-  roomNumber: string;
-  emergencyContact: {
-    name: string;
-    phone: string;
-    relation: string;
-  };
+  roomNumber: number;
 }
 
 export const studentProfileService = {
@@ -24,8 +34,16 @@ export const studentProfileService = {
     return response.data;
   },
 
-  updateProfile: async (profileData: StudentProfile) => {
-    const response = await axios.put(ENDPOINTS.STUDENT.PROFILE, profileData);
+  updateProfile: async (profileData: UpdateProfileRequest) => {
+    const response = await axios.put(ENDPOINTS.STUDENT.PROFILE, {
+      fullName: profileData.fullName,
+      roomNumber: profileData.roomNumber
+    });
+    return response.data;
+  },
+
+  changePassword: async (oldPassword: string, newPassword: string) => {
+    const response = await axios.put(ENDPOINTS.STUDENT.CHANGE_PASSWORD, { oldPassword, newPassword });
     return response.data;
   },
 
@@ -33,4 +51,4 @@ export const studentProfileService = {
     const response = await axios.delete(ENDPOINTS.STUDENT.PROFILE);
     return response.data;
   }
-}; 
+};

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
 import { 
   Surface, 
   Text, 
@@ -11,59 +11,47 @@ import {
   Divider,
   Portal,
   Dialog,
-  HelperText
+  HelperText,
+  useTheme as usePaperTheme
 } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import { useStudentAuth } from '@/app/context/StudentAuthContext';
-import { studentProfileService, StudentProfile } from '@/app/services/student.profile.service';
+import { studentProfileService, StudentProfile, UpdateProfileRequest } from '@/app/services/student.profile.service';
 import { router } from 'expo-router';
-
-interface ProfileStats {
-  daysStayed: number;
-  paymentsCompleted: number;
-  eventsParticipated: number;
-  complaintsResolved: number;
-}
-
-interface EmergencyContact {
-  name: string;
-  relation: string;
-  phone: string;
-}
-
-// Dummy data
-const profileStats: ProfileStats = {
-  daysStayed: 120,
-  paymentsCompleted: 4,
-  eventsParticipated: 8,
-  complaintsResolved: 3,
-};
-
-const emergencyContact: EmergencyContact = {
-  name: "John Smith",
-  relation: "Parent",
-  phone: "+91 9876543210",
-};
 
 export default function ProfileScreen() {
   const { theme } = useTheme();
+  const paperTheme = usePaperTheme();
   const { student, logout } = useStudentAuth();
   const [isEditing, setIsEditing] = useState(false);
-  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [password, setPassword] = useState('');
-  const [passwordError, setPasswordError] = useState('');
+  const [showPasswordChangeDialog, setShowPasswordChangeDialog] = useState(false);
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordChangeError, setPasswordChangeError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   const [profileData, setProfileData] = useState<StudentProfile>({
-    fullName: '',
-    email: '',
-    phone: '',
-    roomNumber: '',
-    emergencyContact: {
-      name: '',
-      phone: '',
-      relation: ''
-    }
+    StudentID: 0,
+    FullName: '',
+    Email: '',
+    Phone: '',
+    Room_No: 0,
+    MoveInDate: '',
+    MoveOutDate: null,
+    PGID: 0,
+    Status: '',
+    Monthly_Rent: '',
+    GuardianName: '',
+    GuardianNumber: '',
+    CreatedAt: '',
+    UpdatedAt: ''
   });
+
+  const onRefresh = React.useCallback(() => {
+    setRefreshing(true);
+    loadProfile().finally(() => setRefreshing(false));
+  }, []);
 
   useEffect(() => {
     loadProfile();
@@ -72,48 +60,25 @@ export default function ProfileScreen() {
   const loadProfile = async () => {
     try {
       const response = await studentProfileService.getProfile();
+      console.log('Profile response:', response); // Debug log
       if (response.success) {
-        setProfileData({
-          fullName: response.data.FullName,
-          email: response.data.Email,
-          phone: response.data.Phone,
-          roomNumber: response.data.Room_No,
-          emergencyContact: {
-            name: response.data.EmergencyContactName,
-            phone: response.data.EmergencyContactPhone,
-            relation: response.data.EmergencyContactRelation
-          }
-        });
+        setProfileData(response.data);
       }
     } catch (error) {
       console.error('Error loading profile:', error);
     }
   };
 
-  const handleEdit = () => {
-    setShowPasswordDialog(true);
-  };
-
-  const handlePasswordSubmit = async () => {
-    try {
-      const response = await studentProfileService.verifyPassword(password);
-      if (response.success) {
-        setShowPasswordDialog(false);
-        setIsEditing(true);
-        setPassword('');
-        setPasswordError('');
-      }
-    } catch (error) {
-      setPasswordError('Invalid password');
-    }
-  };
-
   const handleSave = async () => {
     try {
-      const response = await studentProfileService.updateProfile(profileData);
+      const updateRequest: UpdateProfileRequest = {
+        fullName: profileData.FullName,
+        roomNumber: profileData.Room_No
+      };
+      const response = await studentProfileService.updateProfile(updateRequest);
       if (response.success) {
         setIsEditing(false);
-        loadProfile(); // Reload profile data
+        loadProfile();
       }
     } catch (error) {
       console.error('Error updating profile:', error);
@@ -126,168 +91,187 @@ export default function ProfileScreen() {
       if (response.success) {
         setShowDeleteDialog(false);
         logout();
-        router.replace('/screens/student/login' as const);
+        router.replace('/auth/student/login' as any);
       }
     } catch (error) {
       console.error('Error deleting account:', error);
     }
   };
 
-  const StatCard = ({ title, value, icon }: { title: string; value: number | string; icon: string }) => (
-    <Card style={styles.statCard}>
-      <Card.Content style={styles.statContent}>
-        <IconButton icon={icon} size={24} iconColor={theme.colors.primary} />
-        <Text style={[styles.statValue, { color: theme.colors.text }]}>{value}</Text>
-        <Text style={{ color: theme.colors.secondary }}>{title}</Text>
-      </Card.Content>
-    </Card>
-  );
+  const handleChangePassword = async () => {
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      setPasswordChangeError('All fields are required');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordChangeError('New passwords do not match');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPasswordChangeError('Password must be at least 6 characters');
+      return;
+    }
+
+    try {
+      const response = await studentProfileService.changePassword(oldPassword, newPassword);
+      if (response.success) {
+        setShowPasswordChangeDialog(false);
+        setOldPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setPasswordChangeError('');
+      }
+    } catch (error) {
+      setPasswordChangeError('Failed to change password');
+    }
+  };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <ScrollView 
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
       {/* Profile Header */}
       <Surface style={[styles.header, { backgroundColor: theme.colors.surface }]}>
         <View style={styles.profileHeader}>
-          <Avatar.Text 
-            size={80} 
-            label={profileData.fullName?.substring(0, 2).toUpperCase() || 'ST'}
-            style={{ backgroundColor: theme.colors.primary }}
-          />
-          <View style={styles.headerInfo}>
-            <Text style={[styles.name, { color: theme.colors.text }]}>
-              {profileData.fullName}
-            </Text>
-            <Text style={{ color: theme.colors.secondary }}>
-              Room {profileData.roomNumber}
-            </Text>
+          <View style={styles.avatarContainer}>
+            <Avatar.Text 
+              size={80} 
+              label={profileData.FullName?.substring(0, 2).toUpperCase() || 'ST'}
+              style={{ backgroundColor: theme.colors.primary }}
+            />
           </View>
-          <Button 
-            mode="contained" 
-            onPress={isEditing ? handleSave : handleEdit}
-            style={styles.editButton}
-          >
-            {isEditing ? 'Save' : 'Edit Profile'}
-          </Button>
+          <View style={styles.headerInfo}>
+            <View style={styles.headerRow}>
+              <Text style={styles.label}>Full Name:</Text>
+              {isEditing ? (
+                <TextInput
+                  mode="outlined"
+                  value={profileData.FullName}
+                  onChangeText={value => setProfileData({ ...profileData, FullName: value })}
+                  style={styles.input}
+                />
+              ) : (
+                <Text style={styles.value}>{profileData.FullName}</Text>
+              )}
+            </View>
+            <View style={styles.headerRow}>
+              <Text style={styles.label}>Room Number:</Text>
+              {isEditing ? (
+                <TextInput
+                  mode="outlined"
+                  value={profileData.Room_No.toString()}
+                  onChangeText={value => setProfileData({ ...profileData, Room_No: parseInt(value) || 0 })}
+                  style={styles.input}
+                  keyboardType="numeric"
+                />
+              ) : (
+                <Text style={styles.value}>{profileData.Room_No}</Text>
+              )}
+            </View>
+            <View style={styles.headerRow}>
+              <Text style={styles.label}>Email:</Text>
+              <Text style={styles.value}>{profileData.Email}</Text>
+            </View>
+            <View style={styles.headerRow}>
+              <Text style={styles.label}>Phone:</Text>
+              <Text style={styles.value}>{profileData.Phone}</Text>
+            </View>
+            <View style={styles.headerRow}>
+              <Text style={styles.label}>Monthly Rent:</Text>
+              <Text style={styles.value}>{profileData.Monthly_Rent}</Text>
+            </View>
+            <View style={styles.headerRow}>
+              <Text style={styles.label}>Status:</Text>
+              <Text style={styles.value}>{profileData.Status}</Text>
+            </View>
+          </View>
         </View>
 
         <Divider style={styles.divider} />
 
-        {/* Contact Information */}
-        <View style={styles.contactInfo}>
-          <View style={styles.contactRow}>
-            <IconButton icon="phone" size={20} />
-            <TextInput
-              value={profileData.phone}
-              onChangeText={value => setProfileData({ ...profileData, phone: value })}
-              disabled={!isEditing}
-              style={{ flex: 1 }}
-            />
-          </View>
-          <View style={styles.contactRow}>
-            <IconButton icon="email" size={20} />
-            <TextInput
-              value={profileData.email}
-              onChangeText={value => setProfileData({ ...profileData, email: value })}
-              disabled={!isEditing}
-              style={{ flex: 1 }}
-            />
-          </View>
-        </View>
-      </Surface>
-
-      {/* PG Journey Stats */}
-      <Surface style={[styles.section, { backgroundColor: theme.colors.surface }]}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>Your PG Journey</Text>
-        <View style={styles.statsGrid}>
-          <StatCard title="Days Stayed" value={profileStats.daysStayed} icon="calendar" />
-          <StatCard title="Payments" value={profileStats.paymentsCompleted} icon="credit-card" />
-          <StatCard title="Events" value={profileStats.eventsParticipated} icon="star" />
-          <StatCard title="Resolved" value={profileStats.complaintsResolved} icon="check-circle" />
-        </View>
-      </Surface>
-
-      {/* Emergency Contact */}
-      <Surface style={[styles.section, { backgroundColor: theme.colors.surface }]}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>Emergency Contact</Text>
-        <Card>
-          <Card.Content>
-            <View style={styles.emergencyContact}>
-              <View>
-                <Text style={[styles.contactLabel, { color: theme.colors.secondary }]}>Name</Text>
-                <TextInput
-                  value={profileData.emergencyContact.name}
-                  onChangeText={value => setProfileData({
-                    ...profileData,
-                    emergencyContact: { ...profileData.emergencyContact, name: value }
-                  })}
-                  disabled={!isEditing}
-                />
-              </View>
-              <View>
-                <Text style={[styles.contactLabel, { color: theme.colors.secondary }]}>Relation</Text>
-                <TextInput
-                  value={profileData.emergencyContact.relation}
-                  onChangeText={value => setProfileData({
-                    ...profileData,
-                    emergencyContact: { ...profileData.emergencyContact, relation: value }
-                  })}
-                  disabled={!isEditing}
-                />
-              </View>
-              <View>
-                <Text style={[styles.contactLabel, { color: theme.colors.secondary }]}>Phone</Text>
-                <TextInput
-                  value={profileData.emergencyContact.phone}
-                  onChangeText={value => setProfileData({
-                    ...profileData,
-                    emergencyContact: { ...profileData.emergencyContact, phone: value }
-                  })}
-                  disabled={!isEditing}
-                  keyboardType="phone-pad"
-                />
-              </View>
+        {/* Guardian Information */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>Guardian Information</Text>
+          <View style={styles.guardianInfo}>
+            <View style={styles.contactRow}>
+              <Text style={styles.label}>Name:</Text>
+              <Text style={styles.value}>{profileData.GuardianName}</Text>
             </View>
-          </Card.Content>
-        </Card>
+            <View style={styles.contactRow}>
+              <Text style={styles.label}>Phone:</Text>
+              <Text style={styles.value}>{profileData.GuardianNumber}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.actionButtons}>
+          {isEditing ? (
+            <>
+              <Button 
+                mode="contained" 
+                onPress={handleSave}
+                style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
+              >
+                Save Changes
+              </Button>
+              <Button 
+                mode="outlined" 
+                onPress={() => setIsEditing(false)}
+                style={styles.actionButton}
+              >
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <Button 
+              mode="contained" 
+              onPress={() => setIsEditing(true)}
+              style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
+            >
+              Edit Profile
+            </Button>
+          )}
+        </View>
       </Surface>
 
-      {/* Delete Account Section */}
+      {/* Account Actions */}
       <Surface style={[styles.section, { backgroundColor: theme.colors.surface }]}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.error }]}>Delete Account</Text>
-        <Text style={{ color: theme.colors.textSecondary, marginBottom: 16 }}>
-          Warning: This action cannot be undone. All your data will be permanently deleted.
-        </Text>
-        <Button 
-          mode="contained"
-          onPress={() => setShowDeleteDialog(true)}
-          buttonColor={theme.colors.error}
-        >
-          Delete Account
-        </Button>
+        <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>Account Actions</Text>
+        <View style={styles.accountActions}>
+          <Button
+            mode="contained-tonal"
+            icon="key"
+            onPress={() => setShowPasswordChangeDialog(true)}
+            style={styles.accountButton}
+          >
+            Change Password
+          </Button>
+          <Button 
+            mode="contained-tonal"
+            icon="logout"
+            onPress={logout}
+            style={styles.accountButton}
+          >
+            Logout
+          </Button>
+          <Button 
+            mode="contained"
+            icon="delete"
+            onPress={() => setShowDeleteDialog(true)}
+            buttonColor={theme.colors.error}
+            style={styles.accountButton}
+          >
+            Delete Account
+          </Button>
+        </View>
       </Surface>
 
-      {/* Password Dialog */}
+      {/* Dialogs */}
       <Portal>
-        <Dialog visible={showPasswordDialog} onDismiss={() => setShowPasswordDialog(false)}>
-          <Dialog.Title>Enter Password</Dialog.Title>
-          <Dialog.Content>
-            <TextInput
-              label="Password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              error={!!passwordError}
-            />
-            <HelperText type="error" visible={!!passwordError}>
-              {passwordError}
-            </HelperText>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setShowPasswordDialog(false)}>Cancel</Button>
-            <Button onPress={handlePasswordSubmit}>Confirm</Button>
-          </Dialog.Actions>
-        </Dialog>
-
         <Dialog visible={showDeleteDialog} onDismiss={() => setShowDeleteDialog(false)}>
           <Dialog.Title>Delete Account</Dialog.Title>
           <Dialog.Content>
@@ -300,17 +284,41 @@ export default function ProfileScreen() {
             <Button onPress={handleDelete} textColor={theme.colors.error}>Delete</Button>
           </Dialog.Actions>
         </Dialog>
-      </Portal>
 
-      {/* Logout Button */}
-      <Button 
-        mode="outlined" 
-        onPress={logout}
-        style={styles.logoutButton}
-        textColor={theme.colors.error}
-      >
-        Logout
-      </Button>
+        <Dialog visible={showPasswordChangeDialog} onDismiss={() => setShowPasswordChangeDialog(false)}>
+          <Dialog.Title>Change Password</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              label="Current Password"
+              value={oldPassword}
+              onChangeText={setOldPassword}
+              secureTextEntry
+              style={styles.dialogInput}
+            />
+            <TextInput
+              label="New Password"
+              value={newPassword}
+              onChangeText={setNewPassword}
+              secureTextEntry
+              style={styles.dialogInput}
+            />
+            <TextInput
+              label="Confirm New Password"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+              style={styles.dialogInput}
+            />
+            {passwordChangeError ? (
+              <HelperText type="error">{passwordChangeError}</HelperText>
+            ) : null}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowPasswordChangeDialog(false)}>Cancel</Button>
+            <Button onPress={handleChangePassword}>Change Password</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </ScrollView>
   );
 }
@@ -322,32 +330,37 @@ const styles = StyleSheet.create({
   header: {
     padding: 20,
     elevation: 2,
+    margin: 16,
+    borderRadius: 12,
   },
   profileHeader: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     marginBottom: 16,
   },
+  avatarContainer: {
+    marginBottom: 16,
+  },
   headerInfo: {
-    flex: 1,
-    marginLeft: 16,
+    width: '100%',
+    gap: 12,
   },
-  name: {
-    fontSize: 24,
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  label: {
+    fontSize: 16,
     fontWeight: 'bold',
+    minWidth: 100,
   },
-  editButton: {
-    borderRadius: 20,
+  value: {
+    fontSize: 16,
+    flex: 1,
   },
   divider: {
     marginVertical: 16,
-  },
-  contactInfo: {
-    gap: 8,
-  },
-  contactRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   section: {
     margin: 16,
@@ -360,43 +373,34 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 16,
   },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  guardianInfo: {
     gap: 12,
   },
-  statCard: {
-    flex: 1,
-    minWidth: '45%',
-  },
-  statContent: {
+  contactRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 8,
   },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
+  input: {
+    flex: 1,
+    backgroundColor: 'transparent',
   },
-  emergencyContact: {
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
     gap: 12,
   },
-  contactLabel: {
-    fontSize: 12,
-    marginBottom: 4,
+  actionButton: {
+    flex: 1,
   },
-  ratingContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 16,
+  accountActions: {
+    gap: 12,
   },
-  feedbackInput: {
-    marginBottom: 16,
+  accountButton: {
+    width: '100%',
   },
-  submitButton: {
-    marginBottom: 8,
+  dialogInput: {
+    marginBottom: 12,
   },
-  logoutButton: {
-    margin: 16,
-    borderColor: 'red',
-  },
-}); 
+});

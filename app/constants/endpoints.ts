@@ -104,6 +104,7 @@ export const ENDPOINTS = {
   STUDENT: {
     PROFILE: '/api/students/profile',
     VERIFY_PASSWORD: '/api/students/profile/verify-password',
+    CHANGE_PASSWORD: '/api/students/profile/password',
     UPDATE_PROFILE: '/api/students/profile',
     DELETE_ACCOUNT: '/api/students/profile'
   }
