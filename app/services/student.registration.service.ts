@@ -1,6 +1,7 @@
 import api from '@/app/config/axios.config';
 import { ENDPOINTS } from '@/app/constants/endpoints';
 import { ApiError, ApiResponse } from './student.service';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface PendingRegistration {
   PendingID: number;
@@ -59,17 +60,41 @@ export const studentRegistrationService = {
   approveRegistration: async (pendingId: number): Promise<RegistrationActionResponse> => {
     try {
       console.log('Service: Approving registration:', pendingId);
+      console.log('Service: Using endpoint:', `${ENDPOINTS.STUDENT.APPROVE_REGISTRATION}${pendingId}`);
+      
+      // Get manager data for PG ID
+      const managerData = await AsyncStorage.getItem('manager');
+      if (!managerData) {
+        throw new Error('Manager data not found');
+      }
+      const manager = JSON.parse(managerData);
+      
       const response = await api.post<RegistrationActionResponse>(
-        `${ENDPOINTS.STUDENT.APPROVE_REGISTRATION}/${pendingId}`
+        `${ENDPOINTS.STUDENT.APPROVE_REGISTRATION}${pendingId}`,
+        { pgId: manager.pgId } // Send PG ID for new room creation if needed
       );
 
+      console.log('Service: Approval response:', response.data);
+
       if (!response.data.success) {
+        console.error('Service: Approval failed:', response.data.message);
         throw new ApiError(response.data.message || 'Failed to approve registration');
       }
 
       return response.data;
     } catch (error: any) {
       console.error('Service: Error approving registration:', error);
+      console.error('Service: Error details:', {
+        response: error.response?.data,
+        status: error.response?.status,
+        message: error.message
+      });
+      
+      // Handle specific error cases
+      if (error.response?.status === 400) {
+        throw new ApiError('Registration request not found or has already been processed');
+      }
+      
       throw error.response?.data || error;
     }
   },
@@ -77,17 +102,33 @@ export const studentRegistrationService = {
   declineRegistration: async (pendingId: number): Promise<RegistrationActionResponse> => {
     try {
       console.log('Service: Declining registration:', pendingId);
+      console.log('Service: Using endpoint:', `${ENDPOINTS.STUDENT.DECLINE_REGISTRATION}${pendingId}`);
+      
       const response = await api.post<RegistrationActionResponse>(
-        `${ENDPOINTS.STUDENT.DECLINE_REGISTRATION}/${pendingId}`
+        `${ENDPOINTS.STUDENT.DECLINE_REGISTRATION}${pendingId}`
       );
 
+      console.log('Service: Decline response:', response.data);
+
       if (!response.data.success) {
+        console.error('Service: Decline failed:', response.data.message);
         throw new ApiError(response.data.message || 'Failed to decline registration');
       }
 
       return response.data;
     } catch (error: any) {
       console.error('Service: Error declining registration:', error);
+      console.error('Service: Error details:', {
+        response: error.response?.data,
+        status: error.response?.status,
+        message: error.message
+      });
+      
+      // Handle specific error cases
+      if (error.response?.status === 400) {
+        throw new ApiError('Registration request not found or has already been processed');
+      }
+      
       throw error.response?.data || error;
     }
   }

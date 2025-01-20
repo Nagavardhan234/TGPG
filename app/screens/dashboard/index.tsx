@@ -31,6 +31,8 @@ export default function DashboardHome() {
   const [pendingError, setPendingError] = useState(null);
   const [showTenantId, setShowTenantId] = useState(false);
   const [manager, setManager] = useState(null);
+  const [actionLoading, setActionLoading] = useState<{[key: number]: boolean}>({});
+  const [actionError, setActionError] = useState<{[key: number]: string}>({});
 
   // Refs should also be at the top
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -191,27 +193,102 @@ export default function DashboardHome() {
 
   const handleApprove = async (pendingId) => {
     try {
-      await studentRegistrationService.approveRegistration(pendingId);
+      setActionLoading(prev => ({ ...prev, [pendingId]: true }));
+      setActionError(prev => ({ ...prev, [pendingId]: '' }));
+      
+      // First refresh the pending registrations list to ensure we're working with current data
       const managerData = await AsyncStorage.getItem('manager');
-      if (!managerData) return;
+      if (!managerData) {
+        throw new Error('Manager data not found');
+      }
+      
       const manager = JSON.parse(managerData);
+      
+      // Get latest pending registrations before attempting approval
+      const currentRegistrations = await studentRegistrationService.getPendingRegistrations(manager.tenantRegId);
+      
+      // Check if the registration still exists and is pending
+      const pendingRegistration = currentRegistrations.pendingRegistrations?.find(
+        reg => reg.PendingID === pendingId && reg.Status === 'PENDING'
+      );
+      
+      if (!pendingRegistration) {
+        throw new Error('This registration request no longer exists or has already been processed');
+      }
+      
+      // Proceed with approval
+      console.log('Dashboard: Approving registration:', pendingId);
+      console.log('Dashboard: Registration details:', pendingRegistration);
+      
+      await studentRegistrationService.approveRegistration(pendingId);
+      
+      // Refresh data after successful approval
       const response = await studentRegistrationService.getPendingRegistrations(manager.tenantRegId);
-      setPendingRegistrations(response.data);
+      setPendingRegistrations(response.pendingRegistrations || []);
+      
+      // Refresh dashboard stats to show new tenant and possibly new room
+      await loadDashboardData();
+      
+      console.log('Dashboard: Successfully approved and refreshed data');
     } catch (error) {
-      console.error('Error approving registration:', error);
+      console.error('Dashboard: Error approving registration:', error);
+      let errorMessage = error.message || 'Failed to approve registration. Please try again.';
+      
+      // Handle specific error cases
+      if (error.message?.includes('room capacity')) {
+        errorMessage = 'Room is at full capacity. Please assign a different room.';
+      } else if (error.message?.includes('room not found')) {
+        errorMessage = 'Room will be created automatically for this student.';
+      }
+      
+      setActionError(prev => ({ ...prev, [pendingId]: errorMessage }));
+    } finally {
+      setActionLoading(prev => ({ ...prev, [pendingId]: false }));
     }
   };
 
   const handleDecline = async (pendingId) => {
     try {
-      await studentRegistrationService.declineRegistration(pendingId);
+      setActionLoading(prev => ({ ...prev, [pendingId]: true }));
+      setActionError(prev => ({ ...prev, [pendingId]: '' }));
+      
+      // First refresh the pending registrations list to ensure we're working with current data
       const managerData = await AsyncStorage.getItem('manager');
-      if (!managerData) return;
+      if (!managerData) {
+        throw new Error('Manager data not found');
+      }
+      
       const manager = JSON.parse(managerData);
+      
+      // Get latest pending registrations before attempting decline
+      const currentRegistrations = await studentRegistrationService.getPendingRegistrations(manager.tenantRegId);
+      
+      // Check if the registration still exists and is pending
+      const registrationExists = currentRegistrations.pendingRegistrations?.some(
+        reg => reg.PendingID === pendingId && reg.Status === 'PENDING'
+      );
+      
+      if (!registrationExists) {
+        throw new Error('This registration request no longer exists or has already been processed');
+      }
+      
+      // Proceed with decline
+      console.log('Dashboard: Declining registration:', pendingId);
+      await studentRegistrationService.declineRegistration(pendingId);
+      
+      // Refresh data after successful decline
       const response = await studentRegistrationService.getPendingRegistrations(manager.tenantRegId);
-      setPendingRegistrations(response.data);
+      setPendingRegistrations(response.pendingRegistrations || []);
+      
+      console.log('Dashboard: Successfully declined and refreshed data');
     } catch (error) {
-      console.error('Error declining registration:', error);
+      console.error('Dashboard: Error declining registration:', error);
+      setActionError(prev => ({ 
+        ...prev, 
+        [pendingId]: error.message || 'Failed to decline registration. Please try again.'
+      }));
+    } finally {
+      setActionLoading(prev => ({ ...prev, [pendingId]: false }));
     }
   };
 
@@ -294,62 +371,73 @@ export default function DashboardHome() {
   const renderPendingRegistrations = () => {
     if (pendingLoading) {
       return (
-        <View style={{ padding: 16 }}>
-          <Text style={{ fontSize: 18, marginBottom: 12 }}>Pending Student Registrations</Text>
+        <Surface style={styles.pendingSection}>
+          <Text style={styles.sectionTitle}>Pending Student Registrations</Text>
           <ActivityIndicator size="small" color={theme.colors.primary} />
-        </View>
+        </Surface>
       );
     }
 
     if (pendingError) {
       return (
-        <View style={{ padding: 16 }}>
-          <Text style={{ fontSize: 18, marginBottom: 12 }}>Pending Student Registrations</Text>
-          <Text style={{ color: theme.colors.error }}>{pendingError}</Text>
-        </View>
+        <Surface style={styles.pendingSection}>
+          <Text style={styles.sectionTitle}>Pending Student Registrations</Text>
+          <Text style={[styles.errorText, { color: theme.colors.error }]}>{pendingError}</Text>
+        </Surface>
       );
     }
 
-    if (!pendingRegistrations?.length) {
+    if (!pendingRegistrations || pendingRegistrations.length === 0) {
       return (
-        <View style={{ padding: 16 }}>
-          <Text style={{ fontSize: 18, marginBottom: 12 }}>Pending Student Registrations</Text>
-          <Text style={{ textAlign: 'center', opacity: 0.7 }}>No pending registration requests</Text>
-        </View>
+        <Surface style={styles.pendingSection}>
+          <Text style={styles.sectionTitle}>Pending Student Registrations</Text>
+          <Text style={styles.noDataText}>No pending registrations</Text>
+        </Surface>
       );
     }
 
     return (
-      <View style={{ padding: 16 }}>
-        <Text style={{ fontSize: 18, marginBottom: 12 }}>Pending Student Registrations</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            {pendingRegistrations.map((registration) => (
-              <View key={registration.PendingID} style={{ 
-                width: 280, 
-                padding: 16, 
-                borderRadius: 8, 
-                backgroundColor: theme.colors.surface,
-                marginRight: 12 
-              }}>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>{registration.FullName}</Text>
-                <Text style={{ marginBottom: 4 }}>📱 {registration.Phone}</Text>
-                <Text style={{ marginBottom: 4 }}>📧 {registration.Email || 'Not provided'}</Text>
-                <Text style={{ marginBottom: 4 }}>🏠 Room {registration.RoomNumber}</Text>
-                <Text style={{ marginBottom: 12 }}>📅 {registration.JoiningDate}</Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <Button mode="contained" onPress={() => handleApprove(registration.PendingID)}>
-                    Approve
-                  </Button>
-                  <Button mode="outlined" onPress={() => handleDecline(registration.PendingID)}>
-                    Decline
-                  </Button>
-                </View>
+      <Surface style={styles.pendingSection}>
+        <Text style={styles.sectionTitle}>Pending Student Registrations</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pendingCards}>
+          {pendingRegistrations.map((registration) => (
+            <Surface key={registration.PendingID} style={styles.pendingCard}>
+              <View style={styles.pendingDetails}>
+                <Text style={styles.pendingText}>Name: {registration.FullName}</Text>
+                <Text style={styles.pendingText}>Phone: {registration.Phone}</Text>
+                <Text style={styles.pendingText}>Email: {registration.Email || 'N/A'}</Text>
+                <Text style={styles.pendingText}>Room: {registration.RoomNumber}</Text>
+                <Text style={styles.pendingText}>Joining: {registration.JoiningDate}</Text>
               </View>
-            ))}
-          </View>
+              {actionError[registration.PendingID] && (
+                <Text style={[styles.errorText, { color: theme.colors.error }]}>
+                  {actionError[registration.PendingID]}
+                </Text>
+              )}
+              <View style={styles.pendingActions}>
+                <Button 
+                  mode="contained" 
+                  onPress={() => handleApprove(registration.PendingID)}
+                  loading={actionLoading[registration.PendingID]}
+                  disabled={actionLoading[registration.PendingID]}
+                  style={styles.actionButton}
+                >
+                  Approve
+                </Button>
+                <Button 
+                  mode="outlined" 
+                  onPress={() => handleDecline(registration.PendingID)}
+                  loading={actionLoading[registration.PendingID]}
+                  disabled={actionLoading[registration.PendingID]}
+                  style={styles.actionButton}
+                >
+                  Decline
+                </Button>
+              </View>
+            </Surface>
+          ))}
         </ScrollView>
-      </View>
+      </Surface>
     );
   };
 
@@ -780,5 +868,43 @@ const styles = StyleSheet.create({
   idText: {
     color: '#fff',
     fontSize: 14,
+  },
+  pendingSection: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 12,
+  },
+  pendingCards: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  pendingCard: {
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    flex: 1,
+  },
+  pendingDetails: {
+    marginBottom: 12,
+  },
+  pendingText: {
+    fontSize: 16,
+    marginBottom: 4,
+  },
+  pendingActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  noDataText: {
+    textAlign: 'center',
+    opacity: 0.7,
   },
 }); 
