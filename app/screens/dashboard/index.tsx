@@ -9,6 +9,7 @@ import { router } from 'expo-router';
 import { getDashboardStats, DashboardStats } from '@/app/services/dashboard.service';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '@/app/services/api';
+import { studentRegistrationService } from '@/app/services/student.registration.service';
 
 export default function DashboardHome() {
   const { theme, isDarkMode } = useTheme();
@@ -25,6 +26,11 @@ export default function DashboardHome() {
     { name: "Available", population: 0, color: "#4CAF50", legendFontColor: "#7F7F7F", legendFontSize: 12 },
     { name: "Unavailable", population: 0, color: "#F44336", legendFontColor: "#7F7F7F", legendFontSize: 12 }
   ]);
+  const [pendingRegistrations, setPendingRegistrations] = useState([]);
+  const [pendingLoading, setPendingLoading] = useState(true);
+  const [pendingError, setPendingError] = useState(null);
+  const [showTenantId, setShowTenantId] = useState(false);
+  const [manager, setManager] = useState(null);
 
   // Refs should also be at the top
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -66,6 +72,24 @@ export default function DashboardHome() {
     };
   }, []);
 
+  useEffect(() => {
+    const fetchPendingRegistrations = async () => {
+      try {
+        const managerData = await AsyncStorage.getItem('manager');
+        if (!managerData) return;
+        const manager = JSON.parse(managerData);
+        const response = await studentRegistrationService.getPendingRegistrations(manager.tenantRegId);
+        setPendingRegistrations(response.pendingRegistrations || []);
+      } catch (error) {
+        console.error('Error fetching pending registrations:', error);
+        setPendingError('Failed to load pending registrations');
+      } finally {
+        setPendingLoading(false);
+      }
+    };
+    fetchPendingRegistrations();
+  }, []);
+
   // Move all the helper functions after hooks
   const loadManagerData = async () => {
     try {
@@ -79,6 +103,7 @@ export default function DashboardHome() {
       }
 
       const manager = JSON.parse(managerData);
+      setManager(manager);
       setManagerName(manager.fullName || 'Manager');
 
       if (!pgData && manager.pgId) {
@@ -164,6 +189,32 @@ export default function DashboardHome() {
     }
   };
 
+  const handleApprove = async (pendingId) => {
+    try {
+      await studentRegistrationService.approveRegistration(pendingId);
+      const managerData = await AsyncStorage.getItem('manager');
+      if (!managerData) return;
+      const manager = JSON.parse(managerData);
+      const response = await studentRegistrationService.getPendingRegistrations(manager.tenantRegId);
+      setPendingRegistrations(response.data);
+    } catch (error) {
+      console.error('Error approving registration:', error);
+    }
+  };
+
+  const handleDecline = async (pendingId) => {
+    try {
+      await studentRegistrationService.declineRegistration(pendingId);
+      const managerData = await AsyncStorage.getItem('manager');
+      if (!managerData) return;
+      const manager = JSON.parse(managerData);
+      const response = await studentRegistrationService.getPendingRegistrations(manager.tenantRegId);
+      setPendingRegistrations(response.data);
+    } catch (error) {
+      console.error('Error declining registration:', error);
+    }
+  };
+
   // Render loading state
   if (!theme) return null;
   
@@ -240,6 +291,67 @@ export default function DashboardHome() {
   console.log('StudentData:', studentData);
 
   if (!theme) return null;
+  const renderPendingRegistrations = () => {
+    if (pendingLoading) {
+      return (
+        <View style={{ padding: 16 }}>
+          <Text style={{ fontSize: 18, marginBottom: 12 }}>Pending Student Registrations</Text>
+          <ActivityIndicator size="small" color={theme.colors.primary} />
+        </View>
+      );
+    }
+
+    if (pendingError) {
+      return (
+        <View style={{ padding: 16 }}>
+          <Text style={{ fontSize: 18, marginBottom: 12 }}>Pending Student Registrations</Text>
+          <Text style={{ color: theme.colors.error }}>{pendingError}</Text>
+        </View>
+      );
+    }
+
+    if (!pendingRegistrations?.length) {
+      return (
+        <View style={{ padding: 16 }}>
+          <Text style={{ fontSize: 18, marginBottom: 12 }}>Pending Student Registrations</Text>
+          <Text style={{ textAlign: 'center', opacity: 0.7 }}>No pending registration requests</Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={{ padding: 16 }}>
+        <Text style={{ fontSize: 18, marginBottom: 12 }}>Pending Student Registrations</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            {pendingRegistrations.map((registration) => (
+              <View key={registration.PendingID} style={{ 
+                width: 280, 
+                padding: 16, 
+                borderRadius: 8, 
+                backgroundColor: theme.colors.surface,
+                marginRight: 12 
+              }}>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>{registration.FullName}</Text>
+                <Text style={{ marginBottom: 4 }}>📱 {registration.Phone}</Text>
+                <Text style={{ marginBottom: 4 }}>📧 {registration.Email || 'Not provided'}</Text>
+                <Text style={{ marginBottom: 4 }}>🏠 Room {registration.RoomNumber}</Text>
+                <Text style={{ marginBottom: 12 }}>📅 {registration.JoiningDate}</Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <Button mode="contained" onPress={() => handleApprove(registration.PendingID)}>
+                    Approve
+                  </Button>
+                  <Button mode="outlined" onPress={() => handleDecline(registration.PendingID)}>
+                    Decline
+                  </Button>
+                </View>
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+      </View>
+    );
+  };
 
   const actionButtons = [
     { 
@@ -293,6 +405,17 @@ export default function DashboardHome() {
             <Text style={[styles.greeting, { opacity: isDarkMode ? 0.7 : 0.9 }]}>👋 Hello,</Text>
             <Text style={styles.managerName}>{managerName}</Text>
             <Text style={[styles.role, { opacity: isDarkMode ? 0.7 : 0.9 }]}>Hostel Manager</Text>
+            <View style={styles.idContainer}>
+              <Text style={[styles.idText, { opacity: isDarkMode ? 0.7 : 0.9 }]}>
+                ID: {showTenantId ? manager?.tenantRegId || 'N/A' : '•••••'}
+              </Text>
+              <IconButton
+                icon={showTenantId ? 'eye-off' : 'eye'}
+                iconColor={isDarkMode ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.9)'}
+                size={20}
+                onPress={() => setShowTenantId(!showTenantId)}
+              />
+            </View>
           </View>
           <View style={styles.headerRight}>
             <Text style={styles.hostelName}>{pgName}</Text>
@@ -346,7 +469,7 @@ export default function DashboardHome() {
           </LinearGradient>
         ))}
       </View>
-
+      {renderPendingRegistrations()}
       {/* Charts */}
       <View style={styles.chartsRow}>
         <LinearGradient
@@ -648,5 +771,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 20,
     textAlign: 'center',
+  },
+  idContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  idText: {
+    color: '#fff',
+    fontSize: 14,
   },
 }); 

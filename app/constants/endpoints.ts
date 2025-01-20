@@ -5,6 +5,21 @@ export const ENDPOINTS = {
   MANAGER_REGISTER: '/api/managers/register',
   STUDENT_LOGIN: '/api/students/login',
   
+  // Student endpoints
+  STUDENT: {
+    LOGIN: '/api/students/login',
+    REGISTER: '/api/students/registration/register',
+    PROFILE: '/api/students/profile',
+    VERIFY_PASSWORD: '/api/students/profile/verify-password',
+    CHANGE_PASSWORD: '/api/students/profile/password',
+    UPDATE_PROFILE: '/api/students/profile',
+    DELETE_ACCOUNT: '/api/students/profile',
+    // Registration endpoints
+    PENDING_REGISTRATIONS: '/api/students/registration/pending/',
+    APPROVE_REGISTRATION: '/api/students/registration/approve/',
+    DECLINE_REGISTRATION: '/api/students/registration/decline/'
+  },
+
   // Complaints endpoints with clear role separation
   COMPLAINTS: {
     // Student-specific endpoints
@@ -99,18 +114,10 @@ export const ENDPOINTS = {
   
   AUTH: {
     VERIFY_PASSWORD: '/api/managers/verify-password'
-  },
-  
-  STUDENT: {
-    PROFILE: '/api/students/profile',
-    VERIFY_PASSWORD: '/api/students/profile/verify-password',
-    CHANGE_PASSWORD: '/api/students/profile/password',
-    UPDATE_PROFILE: '/api/students/profile',
-    DELETE_ACCOUNT: '/api/students/profile'
   }
 };
 
-export const BASE_URL = 'http://localhost:3000'
+export const BASE_URL = 'http://localhost:3000';
 
 export const API_TIMEOUT = 10000; // 10 seconds
  

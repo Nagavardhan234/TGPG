@@ -598,4 +598,30 @@ export const getStudentsWithPagination = async (
       totalPages: 0
     };
   }
+};
+
+export const studentService = {
+  registerPendingStudent: async (data: {
+    firstName: string;
+    lastName: string;
+    phone: string;
+    password: string;
+    managerId: string;
+    roomNumber: string;
+    joiningDate: Date;
+  }) => {
+    try {
+      const response = await api.post('/students/registration/register', {
+        ...data,
+        fullName: `${data.firstName} ${data.lastName}`,
+        joiningDate: data.joiningDate.toISOString(),
+      });
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.data?.message) {
+        throw new Error(error.response.data.message);
+      }
+      throw new Error('Failed to register. Please try again later.');
+    }
+  },
 }; 

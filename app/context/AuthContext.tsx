@@ -8,6 +8,7 @@ export interface Manager {
   email: string;
   phone: string;
   role: 'manager';
+  tenantRegId: string;
 }
 
 export interface PG {

@@ -63,6 +63,14 @@ export default function LoginScreen() {
     }
   };
 
+  const handleRegister = () => {
+    if (userType === 'manager') {
+      router.push('/screens/ManagerRegistration');
+    } else {
+      router.push('/screens/StudentRegistration');
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <IconButton
@@ -138,14 +146,18 @@ export default function LoginScreen() {
             Login as {userType === 'manager' ? 'Manager' : 'Student'}
           </Button>
 
-          {userType === 'manager' && (
-            <Button
-              mode="text"
-              onPress={() => router.push('/screens/ManagerRegistration')}
-              style={styles.registerButton}
-            >
-              Register as Manager
-            </Button>
+          <Button
+            mode="text"
+            onPress={handleRegister}
+            style={styles.registerButton}
+          >
+            Register as {userType === 'manager' ? 'Manager' : 'Student'}
+          </Button>
+
+          {userType === 'student' && (
+            <Text style={[styles.helperText, { color: theme.colors.onSurfaceVariant }]}>
+              To register as a student, you'll need your manager's Tenant Registration ID
+            </Text>
           )}
         </View>
       </Surface>
@@ -209,5 +221,10 @@ const styles = StyleSheet.create({
   },
   segmentedButtons: {
     marginBottom: 16,
+  },
+  helperText: {
+    textAlign: 'center',
+    fontSize: 12,
+    marginTop: 8,
   },
 });
