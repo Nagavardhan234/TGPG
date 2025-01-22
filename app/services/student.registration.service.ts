@@ -28,6 +28,15 @@ export interface RegistrationActionResponse {
 }
 
 export const studentRegistrationService = {
+  register: async (data: any): Promise<ApiResponse> => {
+    try {
+      const response = await api.post(ENDPOINTS.STUDENT.REGISTER, data);
+      return response.data;
+    } catch (error: any) {
+      throw error.response?.data || error;
+    }
+  },
+
   getPendingRegistrations: async (tenantRegId: string): Promise<PendingRegistrationsResponse> => {
     try {
       console.log('Service: Fetching pending registrations');
