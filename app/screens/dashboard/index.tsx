@@ -368,164 +368,240 @@ export default function DashboardHome() {
   console.log('StudentData:', studentData);
 
   if (!theme) return null;
-  const renderPendingRegistrations = () => {
-    if (pendingLoading) {
-      return (
-        <Surface style={styles.pendingSection}>
-          <Text style={styles.sectionTitle}>Pending Student Registrations</Text>
-          <ActivityIndicator size="small" color={theme.colors.primary} />
-        </Surface>
-      );
-    }
-
-    if (pendingError) {
-      return (
-        <Surface style={styles.pendingSection}>
-          <Text style={styles.sectionTitle}>Pending Student Registrations</Text>
-          <Text style={[styles.errorText, { color: theme.colors.error }]}>{pendingError}</Text>
-        </Surface>
-      );
-    }
-
-    if (!pendingRegistrations || pendingRegistrations.length === 0) {
-      return (
-        <Surface style={styles.pendingSection}>
-          <Text style={styles.sectionTitle}>Pending Student Registrations</Text>
-          <Text style={styles.noDataText}>No pending registrations</Text>
-        </Surface>
-      );
-    }
-
-    return (
-      <Surface style={styles.pendingSection}>
-        <Text style={styles.sectionTitle}>Pending Student Registrations</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pendingCards}>
-          {pendingRegistrations.map((registration) => (
-            <Surface key={registration.PendingID} style={styles.pendingCard}>
-              <View style={styles.pendingDetails}>
-                <Text style={styles.pendingText}>Name: {registration.FullName}</Text>
-                <Text style={styles.pendingText}>Phone: {registration.Phone}</Text>
-                <Text style={styles.pendingText}>Email: {registration.Email || 'N/A'}</Text>
-                <Text style={styles.pendingText}>Room: {registration.RoomNumber}</Text>
-                <Text style={styles.pendingText}>Joining: {registration.JoiningDate}</Text>
-              </View>
-              {actionError[registration.PendingID] && (
-                <Text style={[styles.errorText, { color: theme.colors.error }]}>
-                  {actionError[registration.PendingID]}
-                </Text>
-              )}
-              <View style={styles.pendingActions}>
-                <Button 
-                  mode="contained" 
-                  onPress={() => handleApprove(registration.PendingID)}
-                  loading={actionLoading[registration.PendingID]}
-                  disabled={actionLoading[registration.PendingID]}
-                  style={styles.actionButton}
-                >
-                  Approve
-                </Button>
-                <Button 
-                  mode="outlined" 
-                  onPress={() => handleDecline(registration.PendingID)}
-                  loading={actionLoading[registration.PendingID]}
-                  disabled={actionLoading[registration.PendingID]}
-                  style={styles.actionButton}
-                >
-                  Decline
-                </Button>
-              </View>
-            </Surface>
-          ))}
-        </ScrollView>
-      </Surface>
-    );
-  };
-
-  const actionButtons = [
-    { 
-      icon: 'account-plus', 
-      label: 'Add Student',
-      onPress: () => router.push('/screens/dashboard/students')
-    },
-    { 
-      icon: 'home-plus', 
-      label: 'Add Room',
-      onPress: () => router.push('/screens/dashboard/rooms')
-    },
-    { 
-      icon: 'bell-ring', 
-      label: 'Send Reminder',
-      onPress: () => router.push('/screens/dashboard/messages')
-    },
-    { 
-      icon: 'file-export', 
-      label: 'Export Report',
-      onPress: () => {
-        // TODO: Implement export functionality
-        console.log('Export Report clicked');
-      }
-    }
-  ];
-
-  // Update stat card colors
-  const statCardGradient = isDarkMode 
-    ? ['#2D2D2D', '#383838'] as const
-    : ['#FFFFFF', '#F8F8F8'] as const;
-
-  // Update chart card colors
-  const chartCardGradient = isDarkMode 
-    ? ['#2D2D2D', '#383838'] as const
-    : ['#FFFFFF', '#F8F8F8'] as const;
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* Header Card */}
       <LinearGradient
-        colors={isDarkMode 
-          ? ['#333333', '#4A4A4A']
-          : ['#6750A4', '#9C27B0']} // Updated to match theme primary colors
-        style={styles.headerCard}
+        colors={['#F3EFFF', '#E8F0FF']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
+        style={[styles.headerCard, {
+          margin: 12,
+          borderRadius: 20,
+          overflow: 'hidden',
+          position: 'relative',
+          elevation: 8,
+          shadowColor: '#6E6E7E',
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.2,
+          shadowRadius: 16,
+        }]}
       >
-        <View style={styles.headerContent}>
-          <View style={styles.headerLeft}>
-            <Text style={[styles.greeting, { opacity: isDarkMode ? 0.7 : 0.9 }]}>👋 Hello,</Text>
-            <Text style={styles.managerName}>{managerName}</Text>
-            <Text style={[styles.role, { opacity: isDarkMode ? 0.7 : 0.9 }]}>Hostel Manager</Text>
-            <View style={styles.idContainer}>
-              <Text style={[styles.idText, { opacity: isDarkMode ? 0.7 : 0.9 }]}>
+        {/* Fluid blob background pattern */}
+        <View style={{
+          position: 'absolute',
+          width: '100%',
+          height: '100%',
+          opacity: 0.6,
+        }}>
+          {/* Large primary blob */}
+          <View style={{
+            position: 'absolute',
+            width: 350,
+            height: 350,
+            borderRadius: 175,
+            backgroundColor: '#D8BBFF',
+            transform: [
+              { scale: 1.2 },
+              { translateX: -120 },
+              { translateY: -180 }
+            ],
+            opacity: 0.3,
+          }} />
+          
+          {/* Medium accent blob */}
+          <View style={{
+            position: 'absolute',
+            width: 250,
+            height: 250,
+            borderRadius: 125,
+            backgroundColor: '#FFD6D6',
+            transform: [
+              { scale: 1.1 },
+              { translateX: 100 },
+              { translateY: -80 }
+            ],
+            opacity: 0.25,
+          }} />
+          
+          {/* Small detail blob */}
+          <View style={{
+            position: 'absolute',
+            width: 150,
+            height: 150,
+            borderRadius: 75,
+            backgroundColor: '#D8BBFF',
+            transform: [
+              { scale: 0.9 },
+              { translateX: 80 },
+              { translateY: 120 }
+            ],
+            opacity: 0.2,
+          }} />
+        </View>
+
+        <View style={[styles.headerContent, {
+          padding: 16,
+          zIndex: 1,
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+        }]}>
+          <View style={[styles.headerLeft, { 
+            flex: 1,
+            minWidth: 200,
+            marginRight: 16,
+          }]}>
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              marginBottom: 4,
+            }}>
+              <Text style={[styles.greeting, {
+                fontSize: 16,
+                color: '#6E6E7E',
+                fontWeight: '600',
+                marginRight: 4,
+              }]}>Hello</Text>
+              <Text style={{
+                fontSize: 20,
+                color: '#FFD700',
+              }}>👋</Text>
+            </View>
+            
+            <Text style={[styles.managerName, {
+              fontSize: 28,
+              fontWeight: 'bold',
+              color: '#2E2E3E',
+              marginBottom: 4,
+              letterSpacing: 0.5,
+            }]} numberOfLines={1} ellipsizeMode="tail">{managerName}</Text>
+            
+            <Text style={[styles.role, {
+              fontSize: 14,
+              color: '#6E6E7E',
+              marginBottom: 12,
+              fontWeight: '500',
+              letterSpacing: 0.3,
+            }]}>Hostel Manager</Text>
+            
+            <View style={[styles.idContainer, {
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: 'rgba(46, 46, 62, 0.06)',
+              borderRadius: 12,
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              alignSelf: 'flex-start',
+              maxWidth: '100%',
+            }]}>
+              <Text style={[styles.idText, {
+                color: '#2E2E3E',
+                fontSize: 13,
+                fontWeight: '600',
+                marginRight: 4,
+                opacity: 0.9,
+              }]} numberOfLines={1}>
                 ID: {showTenantId ? manager?.tenantRegId || 'N/A' : '•••••'}
               </Text>
               <IconButton
                 icon={showTenantId ? 'eye-off' : 'eye'}
-                iconColor={isDarkMode ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.9)'}
-                size={20}
+                iconColor="#6E6E7E"
+                size={16}
                 onPress={() => setShowTenantId(!showTenantId)}
+                style={{ margin: -8, padding: 0 }}
               />
             </View>
           </View>
-          <View style={styles.headerRight}>
-            <Text style={styles.hostelName}>{pgName}</Text>
+
+          <View style={[styles.headerRight, {
+            alignItems: 'flex-end',
+            justifyContent: 'space-between',
+            minWidth: 150,
+          }]}>
+            <Text style={[styles.hostelName, {
+              fontSize: 20,
+              fontWeight: '700',
+              color: '#2E2E3E',
+              marginBottom: 12,
+              textAlign: 'right',
+              letterSpacing: 0.5,
+            }]} numberOfLines={2} ellipsizeMode="tail">{pgName}</Text>
+            
             <View style={[styles.membersBadge, {
-              backgroundColor: isDarkMode 
-                ? 'rgba(255,255,255,0.1)' 
-                : 'rgba(255,255,255,0.2)'
+              backgroundColor: 'rgba(255, 111, 97, 0.1)',
+              borderRadius: 12,
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              flexDirection: 'row',
+              alignItems: 'center',
+              maxWidth: '100%',
             }]}>
-              <Text style={styles.totalMembers}>
-                🏠 Members Available: {stats?.students?.occupied || 0}
+              <Text style={{
+                fontSize: 16,
+                color: '#FF6F61',
+                marginRight: 6,
+              }}>🏠</Text>
+              <Text style={[styles.totalMembers, {
+                color: '#2E2E3E',
+                fontSize: 13,
+                fontWeight: '600',
+                opacity: 0.9,
+              }]} numberOfLines={1}>
+                Members: {stats?.students?.occupied || 0}
               </Text>
             </View>
           </View>
         </View>
       </LinearGradient>
 
-      {/* Stats Cards */}
+      {/* Only render pending section if there are pending registrations */}
+      {!pendingLoading && !pendingError && pendingRegistrations?.length > 0 && (
+        <Surface style={styles.pendingSection} elevation={1}>
+          <Text style={styles.sectionTitle}>Pending Student Registrations</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.pendingCards}>
+              {pendingRegistrations.map((registration) => (
+                <Surface key={registration.PendingID} style={styles.pendingCard} elevation={2}>
+                  <View style={styles.pendingDetails}>
+                    <Text style={styles.pendingText}>Name: {registration.FullName}</Text>
+                    <Text style={styles.pendingText}>Phone: {registration.Phone}</Text>
+                    <Text style={styles.pendingText}>Email: {registration.Email || 'N/A'}</Text>
+                    <Text style={styles.pendingText}>Room: {registration.RoomNumber}</Text>
+                    <Text style={styles.pendingText}>Joining: {registration.JoiningDate}</Text>
+                    <Text style={styles.pendingText}>Requested: {registration.RequestedAt}</Text>
+                  </View>
+                  <View style={styles.pendingActions}>
+                    <Button 
+                      mode="contained" 
+                      onPress={() => handleApprove(registration.PendingID)}
+                      style={styles.actionButton}
+                    >
+                      Approve
+                    </Button>
+                    <Button 
+                      mode="outlined" 
+                      onPress={() => handleDecline(registration.PendingID)}
+                      style={styles.actionButton}
+                    >
+                      Decline
+                    </Button>
+                  </View>
+                </Surface>
+              ))}
+            </View>
+          </ScrollView>
+        </Surface>
+      )}
+
       <View style={styles.statsContainer}>
         {statsData.map((stat, index) => (
           <LinearGradient
             key={index}
-            colors={statCardGradient}
+            colors={isDarkMode 
+              ? ['#2D2D2D', '#383838'] as const
+              : ['#FFFFFF', '#F8F8F8'] as const}
             style={[
               styles.statCard,
               {
@@ -557,11 +633,13 @@ export default function DashboardHome() {
           </LinearGradient>
         ))}
       </View>
-      {renderPendingRegistrations()}
+
       {/* Charts */}
       <View style={styles.chartsRow}>
         <LinearGradient
-          colors={chartCardGradient}
+          colors={isDarkMode 
+            ? ['#2D2D2D', '#383838'] as const
+            : ['#FFFFFF', '#F8F8F8'] as const}
           style={[styles.chartCard, {
             flex: 1,
             padding: 16,
@@ -584,7 +662,9 @@ export default function DashboardHome() {
         </LinearGradient>
 
         <LinearGradient
-          colors={chartCardGradient}
+          colors={isDarkMode 
+            ? ['#2D2D2D', '#383838'] as const
+            : ['#FFFFFF', '#F8F8F8'] as const}
           style={[styles.chartCard, {
             flex: 1,
             padding: 16,
@@ -609,7 +689,9 @@ export default function DashboardHome() {
 
       <View style={[styles.chartsContainer, { padding: 12 }]}>
         <LinearGradient
-          colors={chartCardGradient}
+          colors={isDarkMode 
+            ? ['#2D2D2D', '#383838'] as const
+            : ['#FFFFFF', '#F8F8F8'] as const}
           style={[styles.chartCard, styles.fullWidth, {
             borderColor: isDarkMode 
               ? 'rgba(255, 255, 255, 0.1)' 
@@ -650,31 +732,6 @@ export default function DashboardHome() {
             </Button>
           </View>
         </LinearGradient>
-        <View style={styles.actionButtons}>
-          {actionButtons.map((button, index) => (
-            <LinearGradient
-              key={index}
-              colors={isDarkMode 
-                ? ['#6750A4', '#9C27B0']
-                : ['#6750A4', '#9C27B0']}
-              style={[styles.actionButton, {
-                borderRadius: 12,
-              }]}
-            >
-              <Button 
-                mode="contained" 
-                icon={button.icon}
-                onPress={button.onPress}
-                style={{ backgroundColor: 'transparent' }}
-                labelStyle={{
-                  color: '#FFFFFF',
-                }}
-              >
-                {button.label}
-              </Button>
-            </LinearGradient>
-          ))}
-        </View>
       </View>
     </ScrollView>
   );

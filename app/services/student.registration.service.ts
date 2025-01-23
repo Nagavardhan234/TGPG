@@ -33,6 +33,15 @@ export const studentRegistrationService = {
       const response = await api.post(ENDPOINTS.STUDENT.REGISTER, data);
       return response.data;
     } catch (error: any) {
+      // Handle duplicate email error
+      if (error.response?.data?.message?.includes('duplicate key value')) {
+        if (error.response.data.message.includes('email')) {
+          throw new ApiError('A student with this email is already registered. Please use a different email.');
+        }
+        if (error.response.data.message.includes('phone')) {
+          throw new ApiError('A student with this phone number is already registered. Please use a different number.');
+        }
+      }
       throw error.response?.data || error;
     }
   },
