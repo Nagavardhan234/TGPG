@@ -558,41 +558,187 @@ export default function DashboardHome() {
 
       {/* Only render pending section if there are pending registrations */}
       {!pendingLoading && !pendingError && pendingRegistrations?.length > 0 && (
-        <Surface style={styles.pendingSection} elevation={1}>
-          <Text style={styles.sectionTitle}>Pending Student Registrations</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.pendingCards}>
-              {pendingRegistrations.map((registration) => (
-                <Surface key={registration.PendingID} style={styles.pendingCard} elevation={2}>
-                  <View style={styles.pendingDetails}>
-                    <Text style={styles.pendingText}>Name: {registration.FullName}</Text>
-                    <Text style={styles.pendingText}>Phone: {registration.Phone}</Text>
-                    <Text style={styles.pendingText}>Email: {registration.Email || 'N/A'}</Text>
-                    <Text style={styles.pendingText}>Room: {registration.RoomNumber}</Text>
-                    <Text style={styles.pendingText}>Joining: {registration.JoiningDate}</Text>
-                    <Text style={styles.pendingText}>Requested: {registration.RequestedAt}</Text>
-                  </View>
-                  <View style={styles.pendingActions}>
-                    <Button 
-                      mode="contained" 
-                      onPress={() => handleApprove(registration.PendingID)}
-                      style={styles.actionButton}
-                    >
-                      Approve
-                    </Button>
-                    <Button 
-                      mode="outlined" 
-                      onPress={() => handleDecline(registration.PendingID)}
-                      style={styles.actionButton}
-                    >
-                      Decline
-                    </Button>
-                  </View>
-                </Surface>
-              ))}
+        <LinearGradient
+          colors={isDarkMode ? ['#2D2D2D', '#383838'] : ['#FFFFFF', '#F8F8F8']}
+          style={[styles.pendingSection, {
+            margin: 12,
+            borderRadius: 20,
+            borderWidth: 1,
+            borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
+            overflow: 'hidden',
+          }]}
+        >
+          <View style={{ padding: 16 }}>
+            <View style={{ 
+              flexDirection: 'row', 
+              alignItems: 'center', 
+              marginBottom: 16,
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 8
+            }}>
+              <View style={{ 
+                flexDirection: 'row', 
+                alignItems: 'center',
+                flex: 1,
+                minWidth: 200
+              }}>
+                <IconButton icon="account-clock" size={24} iconColor={theme.colors.primary} style={{ margin: 0 }} />
+                <Text style={[styles.sectionTitle, { 
+                  marginLeft: 8,
+                  fontSize: 16,
+                  fontWeight: 'bold',
+                  color: theme.colors.text,
+                  flex: 1,
+                }]} numberOfLines={1}>
+                  Pending Student Registrations
+                </Text>
+              </View>
+              
+              <Button 
+                mode="text"
+                onPress={() => router.push('/screens/dashboard/pending-requests')}
+                style={{ marginRight: -8 }}
+                contentStyle={{ flexDirection: 'row-reverse' }}
+                labelStyle={{ fontSize: 14 }}
+                icon="chevron-right"
+              >
+                View All
+              </Button>
             </View>
-          </ScrollView>
-        </Surface>
+
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingRight: 16 }}
+            >
+              <View style={styles.pendingCards}>
+                {pendingRegistrations.map((registration) => (
+                  <LinearGradient
+                    key={registration.PendingID}
+                    colors={isDarkMode ? ['#383838', '#2D2D2D'] : ['#F8F8F8', '#FFFFFF']}
+                    style={[styles.pendingCard, {
+                      borderWidth: 1,
+                      borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
+                      borderRadius: 16,
+                      padding: 20,
+                      width: 320,
+                      marginRight: 16,
+                    }]}
+                  >
+                    <View style={styles.pendingDetails}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                        <View style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 20,
+                          backgroundColor: theme.colors.primary + '20',
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          marginRight: 12,
+                        }}>
+                          <IconButton icon="account" size={24} iconColor={theme.colors.primary} style={{ margin: 0 }} />
+                        </View>
+                        <View>
+                          <Text style={[styles.pendingText, {
+                            fontSize: 18,
+                            fontWeight: 'bold',
+                            color: theme.colors.text,
+                            marginBottom: 4,
+                          }]} numberOfLines={1} ellipsizeMode="tail">
+                            {registration.FullName}
+                          </Text>
+                          <Text style={{
+                            fontSize: 13,
+                            color: theme.colors.textSecondary,
+                            opacity: 0.7,
+                          }}>
+                            Room {registration.RoomNumber}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
+                        <View style={{ flex: 1, minWidth: 120 }}>
+                          <Text style={{ fontSize: 13, color: theme.colors.textSecondary, marginBottom: 4 }}>
+                            Phone
+                          </Text>
+                          <Text style={[styles.pendingText, { 
+                            color: theme.colors.text,
+                            fontSize: 14,
+                            fontWeight: '500',
+                          }]}>
+                            {registration.Phone}
+                          </Text>
+                        </View>
+                        <View style={{ flex: 1, minWidth: 120 }}>
+                          <Text style={{ fontSize: 13, color: theme.colors.textSecondary, marginBottom: 4 }}>
+                            Email
+                          </Text>
+                          <Text style={[styles.pendingText, { 
+                            color: theme.colors.text,
+                            fontSize: 14,
+                            fontWeight: '500',
+                          }]} numberOfLines={1}>
+                            {registration.Email || 'N/A'}
+                          </Text>
+                        </View>
+                        <View style={{ flex: 1, minWidth: 120 }}>
+                          <Text style={{ fontSize: 13, color: theme.colors.textSecondary, marginBottom: 4 }}>
+                            Joining Date
+                          </Text>
+                          <Text style={[styles.pendingText, { 
+                            color: theme.colors.text,
+                            fontSize: 14,
+                            fontWeight: '500',
+                          }]}>
+                            {registration.JoiningDate}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {actionError[registration.PendingID] && (
+                        <Text style={{ 
+                          color: theme.colors.error,
+                          fontSize: 13,
+                          marginBottom: 12,
+                          textAlign: 'center'
+                        }}>
+                          {actionError[registration.PendingID]}
+                        </Text>
+                      )}
+
+                      <View style={[styles.pendingActions, { 
+                        flexDirection: 'row',
+                        gap: 12,
+                        justifyContent: 'stretch',
+                      }]}>
+                        <Button 
+                          mode="contained" 
+                          onPress={() => handleApprove(registration.PendingID)}
+                          style={{ flex: 1 }}
+                          loading={actionLoading[registration.PendingID]}
+                          disabled={actionLoading[registration.PendingID]}
+                        >
+                          Approve
+                        </Button>
+                        <Button 
+                          mode="outlined" 
+                          onPress={() => handleDecline(registration.PendingID)}
+                          style={{ flex: 1 }}
+                          loading={actionLoading[registration.PendingID]}
+                          disabled={actionLoading[registration.PendingID]}
+                        >
+                          Decline
+                        </Button>
+                      </View>
+                    </View>
+                  </LinearGradient>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+        </LinearGradient>
       )}
 
       <View style={styles.statsContainer}>
@@ -927,11 +1073,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   pendingSection: {
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#ddd',
     marginBottom: 16,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
   },
   sectionTitle: {
     fontSize: 18,
@@ -940,25 +1087,22 @@ const styles = StyleSheet.create({
   },
   pendingCards: {
     flexDirection: 'row',
-    gap: 12,
   },
   pendingCard: {
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    flex: 1,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   pendingDetails: {
-    marginBottom: 12,
+    flex: 1,
   },
   pendingText: {
-    fontSize: 16,
     marginBottom: 4,
   },
   pendingActions: {
-    flexDirection: 'row',
-    gap: 8,
+    marginTop: 'auto',
   },
   noDataText: {
     textAlign: 'center',
