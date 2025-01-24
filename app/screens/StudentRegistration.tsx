@@ -114,12 +114,7 @@ export default function StudentRegistration() {
       });
       
       if (response.success) {
-        router.push({
-          pathname: '/screens/LoginScreen',
-          params: {
-            message: 'Registration successful. Pending manager approval.'
-          }
-        } as any);
+        router.replace('/screens/student/registration-status' as any);
       } else {
         throw new Error(response.message || 'Registration failed');
       }
