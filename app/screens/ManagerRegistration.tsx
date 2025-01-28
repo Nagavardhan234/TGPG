@@ -734,32 +734,50 @@ export default function ManagerRegistration() {
   };
 
   // Add validation helper functions
-  const validatePersonalDetails = () => {
-    const errors: Array<{ field: string; message: string }> = [];
-
-    if (!managerDetails.fullName.trim()) {
+  const validatePersonalDetails = (): boolean => {
+    const errors: ValidationError[] = [];
+    
+    // Check required fields
+    if (!managerDetails.fullName) {
       errors.push({ field: 'fullName', message: 'Full name is required' });
     }
-
-    if (!managerDetails.email.trim()) {
+    
+    if (!managerDetails.email) {
       errors.push({ field: 'email', message: 'Email is required' });
     } else if (!validateEmail(managerDetails.email)) {
-      errors.push({ field: 'email', message: 'Please enter a valid email address' });
+      errors.push({ field: 'email', message: 'Please enter a valid email' });
     }
-
-    if (!managerDetails.phone.trim()) {
+    
+    if (!managerDetails.phone) {
       errors.push({ field: 'phone', message: 'Phone number is required' });
     } else if (!validatePhone(managerDetails.phone)) {
-      errors.push({ field: 'phone', message: 'Please enter a valid 10-digit phone number' });
+      errors.push({ field: 'phone', message: 'Please enter a valid 10-digit number' });
     }
 
+    // Check OTP verification
+    if (!otpVerified) {
+      errors.push({ field: 'phone', message: 'Please verify your phone number with OTP before proceeding' });
+      showMessage({
+        message: 'Phone Verification Required',
+        description: 'Please verify your phone number with OTP before proceeding',
+        type: 'warning',
+        duration: 3000,
+        floating: true,
+      });
+    }
+    
     if (!managerDetails.password) {
       errors.push({ field: 'password', message: 'Password is required' });
-    } else if (managerDetails.password.length < 8) {
-      errors.push({ field: 'password', message: 'Password must be at least 8 characters' });
+    } else {
+      const passwordValidation = validatePassword(managerDetails.password);
+      if (!passwordValidation.isValid) {
+        errors.push({ field: 'password', message: passwordValidation.message });
+      }
     }
-
-    if (managerDetails.password !== managerDetails.confirmPassword) {
+    
+    if (!managerDetails.confirmPassword) {
+      errors.push({ field: 'confirmPassword', message: 'Please confirm your password' });
+    } else if (managerDetails.password !== managerDetails.confirmPassword) {
       errors.push({ field: 'confirmPassword', message: 'Passwords do not match' });
     }
 
