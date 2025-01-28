@@ -23,6 +23,7 @@ import { showMessage } from 'react-native-flash-message';
 import { router } from 'expo-router';
 import { getAmenities, Amenity } from '../services/amenity.service';
 import ValidationModal from '../components/ValidationModal';
+import { studentRegistrationService } from '@/app/services/student.registration.service';
 
 type Step = {
   title: string;
@@ -241,7 +242,7 @@ const PaymentInfoModal = ({ visible, onDismiss }: { visible: boolean; onDismiss:
 
 // Add state for OTP
 const [showOTP, setShowOTP] = useState(false);
-const [otp, setOTP] = useState('');
+const [otpValues, setOtpValues] = useState(['', '', '', '', '', '']);
 
 // Add validation types
 interface ValidationError {
@@ -549,20 +550,24 @@ const validateNumberInput = (value: string): string => {
 export default function ManagerRegistration() {
   const { theme, isDarkMode } = useTheme();
   const scrollViewRef = useRef<ScrollView>(null);
+  const otpInputRefs = useRef<Array<TextInput | null>>(new Array(6).fill(null));
   
-  // Group all useState declarations together at the top of the component
   const [currentStep, setCurrentStep] = useState(0);
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [showInfoModal, setShowInfoModal] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [showOTP, setShowOTP] = useState(false);
-  const [otp, setOTP] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Array<{ field: string; message: string }>>([]);
   const [isLoadingAmenities, setIsLoadingAmenities] = useState(false);
   const [availableAmenities, setAvailableAmenities] = useState<Amenity[]>([]);
   const [showDuplicateManagerModal, setShowDuplicateManagerModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showOTP, setShowOTP] = useState(false);
+  const [otpValues, setOtpValues] = useState(['', '', '', '', '', '']);
+  const [isLoading, setIsLoading] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [otpError, setOtpError] = useState('');
+  const [amenitiesError, setAmenitiesError] = useState<string | null>(null);
+
   const [managerDetails, setManagerDetails] = useState({
     fullName: '',
     email: '',
@@ -572,7 +577,77 @@ export default function ManagerRegistration() {
     address: '',
     alternatePhone: '',
   });
-  const [amenitiesError, setAmenitiesError] = useState<string | null>(null);
+
+  const handleSendOTP = async () => {
+    if (!validatePhone(managerDetails.phone)) {
+      setValidationErrors(prev => [
+        ...prev.filter(e => e.field !== 'phone'),
+        { field: 'phone', message: 'Please enter a valid 10-digit number before sending OTP' }
+      ]);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const response = await studentRegistrationService.sendOTP(managerDetails.phone);
+      if (response.success) {
+        setShowOTP(true);
+        setOtpValues(['', '', '', '', '', '']);
+        setOtpError('');
+        showMessage({
+          message: 'OTP Sent',
+          description: 'Please check your phone for the OTP',
+          type: 'success',
+          duration: 3000,
+          floating: true,
+        });
+      }
+    } catch (error: any) {
+      showMessage({
+        message: 'Failed to send OTP',
+        description: error.message || 'Please try again',
+        type: 'danger',
+        duration: 3000,
+        floating: true,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    const otpString = otpValues.join('');
+    if (otpString.length !== 6) {
+      setOtpError('Please enter a valid 6-digit OTP');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setOtpError('');
+      
+      const response = await studentRegistrationService.verifyOTP(managerDetails.phone, otpString);
+      
+      if (response.success) {
+        setOtpVerified(true);
+        setShowOTP(false);
+        setOtpValues(['', '', '', '', '', '']);
+        showMessage({
+          message: 'Success',
+          description: 'Phone number verified successfully',
+          type: 'success',
+          duration: 3000,
+          floating: true,
+        });
+      } else {
+        setOtpError('Invalid OTP. Please try again.');
+      }
+    } catch (error: any) {
+      setOtpError(error.message || 'Failed to verify OTP');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Move validateField and handleFieldChange back inside the component
   const validateField = (field: string, value: string): string => {
@@ -991,52 +1066,89 @@ export default function ManagerRegistration() {
         </View>
 
         <View style={styles.inputRow}>
-      <ValidationInput
-        label="Phone Number"
-        value={managerDetails.phone}
-        onChangeText={text => handleFieldChange('phone', text)}
-        error={validationErrors.find(error => error.field === 'phone')?.message}
-        icon="phone"
-        keyboardType="phone-pad"
+          <ValidationInput
+            label="Phone Number"
+            value={managerDetails.phone}
+            onChangeText={text => {
+              // Only allow numbers and limit to 10 digits
+              const numericValue = text.replace(/[^0-9]/g, '').slice(0, 10);
+              handleFieldChange('phone', numericValue);
+            }}
+            error={validationErrors.find(error => error.field === 'phone')?.message}
+            icon="phone"
+            keyboardType="phone-pad"
             style={[styles.input, { flex: 1 }]}
-        right={
-          <TextInput.Icon 
-            icon={showOTP ? "check-circle" : "send"}
-            color={showOTP ? theme.colors.primary : undefined}
-            onPress={() => !showOTP && setShowOTP(true)}
+            right={
+              <TextInput.Icon 
+                icon={otpVerified ? "check-circle" : "send"}
+                color={otpVerified ? theme.colors.primary : undefined}
+                onPress={() => {
+                  if (!otpVerified && !isLoading) {
+                    handleSendOTP();
+                  }
+                }}
+                disabled={!managerDetails.phone || managerDetails.phone.length !== 10 || isLoading || otpVerified}
+              />
+            }
           />
-        }
-      />
         </View>
 
         {showOTP && (
-          <Surface style={styles.otpContainer}>
+          <Surface style={[styles.otpContainer, { backgroundColor: theme.colors.surface }]}>
             <Text style={[styles.otpText, { color: theme.colors.text }]}>
               Enter OTP sent to your phone
             </Text>
             <View style={styles.otpInputRow}>
-              {[...Array(6)].map((_, index) => (
+              {otpValues.map((value, index) => (
                 <TextInput
                   key={index}
-                  style={styles.otpInput}
+                  ref={ref => {
+                    if (ref) {
+                      otpInputRefs.current[index] = ref;
+                    }
+                  }}
+                  style={[styles.otpInput, { backgroundColor: theme.colors.background }]}
                   maxLength={1}
                   keyboardType="numeric"
                   mode="outlined"
-                  value={otp[index] || ''}
+                  value={value}
                   onChangeText={(text) => {
-                    const newOTP = otp.split('');
-                    newOTP[index] = text;
-                    setOTP(newOTP.join(''));
+                    if (/^\d*$/.test(text)) {
+                      const newOtpValues = [...otpValues];
+                      newOtpValues[index] = text;
+                      setOtpValues(newOtpValues);
+                      
+                      // Auto-focus next input
+                      if (text && index < 5) {
+                        otpInputRefs.current[index + 1]?.focus();
+                      }
+                    }
+                  }}
+                  onKeyPress={({ nativeEvent }) => {
+                    if (nativeEvent.key === 'Backspace') {
+                      const newOtpValues = [...otpValues];
+                      newOtpValues[index] = '';
+                      setOtpValues(newOtpValues);
+                      
+                      // Focus previous input
+                      if (index > 0) {
+                        otpInputRefs.current[index - 1]?.focus();
+                      }
+                    }
                   }}
                 />
               ))}
             </View>
+            {otpError && (
+              <HelperText type="error" visible={true}>
+                {otpError}
+              </HelperText>
+            )}
             <Button 
               mode="contained" 
-              onPress={() => {
-                // Verify OTP logic here
-                setShowOTP(false);
-              }}
+              onPress={handleVerifyOTP}
+              loading={isLoading}
+              disabled={otpValues.join('').length !== 6 || isLoading}
               style={styles.verifyButton}
             >
               Verify OTP
@@ -1066,7 +1178,7 @@ export default function ManagerRegistration() {
       <ValidationInput
         label="Confirm Password *"
         value={managerDetails.confirmPassword}
-        onChangeText={text => handleFieldChange('confirmPassword', text)}
+        onChangeText={(text) => handleFieldChange('confirmPassword', text)}
         error={validationErrors.find(error => error.field === 'confirmPassword')?.message}
         icon="eye"
         secureTextEntry
