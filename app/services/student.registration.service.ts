@@ -30,7 +30,12 @@ export interface RegistrationActionResponse {
 export const studentRegistrationService = {
   register: async (data: any): Promise<ApiResponse> => {
     try {
-      const response = await api.post(ENDPOINTS.STUDENT.REGISTER, data);
+      // Use the ENDPOINTS constant to ensure proper API prefix
+      const endpoint = data.checkOnly ? 
+        '/api/students/registration/register/validate' : 
+        '/api/students/registration/register';
+      
+      const response = await api.post(endpoint, data);
       return response.data;
     } catch (error: any) {
       // Handle duplicate email error
@@ -148,6 +153,24 @@ export const studentRegistrationService = {
       }
       
       throw error.response?.data || error;
+    }
+  },
+
+  sendOTP: async (phone: string): Promise<ApiResponse<any>> => {
+    try {
+      const response = await api.post(ENDPOINTS.STUDENT.OTP_SEND, { phone });
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to send OTP');
+    }
+  },
+
+  verifyOTP: async (phone: string, otp: string): Promise<ApiResponse<any>> => {
+    try {
+      const response = await api.post(ENDPOINTS.STUDENT.OTP_VERIFY, { phone, otp });
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to verify OTP');
     }
   }
 }; 

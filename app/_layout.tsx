@@ -28,6 +28,14 @@ function AppContent() {
           options={{ headerShown: false }} 
         />
         <Stack.Screen 
+          name="screens/StudentRegistration" 
+          options={{ headerShown: false }} 
+        />
+        <Stack.Screen 
+          name="screens/student/registration-status" 
+          options={{ headerShown: false }} 
+        />
+        <Stack.Screen 
           name="screens/dashboard" 
           options={{
             headerShown: false,
@@ -80,6 +88,8 @@ export const routeMap = {
   '/': 'index',
   '/screens/LoginScreen': 'login',
   '/screens/ManagerRegistration': 'manager-registration',
+  '/screens/StudentRegistration': 'student-registration',
+  '/screens/student/registration-status': 'student/registration-status',
   '/screens/dashboard': 'dashboard',
   'screens/dashboard/students': 'dashboard/students',
   'screens/dashboard/rooms': 'dashboard/rooms',

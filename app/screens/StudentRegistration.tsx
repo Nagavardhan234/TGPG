@@ -1,11 +1,31 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import { TextInput, Button, Text, Surface, HelperText, IconButton } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, Modal, Animated } from 'react-native';
+import { TextInput, Button, Text, Surface, HelperText, IconButton, Portal } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import { studentRegistrationService } from '@/app/services/student.registration.service';
 import { ErrorNotification } from '@/app/components/ErrorNotification';
 import { router } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { RouteMap } from '@/app/_layout';
+
+interface FormData {
+  fullName: string;
+  phone: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+  tenantRegId: string;
+  roomNumber: string;
+  joiningDate: Date;
+}
+
+interface FormErrors {
+  [key: string]: string;
+}
+
+interface ApiError {
+  message: string;
+}
 
 export default function StudentRegistration() {
   const { theme, isDarkMode } = useTheme();
@@ -14,8 +34,13 @@ export default function StudentRegistration() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showOTPModal, setShowOTPModal] = useState(false);
+  const [otpVerified, setOTPVerified] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [otpError, setOtpError] = useState('');
+  const [fadeAnim] = useState(new Animated.Value(0));
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     fullName: '',
     phone: '',
     email: '',
@@ -26,9 +51,9 @@ export default function StudentRegistration() {
     joiningDate: new Date()
   });
 
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
 
-  const validateField = (name: string, value: string) => {
+  const validateField = (name: keyof FormData, value: string) => {
     let error = '';
     switch (name) {
       case 'fullName':
@@ -70,7 +95,7 @@ export default function StudentRegistration() {
     return error;
   };
 
-  const handleChange = (name: string, value: string) => {
+  const handleChange = (name: keyof FormData, value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }));
     const error = validateField(name, value);
     setFormErrors(prev => ({ ...prev, [name]: error }));
@@ -84,46 +109,157 @@ export default function StudentRegistration() {
   };
 
   const handleSubmit = async () => {
+    setLoading(true);
+    setError('');
+    
     try {
-      // Validate all fields
-      const errors: Record<string, string> = {};
-      Object.keys(formData).forEach(key => {
-        if (key !== 'joiningDate') {
-          const error = validateField(key, formData[key as keyof typeof formData] as string);
-          if (error) errors[key] = error;
+      // Client-side validation first
+      const formErrors: FormErrors = {};
+      (Object.keys(formData) as Array<keyof FormData>).forEach(field => {
+        const error = validateField(field, formData[field].toString());
+        if (error) {
+          formErrors[field] = error;
         }
       });
 
-      if (Object.keys(errors).length > 0) {
-        setFormErrors(errors);
+      if (Object.keys(formErrors).length > 0) {
+        setFormErrors(formErrors);
+        setLoading(false);
         return;
       }
 
-      setLoading(true);
-      setError(null);
-
-      const response = await studentRegistrationService.register({
-        fullName: formData.fullName,
-        phone: formData.phone,
-        email: formData.email,
-        joiningDate: formData.joiningDate.toISOString().split('T')[0],
-        roomNumber: formData.roomNumber,
-        password: formData.password,
-        confirmPassword: formData.confirmPassword,
-        managerId: formData.tenantRegId
-      });
-      
-      if (response.success) {
-        router.replace('/screens/student/registration-status' as any);
-      } else {
-        throw new Error(response.message || 'Registration failed');
+      if (formData.password !== formData.confirmPassword) {
+        setFormErrors(prev => ({
+          ...prev,
+          confirmPassword: 'Passwords do not match'
+        }));
+        setLoading(false);
+        return;
       }
-    } catch (error: any) {
-      setError(error.message || 'Registration failed');
+
+      // Server-side validation before OTP
+      try {
+        const validationResponse = await studentRegistrationService.register({
+          fullName: formData.fullName,
+          phone: formData.phone,
+          email: formData.email,
+          joiningDate: formData.joiningDate,
+          roomNumber: formData.roomNumber,
+          managerId: formData.tenantRegId,
+          checkOnly: true // Just validate, don't register
+        });
+
+        // If validation passes, proceed with OTP
+        if (!otpVerified) {
+          try {
+            await studentRegistrationService.sendOTP(formData.phone);
+            setShowOTPModal(true);
+          } catch (err) {
+            const error = err as ApiError;
+            console.error('Failed to send OTP:', error);
+            setError(error.message || 'Failed to send OTP');
+          }
+          setLoading(false);
+          return;
+        }
+
+        // If OTP is verified, proceed with actual registration
+        const response = await studentRegistrationService.register({
+          fullName: formData.fullName,
+          phone: formData.phone,
+          email: formData.email,
+          password: formData.password,
+          joiningDate: formData.joiningDate,
+          roomNumber: formData.roomNumber,
+          managerId: formData.tenantRegId
+        });
+
+        if (response.success) {
+          router.push('screens/student/registration-status');
+        } else {
+          setError(response.message || 'Registration failed');
+        }
+      } catch (err) {
+        const error = err as ApiError;
+        console.error('Registration error:', error);
+        if (error.message?.includes('email is already registered')) {
+          setFormErrors(prev => ({ ...prev, email: error.message }));
+        } else if (error.message?.includes('phone number is already registered')) {
+          setFormErrors(prev => ({ ...prev, phone: error.message }));
+        } else if (error.message?.includes('Room')) {
+          setFormErrors(prev => ({ ...prev, roomNumber: error.message }));
+        } else if (error.message?.includes('Tenant Registration ID')) {
+          setFormErrors(prev => ({ ...prev, tenantRegId: error.message }));
+        } else {
+          setError(error.message || 'Registration failed');
+        }
+      }
+
+    } catch (err) {
+      const error = err as ApiError;
+      console.error('Registration error:', error);
+      if (error.message?.includes('email is already registered')) {
+        setFormErrors(prev => ({ ...prev, email: error.message }));
+      } else if (error.message?.includes('phone number is already registered')) {
+        setFormErrors(prev => ({ ...prev, phone: error.message }));
+      } else if (error.message?.includes('Room')) {
+        setFormErrors(prev => ({ ...prev, roomNumber: error.message }));
+      } else if (error.message?.includes('Tenant Registration ID')) {
+        setFormErrors(prev => ({ ...prev, tenantRegId: error.message }));
+      } else {
+        setError(error.message || 'Registration failed');
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  const handleVerifyOTP = async () => {
+    try {
+      setLoading(true);
+      setOtpError('');
+      const response = await studentRegistrationService.verifyOTP(formData.phone, otp);
+      if (response.success) {
+        setOTPVerified(true);
+        setShowOTPModal(false);
+        // Instead of calling handleSubmit, proceed with registration directly
+        const registrationResponse = await studentRegistrationService.register({
+          fullName: formData.fullName,
+          phone: formData.phone,
+          email: formData.email,
+          password: formData.password,
+          joiningDate: formData.joiningDate,
+          roomNumber: formData.roomNumber,
+          managerId: formData.tenantRegId
+        });
+
+        if (registrationResponse.success) {
+          router.push('screens/student/registration-status');
+        } else {
+          setError(registrationResponse.message || 'Registration failed');
+        }
+      } else {
+        setOtpError('Invalid OTP. Please try again.');
+      }
+    } catch (err) {
+      const error = err as ApiError;
+      setOtpError(error.message || 'Failed to verify OTP');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (showOTPModal) {
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      fadeAnim.setValue(0);
+    }
+  }, [showOTPModal]);
 
   return (
     <ScrollView 
@@ -273,6 +409,72 @@ export default function StudentRegistration() {
         </View>
       </Surface>
 
+      <Portal>
+        <Modal
+          visible={showOTPModal}
+          onDismiss={() => setShowOTPModal(false)}
+          transparent
+        >
+          <Animated.View style={[
+            styles.modalContainer,
+            {
+              opacity: fadeAnim,
+              transform: [{
+                scale: fadeAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.8, 1],
+                }),
+              }],
+            },
+          ]}>
+            <Surface style={[styles.otpCard, {
+              backgroundColor: theme.colors.surface,
+              borderColor: isDarkMode ? theme.colors.outline : 'transparent',
+              borderWidth: isDarkMode ? 1 : 0,
+            }]}>
+              <Text style={[styles.otpTitle, { color: theme.colors.primary }]}>
+                Enter OTP
+              </Text>
+              <Text style={[styles.otpSubtitle, { color: theme.colors.onSurface }]}>
+                Please enter the OTP sent to {formData.phone}
+              </Text>
+              
+              <TextInput
+                label="OTP"
+                value={otp}
+                onChangeText={setOtp}
+                mode="outlined"
+                keyboardType="numeric"
+                maxLength={6}
+                style={styles.otpInput}
+                error={!!otpError}
+              />
+              {otpError && (
+                <HelperText type="error">{otpError}</HelperText>
+              )}
+
+              <View style={styles.otpButtons}>
+                <Button
+                  mode="text"
+                  onPress={() => setShowOTPModal(false)}
+                  style={styles.otpButton}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  mode="contained"
+                  onPress={handleVerifyOTP}
+                  loading={loading}
+                  style={styles.otpButton}
+                >
+                  Verify
+                </Button>
+              </View>
+            </Surface>
+          </Animated.View>
+        </Modal>
+      </Portal>
+
       {error && (
         <ErrorNotification
           visible={!!error}
@@ -315,5 +517,44 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginTop: 8,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    padding: 16,
+  },
+  otpCard: {
+    padding: 24,
+    borderRadius: 12,
+    elevation: 8,
+    width: '90%',
+    maxWidth: 400,
+  },
+  otpTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  otpSubtitle: {
+    fontSize: 16,
+    marginBottom: 24,
+    textAlign: 'center',
+    opacity: 0.7,
+  },
+  otpInput: {
+    marginBottom: 24,
+    fontSize: 24,
+    letterSpacing: 8,
+  },
+  otpButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  otpButton: {
+    minWidth: 100,
   },
 }); 

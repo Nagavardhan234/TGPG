@@ -17,7 +17,10 @@ export const ENDPOINTS = {
     // Registration endpoints
     PENDING_REGISTRATIONS: '/api/students/registration/pending/',
     APPROVE_REGISTRATION: '/api/students/registration/approve/',
-    DECLINE_REGISTRATION: '/api/students/registration/decline/'
+    DECLINE_REGISTRATION: '/api/students/registration/decline/',
+    // OTP endpoints
+    OTP_SEND: '/api/students/registration/otp/send',
+    OTP_VERIFY: '/api/students/registration/otp/verify'
   },
 
   // Complaints endpoints with clear role separation

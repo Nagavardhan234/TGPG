@@ -611,7 +611,7 @@ export const studentService = {
     joiningDate: Date;
   }) => {
     try {
-      const response = await api.post('/students/registration/register', {
+      const response = await api.post(ENDPOINTS.STUDENT.REGISTER, {
         ...data,
         fullName: `${data.firstName} ${data.lastName}`,
         joiningDate: data.joiningDate.toISOString(),
