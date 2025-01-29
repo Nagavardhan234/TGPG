@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Dimensions } from 'react-native';
 import { TextInput, Button, Text, Surface, IconButton, SegmentedButtons, Avatar } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import { useAuth } from '@/app/context/AuthContext';
@@ -8,6 +8,9 @@ import { managerService } from '@/app/services/manager.service';
 import { loginStudent } from '@/app/services/student.auth.service';
 import { ErrorNotification } from '@/app/components/ErrorNotification';
 import { router } from 'expo-router';
+import { AnimatedBlob } from '@/app/components/AnimatedBlob';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MotiView } from 'moti';
 
 type UserType = 'manager' | 'student';
 
@@ -73,6 +76,8 @@ export default function LoginScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <AnimatedBlob />
+      
       <IconButton
         icon={isDarkMode ? "weather-night" : "weather-sunny"}
         size={24}
@@ -84,82 +89,111 @@ export default function LoginScreen() {
       <Surface style={[
         styles.card, 
         { 
-          backgroundColor: theme.colors.surface,
-          borderColor: isDarkMode ? theme.colors.outline : 'transparent',
+          backgroundColor: theme.colors.surface + 'CC',
+          borderColor: isDarkMode ? theme.colors.outline + '40' : 'transparent',
           borderWidth: isDarkMode ? 1 : 0
         }
       ]}>
-        <Text style={[styles.title, { color: theme.colors.primary }]}>Login</Text>
+        <LinearGradient
+          colors={[theme.colors.primary + '20', theme.colors.surface + '90']}
+          style={styles.gradientOverlay}
+        />
 
-        <View style={styles.avatarContainer}>
-          <Avatar.Icon 
-            size={80} 
-            icon={userType === 'manager' ? "account-tie" : "account-group"}
-            style={[
-              styles.avatar, 
-              { 
-                backgroundColor: theme.colors.primary,
-                transform: [{ scale: userType === 'student' ? 1.1 : 1 }]
-              }
-            ]}
-          />
-        </View>
+        <MotiView
+          from={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: 'timing', duration: 500 }}
+          style={styles.cardContent}
+        >
+          <Text style={[styles.title, { color: theme.colors.primary }]}>Welcome Back!</Text>
 
-        <View style={styles.formContainer}>
-          <SegmentedButtons
-            value={userType}
-            onValueChange={value => setUserType(value as UserType)}
-            buttons={[
-              { value: 'manager', label: 'Manager' },
-              { value: 'student', label: 'Student' }
-            ]}
-            style={styles.segmentedButtons}
-          />
+          <View style={styles.avatarContainer}>
+            <MotiView
+              animate={{ 
+                scale: userType === 'student' ? 1.1 : 1,
+                rotate: userType === 'student' ? '360deg' : '0deg'
+              }}
+              transition={{ type: 'spring', stiffness: 100 }}
+            >
+              <Avatar.Icon 
+                size={100} 
+                icon={userType === 'manager' ? "account-tie" : "account-group"}
+                style={[
+                  styles.avatar, 
+                  { backgroundColor: theme.colors.primary }
+                ]}
+              />
+            </MotiView>
+          </View>
 
-          <TextInput
-            label="Phone Number"
-            value={phone}
-            onChangeText={setPhone}
-            mode="outlined"
-            keyboardType="phone-pad"
-            style={styles.input}
-            left={<TextInput.Icon icon="phone" />}
-          />
+          <View style={styles.formContainer}>
+            <SegmentedButtons
+              value={userType}
+              onValueChange={value => setUserType(value as UserType)}
+              buttons={[
+                { 
+                  value: 'manager', 
+                  label: 'Manager',
+                  icon: 'account-tie'
+                },
+                { 
+                  value: 'student', 
+                  label: 'Student',
+                  icon: 'account-group'
+                }
+              ]}
+              style={styles.segmentedButtons}
+            />
 
-          <TextInput
-            label="Password"
-            value={password}
-            onChangeText={setPassword}
-            mode="outlined"
-            secureTextEntry={!showPassword}
-            style={styles.input}
-            left={<TextInput.Icon icon="lock" />}
-            right={<TextInput.Icon icon={showPassword ? "eye-off" : "eye"} onPress={() => setShowPassword(!showPassword)} />}
-          />
+            <TextInput
+              label="Phone Number"
+              value={phone}
+              onChangeText={setPhone}
+              mode="outlined"
+              keyboardType="phone-pad"
+              style={styles.input}
+              left={<TextInput.Icon icon="phone" />}
+              theme={{ colors: { primary: theme.colors.primary } }}
+            />
 
-          <Button
-            mode="contained"
-            onPress={handleLogin}
-            loading={loading}
-            style={styles.button}
-          >
-            Login as {userType === 'manager' ? 'Manager' : 'Student'}
-          </Button>
+            <TextInput
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              mode="outlined"
+              secureTextEntry={!showPassword}
+              style={styles.input}
+              left={<TextInput.Icon icon="lock" />}
+              right={<TextInput.Icon icon={showPassword ? "eye-off" : "eye"} onPress={() => setShowPassword(!showPassword)} />}
+              theme={{ colors: { primary: theme.colors.primary } }}
+            />
 
-          <Button
-            mode="text"
-            onPress={handleRegister}
-            style={styles.registerButton}
-          >
-            Register as {userType === 'manager' ? 'Manager' : 'Student'}
-          </Button>
+            <Button
+              mode="contained"
+              onPress={handleLogin}
+              loading={loading}
+              style={styles.button}
+              contentStyle={styles.buttonContent}
+            >
+              Login as {userType === 'manager' ? 'Manager' : 'Student'}
+            </Button>
 
-          {userType === 'student' && (
-            <Text style={[styles.helperText, { color: theme.colors.onSurfaceVariant }]}>
-              To register as a student, you'll need your manager's Tenant Registration ID
-            </Text>
-          )}
-        </View>
+            <Button
+              mode="text"
+              onPress={handleRegister}
+              style={styles.registerButton}
+              labelStyle={{ color: theme.colors.primary }}
+            >
+              Register as {userType === 'manager' ? 'Manager' : 'Student'}
+            </Button>
+
+            {userType === 'student' && (
+              <Text style={[styles.helperText, { color: theme.colors.onSurfaceVariant }]}>
+                To register as a student, you'll need your manager's Tenant Registration ID
+              </Text>
+            )}
+          </View>
+        </MotiView>
       </Surface>
 
       {error && (
@@ -174,6 +208,7 @@ export default function LoginScreen() {
   );
 }
 
+const { width } = Dimensions.get('window');
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -183,13 +218,23 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '100%',
-    maxWidth: 400,
+    maxWidth: Math.min(width - 40, 400),
     padding: 24,
-    borderRadius: 16,
+    borderRadius: 24,
     elevation: 4,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  cardContent: {
+    position: 'relative',
+    zIndex: 1,
+  },
+  gradientOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.8,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     marginBottom: 24,
     textAlign: 'center',
@@ -199,16 +244,22 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   avatar: {
-    elevation: 4,
+    elevation: 8,
   },
   formContainer: {
     gap: 16,
   },
   input: {
-    marginBottom: 16,
+    marginBottom: 8,
+    backgroundColor: 'transparent',
   },
   button: {
-    marginTop: 8,
+    marginTop: 16,
+    borderRadius: 12,
+    elevation: 2,
+  },
+  buttonContent: {
+    paddingVertical: 8,
   },
   registerButton: {
     marginTop: 8,
@@ -218,6 +269,7 @@ const styles = StyleSheet.create({
     top: 20,
     right: 20,
     zIndex: 1000,
+    backgroundColor: theme => theme.colors.surface + 'CC',
   },
   segmentedButtons: {
     marginBottom: 16,

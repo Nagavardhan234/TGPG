@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, Dimensions } from 'react-native';
 import { Text, TextInput, Button, Surface } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import { router } from 'expo-router';
@@ -7,6 +7,8 @@ import Video from 'react-native-video';
 import { managerService } from '@/app/services/manager.service';
 import { useToast } from '@/app/hooks/useToast';
 import { useAuth } from '@/app/context/AuthContext';
+import { AnimatedBlob } from '@/app/components/AnimatedBlob';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function ManagerLoginScreen() {
   const { theme } = useTheme();
@@ -38,70 +40,91 @@ export default function ManagerLoginScreen() {
   };
 
   return (
-    <ScrollView 
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-      contentContainerStyle={styles.content}
-    >
-      <Surface style={styles.card}>
-        {/* WebM Animation Section */}
-        <View style={styles.animationContainer}>
-          <Video
-            source={require('@/assets/GIF/Member_Login.webm')}
-            style={styles.animation}
-            repeat
-            resizeMode="contain"
-            muted
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <AnimatedBlob />
+      <ScrollView 
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Surface style={[styles.card, { backgroundColor: theme.colors.surface + 'CC' }]}>
+          <LinearGradient
+            colors={[theme.colors.primary + '20', theme.colors.surface + '90']}
+            style={styles.gradientOverlay}
           />
-        </View>
+          
+          {/* Logo/Animation Section */}
+          <View style={styles.animationContainer}>
+            <Video
+              source={require('@/assets/GIF/Member_Login.webm')}
+              style={styles.animation}
+              repeat
+              resizeMode="contain"
+              muted
+            />
+            <Text style={[styles.welcomeText, { color: theme.colors.primary }]}>
+              Welcome Back!
+            </Text>
+          </View>
 
-        {/* Login Form */}
-        <View style={styles.formContainer}>
-          <TextInput
-            label="Phone Number"
-            value={phone}
-            onChangeText={setPhone}
-            mode="outlined"
-            keyboardType="phone-pad"
-            left={<TextInput.Icon icon="phone" />}
-            style={styles.input}
-          />
+          {/* Login Form */}
+          <View style={styles.formContainer}>
+            <TextInput
+              label="Phone Number"
+              value={phone}
+              onChangeText={setPhone}
+              mode="outlined"
+              keyboardType="phone-pad"
+              left={<TextInput.Icon icon="phone" />}
+              style={styles.input}
+              theme={{
+                colors: { primary: theme.colors.primary },
+              }}
+            />
 
-          <TextInput
-            label="Password"
-            value={password}
-            onChangeText={setPassword}
-            mode="outlined"
-            secureTextEntry={!showPassword}
-            left={<TextInput.Icon icon="lock" />}
-            right={<TextInput.Icon icon={showPassword ? "eye-off" : "eye"} onPress={() => setShowPassword(!showPassword)} />}
-            style={styles.input}
-          />
+            <TextInput
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              mode="outlined"
+              secureTextEntry={!showPassword}
+              left={<TextInput.Icon icon="lock" />}
+              right={<TextInput.Icon icon={showPassword ? "eye-off" : "eye"} onPress={() => setShowPassword(!showPassword)} />}
+              style={styles.input}
+              theme={{
+                colors: { primary: theme.colors.primary },
+              }}
+            />
 
-          <Button
-            mode="contained"
-            onPress={handleLogin}
-            loading={isLoading}
-            style={styles.loginButton}
-          >
-            Login
-          </Button>
-        </View>
+            <Button
+              mode="contained"
+              onPress={handleLogin}
+              loading={isLoading}
+              style={styles.loginButton}
+              contentStyle={styles.loginButtonContent}
+            >
+              Login
+            </Button>
+          </View>
 
-        {/* Registration Link */}
-        <View style={styles.registerContainer}>
-          <Text style={{ color: theme.colors.text }}>Don't have an account?</Text>
-          <Button
-            mode="text"
-            onPress={() => router.push('/screens/ManagerRegistration')}
-          >
-            Register Now
-          </Button>
-        </View>
-      </Surface>
-    </ScrollView>
+          {/* Registration Link */}
+          <View style={styles.registerContainer}>
+            <Text style={{ color: theme.colors.text }}>Don't have an account?</Text>
+            <Button
+              mode="text"
+              onPress={() => router.push('/screens/ManagerRegistration')}
+              style={styles.registerButton}
+              labelStyle={{ color: theme.colors.primary }}
+            >
+              Register Now
+            </Button>
+          </View>
+        </Surface>
+      </ScrollView>
+    </View>
   );
 }
 
+const { width } = Dimensions.get('window');
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -113,16 +136,31 @@ const styles = StyleSheet.create({
   },
   card: {
     padding: 24,
-    borderRadius: 16,
+    borderRadius: 24,
     elevation: 4,
+    overflow: 'hidden',
+    maxWidth: Math.min(width - 40, 400),
+    width: '100%',
+    alignSelf: 'center',
+    position: 'relative',
+  },
+  gradientOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.8,
   },
   animationContainer: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
   },
   animation: {
-    width: 200,
-    height: 200,
+    width: 180,
+    height: 180,
+  },
+  welcomeText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginTop: 16,
+    textAlign: 'center',
   },
   formContainer: {
     gap: 16,
@@ -131,11 +169,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   loginButton: {
-    marginTop: 8,
-    paddingVertical: 6,
+    marginTop: 16,
+    borderRadius: 12,
+    elevation: 2,
+  },
+  loginButtonContent: {
+    paddingVertical: 8,
   },
   registerContainer: {
     marginTop: 24,
     alignItems: 'center',
+  },
+  registerButton: {
+    marginTop: 4,
   },
 }); 

@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 export const ENDPOINTS = {
   // Auth endpoints
   AUTH: '/api/auth',
@@ -120,7 +122,18 @@ export const ENDPOINTS = {
   }
 };
 
-export const BASE_URL = 'http://localhost:3000';
+// Get the development server IP address
+const DEV_SERVER_IP = '192.168.0.5'; // Your computer's IP address
+
+// Configure BASE_URL based on platform and environment
+export const BASE_URL = Platform.select({
+  // For Android, use 10.0.2.2 for emulator or actual IP for physical device
+  android: __DEV__ ? `http://${DEV_SERVER_IP}:3000` : 'http://10.0.2.2:3000',
+  // For iOS, use localhost for simulator or actual IP for physical device
+  ios: __DEV__ ? `http://${DEV_SERVER_IP}:3000` : 'http://localhost:3000',
+  // Default to localhost for web
+  default: 'http://localhost:3000'
+});
 
 export const API_TIMEOUT = 10000; // 10 seconds
  
