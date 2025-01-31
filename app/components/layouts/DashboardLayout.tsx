@@ -37,12 +37,6 @@ const menuItems = [
     title: 'Payments Overview',
     icon: 'credit-card-outline',
     route: '/screens/dashboard/payments'
-  },
-  {
-    key: 'messages',
-    title: 'Messages',
-    icon: 'message-outline',
-    route: '/screens/dashboard/messages'
   }
 ];
 
