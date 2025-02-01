@@ -7,6 +7,8 @@ import { getRoomStats, RoomStatsResponse, deleteRoom, addRoom } from '@/app/serv
 import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/app/context/AuthContext';
 import { ErrorNotification } from '@/app/components/ErrorNotification';
+import { NetworkErrorView } from '@/app/components/NetworkErrorView';
+import { PageLoader } from '@/app/components/PageLoader';
 
 interface AddRoomForm {
   roomNumber: string;
@@ -32,13 +34,18 @@ export default function RoomManagement() {
   });
   const [addRoomError, setAddRoomError] = useState('');
   const [totalRooms, setTotalRooms] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   // Load room statistics
   const loadRoomStats = useCallback(async () => {
-    if (!pg?.PGID) return;
+    if (!pg?.PGID) {
+      setError('PG information not found');
+      return;
+    }
 
     try {
       setLoading(true);
+      setError(null);
       const response = await getRoomStats(pg.PGID);
       if (response.success && response.rooms_json) {
         const parsedRooms = typeof response.rooms_json[0].rooms_json === 'string' 
@@ -53,11 +60,12 @@ export default function RoomManagement() {
         }));
         setRooms(formattedRooms);
         setTotalRooms(formattedRooms.length);
+      } else {
+        throw new Error('Failed to load room statistics');
       }
     } catch (error) {
       console.error('Error loading room stats:', error);
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to load room stats');
-      setShowError(true);
+      setError(error instanceof Error ? error.message : 'Failed to load room statistics');
     } finally {
       setLoading(false);
     }
@@ -178,6 +186,21 @@ export default function RoomManagement() {
     }
   };
 
+  if (loading) {
+    return <PageLoader message="Loading room statistics..." />;
+  }
+
+  if (error) {
+    return (
+      <NetworkErrorView
+        message={error}
+        onRetry={loadRoomStats}
+        showAnimation={false}
+        icon="door"
+      />
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: isDarkMode ? '#121212' : theme.colors.background }]}>
       <ErrorNotification
@@ -205,11 +228,7 @@ export default function RoomManagement() {
       </View>
 
       <ScrollView style={styles.roomsContainer}>
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-          </View>
-        ) : !rooms || rooms.length === 0 ? (
+        {!rooms || rooms.length === 0 ? (
           <View style={styles.emptyStateContainer}>
             <IconButton
               icon="door"

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Surface, Text, Card, Checkbox, Button, Avatar, ProgressBar, Chip } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
+import { AccessibilityUtils } from '../../utils/accessibility';
 
 // Dummy data
 const tasks = [
@@ -40,13 +41,27 @@ export default function RoommatesScreen() {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <ScrollView
+      {...AccessibilityUtils.getAccessibilityProps('Roommates Screen', 'scrollView')}
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+    >
       {/* Roommates List */}
-      <Surface style={[styles.section, { backgroundColor: theme.colors.surface }]}>
+      <Surface
+        {...AccessibilityUtils.getAccessibilityProps('Roommate List', 'list')}
+        style={[styles.section, { backgroundColor: theme.colors.surface }]}
+      >
         <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>Your Roommates</Text>
         <View style={styles.roommatesList}>
-          {roommates.map(roommate => (
-            <Card key={roommate.id} style={styles.roommateCard}>
+          {roommates.map((roommate) => (
+            <View
+              key={roommate.id}
+              {...AccessibilityUtils.getAccessibilityProps(
+                `Roommate ${roommate.name}, Room ${roommate.room}`,
+                'listitem',
+                { selected: roommate.isSelected }
+              )}
+              style={styles.roommateCard}
+            >
               <Card.Content style={styles.roommateContent}>
                 <Avatar.Text 
                   size={40} 
@@ -58,9 +73,18 @@ export default function RoommatesScreen() {
                   <Text style={{ color: theme.colors.secondary }}>Room {roommate.room}</Text>
                 </View>
               </Card.Content>
-            </Card>
+            </View>
           ))}
         </View>
+
+        <Button
+          {...AccessibilityUtils.getButtonA11yProps('Add New Roommate', false)}
+          mode="contained"
+          onPress={handleAddRoommate}
+          style={styles.addButton}
+        >
+          Add New Roommate
+        </Button>
       </Surface>
 
       {/* Tasks Section */}
@@ -189,5 +213,8 @@ const styles = StyleSheet.create({
   progressBar: {
     height: 8,
     borderRadius: 4,
+  },
+  addButton: {
+    marginTop: 16,
   },
 }); 

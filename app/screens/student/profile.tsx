@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, ScrollView, StyleSheet, RefreshControl } from 'react-native';
+import { View, ScrollView, StyleSheet, RefreshControl, Platform } from 'react-native';
 import { Text, Card, Button, TextInput, Avatar, IconButton, HelperText, useTheme, Portal, Dialog } from 'react-native-paper';
 import { studentProfileService, StudentProfile } from '@/app/services/student.profile.service';
 
@@ -254,10 +254,27 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
+    padding: Platform.select({
+      ios: 16,
+      android: 16,
+      default: 24
+    })
   },
   card: {
+    borderRadius: 12,
+    padding: Platform.select({
+      ios: 16,
+      android: 16,
+      default: 20
+    }),
     marginBottom: 16,
+    width: '100%',
+    maxWidth: Platform.select({
+      ios: '100%',
+      android: '100%',
+      default: 600
+    }),
+    alignSelf: 'center'
   },
   header: {
     flexDirection: 'row',
@@ -271,6 +288,11 @@ const styles = StyleSheet.create({
   },
   input: {
     marginBottom: 16,
+    fontSize: Platform.select({
+      ios: 16,
+      android: 16,
+      default: 14
+    })
   },
   infoRow: {
     flexDirection: 'row',

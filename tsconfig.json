@@ -19,7 +19,13 @@
       "@services/*": [
         "app/services/*"
       ]
-    }
+    },
+    "types": [
+      "react-native",
+      "jest",
+      "@types/react-native-vector-icons",
+      "@react-native-community/netinfo"
+    ]
   },
   "include": [
     "**/*.ts",

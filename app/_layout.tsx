@@ -1,9 +1,13 @@
-import { Stack } from 'expo-router/stack';
+import { Stack } from 'expo-router';
 import { ThemeProvider } from '@/app/context/ThemeContext';
 import { PaperProvider } from 'react-native-paper';
 import { AuthProvider } from '@/app/context/AuthContext';
 import { useTheme } from '@/app/context/ThemeContext';
 import { StudentAuthProvider } from '@/app/context/StudentAuthContext';
+import { NetworkProvider } from './providers/NetworkProvider';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import FlashMessage from 'react-native-flash-message';
+import LoadingManager from '@/app/components/LoadingManager';
 
 function AppContent() {
   const { theme } = useTheme();
@@ -64,19 +68,26 @@ function AppContent() {
           }} 
         />
       </Stack>
+      <FlashMessage position="top" />
     </PaperProvider>
   );
 }
 
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <StudentAuthProvider>
-          <AppContent />
-        </StudentAuthProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <NetworkProvider>
+        <ThemeProvider>
+          <LoadingManager>
+            <AuthProvider>
+              <StudentAuthProvider>
+                <AppContent />
+              </StudentAuthProvider>
+            </AuthProvider>
+          </LoadingManager>
+        </ThemeProvider>
+      </NetworkProvider>
+    </SafeAreaProvider>
   );
 }
 

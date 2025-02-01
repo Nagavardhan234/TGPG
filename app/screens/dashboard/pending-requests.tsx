@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TextInput } from 'react-native';
-import { Text, IconButton, Button, ActivityIndicator, Searchbar } from 'react-native-paper';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, StyleSheet, ScrollView } from 'react-native';
+import { Title, Searchbar, List, IconButton, Button, Text } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
+import { NetworkErrorView } from '@/app/components/NetworkErrorView';
+import { PageLoader } from '@/app/components/PageLoader';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { studentRegistrationService } from '@/app/services/student.registration.service';
@@ -14,7 +15,7 @@ export default function PendingRequests() {
   const [pendingRegistrations, setPendingRegistrations] = useState([]);
   const [filteredRegistrations, setFilteredRegistrations] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [actionLoading, setActionLoading] = useState<{[key: number]: boolean}>({});
   const [actionError, setActionError] = useState<{[key: number]: string}>({});
@@ -54,7 +55,7 @@ export default function PendingRequests() {
       const response = await studentRegistrationService.getPendingRegistrations(manager.tenantRegId);
       setPendingRegistrations(response.pendingRegistrations || []);
       setFilteredRegistrations(response.pendingRegistrations || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching pending registrations:', error);
       setError(error.message || 'Failed to load pending registrations');
     } finally {
@@ -113,19 +114,17 @@ export default function PendingRequests() {
   };
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
-    );
+    return <PageLoader message="Loading pending registrations..." />;
   }
 
   if (error) {
     return (
-      <View style={styles.errorContainer}>
-        <Text style={[styles.errorText, { color: theme.colors.error }]}>{error}</Text>
-        <Button mode="contained" onPress={fetchPendingRegistrations}>Retry</Button>
-      </View>
+      <NetworkErrorView
+        message={error}
+        onRetry={fetchPendingRegistrations}
+        showAnimation={false}
+        icon="account-clock"
+      />
     );
   }
 
@@ -158,18 +157,19 @@ export default function PendingRequests() {
 
       <View style={styles.content}>
         {filteredRegistrations.length === 0 ? (
-          <Text style={[styles.noDataText, { color: theme.colors.textSecondary }]}>
-            {searchQuery ? 'No matching requests found' : 'No pending requests'}
-          </Text>
+          <View style={styles.emptyContainer}>
+            <IconButton
+              icon="account-clock"
+              size={50}
+              iconColor={theme.colors.primary}
+            />
+            <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
+              {searchQuery ? 'No matching requests found' : 'No pending requests'}
+            </Text>
+          </View>
         ) : (
           filteredRegistrations.map((registration) => (
-            <LinearGradient
-              key={registration.PendingID}
-              colors={isDarkMode ? ['#383838', '#2D2D2D'] : ['#F8F8F8', '#FFFFFF']}
-              style={[styles.card, {
-                borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
-              }]}
-            >
+            <View key={registration.PendingID} style={styles.requestCard}>
               <View style={styles.cardHeader}>
                 <View style={styles.profileSection}>
                   <View style={[styles.avatar, {
@@ -231,7 +231,7 @@ export default function PendingRequests() {
                   Decline
                 </Button>
               </View>
-            </LinearGradient>
+            </View>
           ))
         )}
       </View>
@@ -351,5 +351,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 32,
     opacity: 0.7,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    textAlign: 'center',
+    fontSize: 16,
+    marginTop: 32,
+    opacity: 0.7,
+  },
+  requestCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 16,
+    overflow: 'hidden',
   },
 }); 

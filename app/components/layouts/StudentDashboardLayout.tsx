@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, Platform, useWindowDimensions, TouchableOpacity } from 'react-native';
 import { 
   Text, 
@@ -15,6 +15,10 @@ import {
 import { useTheme } from '@/app/context/ThemeContext';
 import { useStudentAuth } from '@/app/context/StudentAuthContext';
 import { router, usePathname } from 'expo-router';
+import { OfflineScreen } from '../OfflineScreen';
+import { useNetworkStore } from '../../stores/networkStore';
+import { LoadingOverlay } from '../LoadingOverlay';
+import { ErrorBoundary } from '../ErrorBoundary';
 
 type StudentRoutes = {
   '/screens/student/dashboard': undefined;
@@ -32,6 +36,8 @@ interface Props {
   title?: string;
   subtitle?: string;
   headerRight?: () => React.ReactNode;
+  loading?: boolean;
+  onRetry?: () => void;
 }
 
 const studentMenuItems = [
@@ -67,14 +73,22 @@ const studentMenuItems = [
   }
 ];
 
-export default function StudentDashboardLayout({ children, title, subtitle, headerRight }: Props) {
+export default function StudentDashboardLayout({ 
+  children, 
+  title, 
+  subtitle, 
+  headerRight,
+  loading,
+  onRetry 
+}: Props) {
   const { theme, isDarkMode, toggleTheme } = useTheme();
   const paperTheme = usePaperTheme();
   const { student, isAuthenticated, logout } = useStudentAuth();
-  const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
-  const [expandedMenu, setExpandedMenu] = React.useState<string | null>(null);
-  const [isInitialized, setIsInitialized] = React.useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
   const pathname = usePathname();
+  const isConnected = useNetworkStore((state) => state.isConnected);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -85,9 +99,18 @@ export default function StudentDashboardLayout({ children, title, subtitle, head
 
   useEffect(() => {
     if (isInitialized && (!isAuthenticated || !student)) {
-      router.replace('/screens/student/login' as any);
+      router.replace('/screens/student/login');
     }
   }, [isInitialized, isAuthenticated, student]);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      router.replace('/screens/student/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
 
   const renderMenuItem = (item: typeof studentMenuItems[number]) => (
     <List.Item
@@ -114,105 +137,107 @@ export default function StudentDashboardLayout({ children, title, subtitle, head
     />
   );
 
-  if (!isAuthenticated || !student) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background }]}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
-    );
+  if (!isInitialized) {
+    return <LoadingOverlay />;
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <Surface style={[styles.header, { backgroundColor: theme.colors.surface, elevation: 2 }]}>
-        <View style={styles.headerContent}>
-          <View style={styles.headerLeft}>
-            <IconButton 
-              icon="menu" 
-              onPress={() => setIsDrawerOpen(true)}
-              iconColor={theme.colors.text}
-            />
-            <View>
-              <Text variant="titleLarge" style={{ color: theme.colors.text }}>
-                {title || 'Dashboard'}
-              </Text>
-              {subtitle && (
-                <Text variant="bodyMedium" style={{ color: theme.colors.textSecondary }}>
-                  {subtitle}
+    <ErrorBoundary>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <Surface style={[styles.header, { backgroundColor: theme.colors.surface, elevation: 2 }]}>
+          <View style={styles.headerContent}>
+            <View style={styles.headerLeft}>
+              <IconButton 
+                icon="menu" 
+                onPress={() => setIsDrawerOpen(true)}
+                iconColor={theme.colors.text}
+              />
+              <View>
+                <Text variant="titleLarge" style={{ color: theme.colors.text }}>
+                  {title || 'Dashboard'}
                 </Text>
-              )}
+                {subtitle && (
+                  <Text variant="bodyMedium" style={{ color: theme.colors.textSecondary }}>
+                    {subtitle}
+                  </Text>
+                )}
+              </View>
+            </View>
+            <View style={styles.headerRight}>
+              <IconButton 
+                icon="bell" 
+                onPress={() => {}}
+                style={[styles.headerIcon, { backgroundColor: theme.colors.surfaceVariant }]}
+                iconColor={theme.colors.text}
+              />
+              <IconButton 
+                icon={isDarkMode ? 'weather-sunny' : 'weather-night'}
+                onPress={toggleTheme}
+                style={[styles.headerIcon, { backgroundColor: theme.colors.surfaceVariant }]}
+                iconColor={theme.colors.text}
+              />
+              <TouchableOpacity onPress={() => router.push('/screens/student/profile' as any)}>
+                <Avatar.Text
+                  size={35}
+                  label={student?.FullName?.substring(0, 2).toUpperCase() || 'ST'}
+                  style={{ backgroundColor: theme.colors.primary + '20' }}
+                  color={theme.colors.primary}
+                />
+              </TouchableOpacity>
             </View>
           </View>
-          <View style={styles.headerRight}>
-            <IconButton 
-              icon="bell" 
-              onPress={() => {}}
-              style={[styles.headerIcon, { backgroundColor: theme.colors.surfaceVariant }]}
-              iconColor={theme.colors.text}
-            />
-            <IconButton 
-              icon={isDarkMode ? 'weather-sunny' : 'weather-night'}
-              onPress={toggleTheme}
-              style={[styles.headerIcon, { backgroundColor: theme.colors.surfaceVariant }]}
-              iconColor={theme.colors.text}
-            />
-            <TouchableOpacity onPress={() => router.push('/screens/student/profile' as any)}>
+        </Surface>
+
+        <View style={styles.content}>
+          {loading ? (
+            <LoadingOverlay />
+          ) : (
+            <>
+              <OfflineScreen onRetry={onRetry} />
+              {children}
+            </>
+          )}
+        </View>
+
+        <Portal>
+          <Modal
+            visible={isDrawerOpen}
+            onDismiss={() => setIsDrawerOpen(false)}
+            contentContainerStyle={[styles.drawer, { backgroundColor: theme.colors.surface }]}
+          >
+            <Surface style={[styles.drawerHeader, { backgroundColor: theme.colors.surface }]}>
               <Avatar.Text
-                size={35}
+                size={50}
                 label={student?.FullName?.substring(0, 2).toUpperCase() || 'ST'}
                 style={{ backgroundColor: theme.colors.primary + '20' }}
                 color={theme.colors.primary}
               />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Surface>
-
-      <View style={styles.content}>
-        {children}
-      </View>
-
-      <Portal>
-        <Modal
-          visible={isDrawerOpen}
-          onDismiss={() => setIsDrawerOpen(false)}
-          contentContainerStyle={[styles.drawer, { backgroundColor: theme.colors.surface }]}
-        >
-          <Surface style={[styles.drawerHeader, { backgroundColor: theme.colors.surface }]}>
-            <Avatar.Text
-              size={50}
-              label={student?.FullName?.substring(0, 2).toUpperCase() || 'ST'}
-              style={{ backgroundColor: theme.colors.primary + '20' }}
-              color={theme.colors.primary}
-            />
-            <View style={styles.drawerHeaderInfo}>
-              <Text variant="titleMedium" style={{ color: theme.colors.text }}>
-                {student?.FullName}
-              </Text>
-              <Text variant="bodyMedium" style={{ color: theme.colors.textSecondary }}>
-                Room {student?.Room_No}
-              </Text>
-            </View>
-          </Surface>
-          <Divider />
-          <View style={{ flex: 1 }}>
-            <List.Section>
-              {studentMenuItems.map(renderMenuItem)}
-            </List.Section>
+              <View style={styles.drawerHeaderInfo}>
+                <Text variant="titleMedium" style={{ color: theme.colors.text }}>
+                  {student?.FullName}
+                </Text>
+                <Text variant="bodyMedium" style={{ color: theme.colors.textSecondary }}>
+                  Room {student?.Room_No}
+                </Text>
+              </View>
+            </Surface>
             <Divider />
-            <List.Item
-              title="Logout"
-              titleStyle={{ color: theme.colors.error }}
-              left={props => <List.Icon {...props} icon="logout" color={theme.colors.error} />}
-              onPress={() => {
-                logout();
-                setIsDrawerOpen(false);
-              }}
-            />
-          </View>
-        </Modal>
-      </Portal>
-    </View>
+            <View style={{ flex: 1 }}>
+              <List.Section>
+                {studentMenuItems.map(renderMenuItem)}
+              </List.Section>
+              <Divider />
+              <List.Item
+                title="Logout"
+                titleStyle={{ color: theme.colors.error }}
+                left={props => <List.Icon {...props} icon="logout" color={theme.colors.error} />}
+                onPress={handleLogout}
+              />
+            </View>
+          </Modal>
+        </Portal>
+      </View>
+    </ErrorBoundary>
   );
 }
 
