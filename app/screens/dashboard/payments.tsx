@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import { Title, Card, Paragraph, Searchbar, List, Divider, useTheme } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, Text } from 'react-native';
+import { Title, Card, Paragraph, Searchbar, List, Divider, Button } from 'react-native-paper';
+import { useTheme } from '@/app/context/ThemeContext';
 import { useAuth } from '@/app/context/AuthContext';
 import { NetworkErrorView } from '@/app/components/NetworkErrorView';
 import { PageLoader } from '@/app/components/PageLoader';
 import api from '@/app/services/api';
+import ErrorBoundary from '@/app/components/ErrorBoundary';
 
 interface PaymentStats {
   totalRevenue: number;
@@ -19,12 +21,36 @@ interface PaymentStats {
   }>;
 }
 
-export default function PaymentsOverview() {
+const PaymentScreen = () => {
+  const { theme } = useTheme();
+  
+  return (
+    <ErrorBoundary
+      onError={(error, errorInfo) => {
+        console.error('Payment error:', error, errorInfo);
+      }}
+      fallback={
+        <View style={styles.errorContainer}>
+          <Text style={[styles.errorText, { color: theme.colors.error }]}>
+            We encountered an issue processing your payment. Please try again later.
+          </Text>
+          <Button mode="contained" onPress={() => window.location.reload()}>
+            Retry Payment
+          </Button>
+        </View>
+      }
+    >
+      <PaymentContent />
+    </ErrorBoundary>
+  );
+};
+
+const PaymentContent = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<PaymentStats | null>(null);
-  const { theme, isDarkMode } = useTheme();
+  const { theme } = useTheme();
   const { pg } = useAuth();
 
   useEffect(() => {
@@ -74,12 +100,12 @@ export default function PaymentsOverview() {
   }
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: isDarkMode ? '#121212' : theme.colors.background }]}>
+    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Title style={[styles.title, { color: theme.colors.text }]}>Payments Overview</Title>
 
       <View style={styles.summaryCards}>
         <Card style={[styles.summaryCard, {
-          backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : theme.colors.surface
+          backgroundColor: theme.colors.surface
         }]}>
           <Card.Content>
             <Title style={{ color: theme.colors.text }}>Total Revenue</Title>
@@ -90,7 +116,7 @@ export default function PaymentsOverview() {
         </Card>
 
         <Card style={[styles.summaryCard, {
-          backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : theme.colors.surface
+          backgroundColor: theme.colors.surface
         }]}>
           <Card.Content>
             <Title style={{ color: theme.colors.text }}>Pending Payments</Title>
@@ -101,7 +127,7 @@ export default function PaymentsOverview() {
         </Card>
 
         <Card style={[styles.summaryCard, {
-          backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : theme.colors.surface
+          backgroundColor: theme.colors.surface
         }]}>
           <Card.Content>
             <Title style={{ color: theme.colors.text }}>This Month</Title>
@@ -119,7 +145,7 @@ export default function PaymentsOverview() {
         onChangeText={setSearchQuery}
         value={searchQuery}
         style={[styles.searchBar, {
-          backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : theme.colors.surface
+          backgroundColor: theme.colors.surface
         }]}
         iconColor={theme.colors.text}
         placeholderTextColor={theme.colors.textSecondary}
@@ -158,7 +184,7 @@ export default function PaymentsOverview() {
                 descriptionStyle={{ color: theme.colors.textSecondary }}
               />
               {index < filteredTransactions.length - 1 && (
-                <Divider style={{ backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#e0e0e0' }} />
+                <Divider style={{ backgroundColor: theme.colors.surface }} />
               )}
             </React.Fragment>
           ))}
@@ -166,7 +192,7 @@ export default function PaymentsOverview() {
       )}
     </ScrollView>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -209,4 +235,17 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
-}); 
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20,
+  }
+});
+
+export default PaymentScreen; 

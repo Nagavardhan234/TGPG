@@ -5,6 +5,9 @@ import { useTheme } from '@/app/context/ThemeContext';
 import { useAuth } from '@/app/context/AuthContext';
 import { NetworkErrorView } from '@/app/components/NetworkErrorView';
 import { PageLoader } from '@/app/components/PageLoader';
+import { SkeletonLayouts } from '@/app/components/Skeleton';
+import ErrorBoundary from '@/app/components/ErrorBoundary';
+import { AccessibilityWrapper } from '@/app/components/AccessibilityWrapper';
 import api from '@/app/services/api';
 
 interface Message {
@@ -16,7 +19,7 @@ interface Message {
   read: boolean;
 }
 
-export default function Messages() {
+const MessagesContent = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,7 +61,23 @@ export default function Messages() {
   );
 
   if (loading) {
-    return <PageLoader message="Loading messages..." />;
+    return (
+      <View style={styles.container}>
+        <Title style={[styles.title, { color: theme.colors.text }]}>Messages</Title>
+        <Searchbar
+          placeholder="Search messages..."
+          value=""
+          onChangeText={() => {}}
+          style={styles.searchBar}
+          disabled
+        />
+        {[...Array(5)].map((_, index) => (
+          <View key={index} style={styles.skeletonContainer}>
+            <SkeletonLayouts.ListItem />
+          </View>
+        ))}
+      </View>
+    );
   }
 
   if (error) {
@@ -73,52 +92,78 @@ export default function Messages() {
 
   return (
     <View style={[styles.container, { backgroundColor: isDarkMode ? '#121212' : theme.colors.background }]}>
-      <Title style={[styles.title, { color: theme.colors.text }]}>Messages</Title>
+      <AccessibilityWrapper
+        accessibilityRole="header"
+        accessibilityLabel="Messages"
+      >
+        <Title style={[styles.title, { color: theme.colors.text }]}>Messages</Title>
+      </AccessibilityWrapper>
 
-      <Searchbar
-        placeholder="Search messages..."
-        onChangeText={setSearchQuery}
-        value={searchQuery}
-        style={[styles.searchBar, {
-          backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : theme.colors.surface
-        }]}
-        iconColor={theme.colors.text}
-        placeholderTextColor={theme.colors.text}
-        inputStyle={{ color: theme.colors.text }}
-      />
+      <AccessibilityWrapper
+        accessibilityRole="search"
+        accessibilityLabel="Search messages"
+        accessibilityHint="Enter text to filter messages"
+      >
+        <Searchbar
+          placeholder="Search messages..."
+          onChangeText={setSearchQuery}
+          value={searchQuery}
+          style={[styles.searchBar, {
+            backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : theme.colors.surface
+          }]}
+          iconColor={theme.colors.text}
+          placeholderTextColor={theme.colors.text}
+          inputStyle={{ color: theme.colors.text }}
+        />
+      </AccessibilityWrapper>
 
       {filteredMessages.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <List.Icon icon="message-outline" color={theme.colors.primary} />
-          <Title style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
-            {searchQuery ? 'No matching messages found' : 'No messages yet'}
-          </Title>
-        </View>
+        <AccessibilityWrapper
+          accessibilityRole="text"
+          accessibilityLabel={searchQuery ? 'No matching messages found' : 'No messages yet'}
+        >
+          <View style={styles.emptyContainer}>
+            <List.Icon icon="message-outline" color={theme.colors.primary} />
+            <Title style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
+              {searchQuery ? 'No matching messages found' : 'No messages yet'}
+            </Title>
+          </View>
+        </AccessibilityWrapper>
       ) : (
-        <List.Section>
-          {filteredMessages.map((message, index) => (
-            <React.Fragment key={message.id}>
-              <List.Item
-                title={message.sender}
-                description={message.subject}
-                left={props => (
-                  <List.Icon 
-                    {...props} 
-                    icon={message.read ? "message-text" : "message-text-outline"} 
-                    color={theme.colors.text} 
-                  />
+        <AccessibilityWrapper
+          accessibilityRole="list"
+          accessibilityLabel="Messages list"
+        >
+          <List.Section>
+            {filteredMessages.map((message, index) => (
+              <React.Fragment key={message.id}>
+                <List.Item
+                  title={message.sender}
+                  description={message.subject}
+                  left={props => (
+                    <List.Icon 
+                      {...props} 
+                      icon={message.read ? "message-text" : "message-text-outline"} 
+                      color={theme.colors.text} 
+                    />
+                  )}
+                  right={props => <List.Icon {...props} icon="chevron-right" color={theme.colors.text} />}
+                  titleStyle={{ color: theme.colors.text }}
+                  descriptionStyle={{ color: theme.colors.textSecondary }}
+                  onPress={() => {/* Handle message press */}}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Message from ${message.sender}: ${message.subject}`}
+                  accessibilityHint={message.read ? "Message has been read" : "New message"}
+                  accessibilityState={{ selected: message.read }}
+                />
+                {index < filteredMessages.length - 1 && (
+                  <Divider style={{ backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#e0e0e0' }} />
                 )}
-                right={props => <List.Icon {...props} icon="chevron-right" color={theme.colors.text} />}
-                titleStyle={{ color: theme.colors.text }}
-                descriptionStyle={{ color: theme.colors.textSecondary }}
-                onPress={() => {/* Handle message press */}}
-              />
-              {index < filteredMessages.length - 1 && (
-                <Divider style={{ backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#e0e0e0' }} />
-              )}
-            </React.Fragment>
-          ))}
-        </List.Section>
+              </React.Fragment>
+            ))}
+          </List.Section>
+        </AccessibilityWrapper>
       )}
 
       <FAB
@@ -126,8 +171,30 @@ export default function Messages() {
         style={[styles.fab, { backgroundColor: theme.colors.primary }]}
         onPress={() => {}}
         label="New Message"
+        accessible={true}
+        accessibilityLabel="Create new message"
+        accessibilityRole="button"
       />
     </View>
+  );
+}
+
+export default function Messages() {
+  return (
+    <ErrorBoundary
+      onError={(error, errorInfo) => {
+        console.error('Messages error:', error, errorInfo);
+      }}
+      fallback={
+        <NetworkErrorView
+          message="Something went wrong while loading messages"
+          onRetry={() => window.location.reload()}
+          showAnimation={false}
+        />
+      }
+    >
+      <MessagesContent />
+    </ErrorBoundary>
   );
 }
 
@@ -156,5 +223,9 @@ const styles = StyleSheet.create({
   emptyText: {
     marginTop: 8,
     textAlign: 'center',
+  },
+  skeletonContainer: {
+    marginBottom: 8,
+    backgroundColor: 'transparent',
   },
 }); 

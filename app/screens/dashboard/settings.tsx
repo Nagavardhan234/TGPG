@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Surface, Text, Button, TextInput, ActivityIndicator, Portal, Dialog, Snackbar, List, SegmentedButtons } from 'react-native-paper';
+import { Surface, Text, Button, TextInput, ActivityIndicator, Portal, Dialog, Snackbar, List, SegmentedButtons, Switch } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import { getSettings, verifyPassword, updatePaymentSettings, changePassword } from '@/app/services/settings.service';
+import { AccessibilityWrapper } from '@/app/components/AccessibilityWrapper';
 
 export default function SettingsScreen() {
   const { theme, isDarkMode, toggleTheme } = useTheme();
@@ -252,217 +253,244 @@ export default function SettingsScreen() {
   }
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      {/* Payment Settings */}
-      <Surface style={[styles.section, { backgroundColor: theme.colors.surface }]}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>Payment Settings</Text>
-        
-        <SegmentedButtons
-          value={paymentSettings.paymentMethod}
-          onValueChange={value => 
-            setPaymentSettings({ ...paymentSettings, paymentMethod: value })}
-          buttons={[
-            { value: 'upi', label: 'UPI' },
-            { value: 'bank', label: 'Bank Transfer' }
-          ]}
-          style={styles.segmentedButtons}
-        />
+    <AccessibilityWrapper
+      accessibilityRole="main"
+      accessibilityLabel="Settings Screen"
+    >
+      <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <AccessibilityWrapper
+          accessibilityRole="header"
+          accessibilityLabel="Settings"
+        >
+          <Text style={styles.title}>Settings</Text>
+        </AccessibilityWrapper>
 
-        {paymentSettingsError ? (
-          <Text style={styles.errorText}>{paymentSettingsError}</Text>
-        ) : null}
+        <AccessibilityWrapper
+          accessibilityRole="group"
+          accessibilityLabel="Theme Settings"
+        >
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Theme</Text>
+            <Switch
+              value={isDarkMode}
+              onValueChange={toggleTheme}
+              accessibilityRole="switch"
+              accessibilityLabel="Dark mode toggle"
+              accessibilityHint="Toggles between light and dark theme"
+              accessibilityState={{ checked: isDarkMode }}
+            />
+          </View>
+        </AccessibilityWrapper>
 
-        {paymentSettings.paymentMethod === 'upi' ? (
-          <TextInput
-            label="UPI ID"
-            value={paymentSettings.upiId}
-            onChangeText={text => {
+        <AccessibilityWrapper
+          accessibilityRole="group"
+          accessibilityLabel="Notification Settings"
+        >
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Notifications</Text>
+            <Switch
+              value={notificationsEnabled}
+              onValueChange={toggleNotifications}
+              accessibilityRole="switch"
+              accessibilityLabel="Notifications toggle"
+              accessibilityHint="Toggles notification settings"
+              accessibilityState={{ checked: notificationsEnabled }}
+            />
+          </View>
+        </AccessibilityWrapper>
+
+        {/* Payment Settings */}
+        <Surface style={[styles.section, { backgroundColor: theme.colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>Payment Settings</Text>
+          
+          <SegmentedButtons
+            value={paymentSettings.paymentMethod}
+            onValueChange={value => 
+              setPaymentSettings({ ...paymentSettings, paymentMethod: value })}
+            buttons={[
+              { value: 'upi', label: 'UPI' },
+              { value: 'bank', label: 'Bank Transfer' }
+            ]}
+            style={styles.segmentedButtons}
+          />
+
+          {paymentSettingsError ? (
+            <Text style={styles.errorText}>{paymentSettingsError}</Text>
+          ) : null}
+
+          {paymentSettings.paymentMethod === 'upi' ? (
+            <TextInput
+              label="UPI ID"
+              value={paymentSettings.upiId}
+              onChangeText={text => {
+                if (!isPasswordVerified) {
+                  setShowPasswordDialog(true);
+                  return;
+                }
+                setPaymentSettings({ ...paymentSettings, upiId: text });
+              }}
+              style={styles.input}
+              disabled={!isPasswordVerified}
+              placeholder={isPasswordVerified ? "Enter UPI ID" : "••••••••"}
+            />
+          ) : (
+            <View>
+              <TextInput
+                label="Bank Name"
+                value={paymentSettings.bankDetails.bankName}
+                onChangeText={text => {
+                  if (!isPasswordVerified) {
+                    setShowPasswordDialog(true);
+                    return;
+                  }
+                  setPaymentSettings({
+                    ...paymentSettings,
+                    bankDetails: { ...paymentSettings.bankDetails, bankName: text }
+                  });
+                }}
+                style={styles.input}
+                disabled={!isPasswordVerified}
+                placeholder={isPasswordVerified ? "Enter bank name" : "••••••••"}
+              />
+              <TextInput
+                label="Account Number"
+                value={paymentSettings.bankDetails.accountNumber}
+                onChangeText={text => {
+                  if (!isPasswordVerified) {
+                    setShowPasswordDialog(true);
+                    return;
+                  }
+                  setPaymentSettings({
+                    ...paymentSettings,
+                    bankDetails: { ...paymentSettings.bankDetails, accountNumber: text }
+                  });
+                }}
+                style={styles.input}
+                disabled={!isPasswordVerified}
+                keyboardType="numeric"
+                placeholder={isPasswordVerified ? "Enter account number" : "••••••••"}
+              />
+              <TextInput
+                label="IFSC Code"
+                value={paymentSettings.bankDetails.ifscCode}
+                onChangeText={text => {
+                  if (!isPasswordVerified) {
+                    setShowPasswordDialog(true);
+                    return;
+                  }
+                  setPaymentSettings({
+                    ...paymentSettings,
+                    bankDetails: { ...paymentSettings.bankDetails, ifscCode: text.toUpperCase() }
+                  });
+                }}
+                style={styles.input}
+                disabled={!isPasswordVerified}
+                autoCapitalize="characters"
+                placeholder={isPasswordVerified ? "Enter IFSC code" : "••••••••"}
+              />
+            </View>
+          )}
+
+          <Button
+            mode="contained"
+            onPress={() => {
               if (!isPasswordVerified) {
                 setShowPasswordDialog(true);
                 return;
               }
-              setPaymentSettings({ ...paymentSettings, upiId: text });
+              handlePaymentSettingsUpdate();
             }}
-            style={styles.input}
-            disabled={!isPasswordVerified}
-            placeholder={isPasswordVerified ? "Enter UPI ID" : "••••••••"}
-          />
-        ) : (
-          <View>
-            <TextInput
-              label="Bank Name"
-              value={paymentSettings.bankDetails.bankName}
-              onChangeText={text => {
-                if (!isPasswordVerified) {
-                  setShowPasswordDialog(true);
-                  return;
-                }
-                setPaymentSettings({
-                  ...paymentSettings,
-                  bankDetails: { ...paymentSettings.bankDetails, bankName: text }
-                });
-              }}
-              style={styles.input}
-              disabled={!isPasswordVerified}
-              placeholder={isPasswordVerified ? "Enter bank name" : "••••••••"}
-            />
-            <TextInput
-              label="Account Number"
-              value={paymentSettings.bankDetails.accountNumber}
-              onChangeText={text => {
-                if (!isPasswordVerified) {
-                  setShowPasswordDialog(true);
-                  return;
-                }
-                setPaymentSettings({
-                  ...paymentSettings,
-                  bankDetails: { ...paymentSettings.bankDetails, accountNumber: text }
-                });
-              }}
-              style={styles.input}
-              disabled={!isPasswordVerified}
-              keyboardType="numeric"
-              placeholder={isPasswordVerified ? "Enter account number" : "••••••••"}
-            />
-            <TextInput
-              label="IFSC Code"
-              value={paymentSettings.bankDetails.ifscCode}
-              onChangeText={text => {
-                if (!isPasswordVerified) {
-                  setShowPasswordDialog(true);
-                  return;
-                }
-                setPaymentSettings({
-                  ...paymentSettings,
-                  bankDetails: { ...paymentSettings.bankDetails, ifscCode: text.toUpperCase() }
-                });
-              }}
-              style={styles.input}
-              disabled={!isPasswordVerified}
-              autoCapitalize="characters"
-              placeholder={isPasswordVerified ? "Enter IFSC code" : "••••••••"}
-            />
-          </View>
-        )}
+            style={styles.button}
+            icon={isPasswordVerified ? "content-save" : "lock"}
+          >
+            {isPasswordVerified ? 'Save Payment Settings' : 'Unlock to Edit'}
+          </Button>
+        </Surface>
 
-        <Button
-          mode="contained"
-          onPress={() => {
-            if (!isPasswordVerified) {
-              setShowPasswordDialog(true);
-              return;
-            }
-            handlePaymentSettingsUpdate();
-          }}
-          style={styles.button}
-          icon={isPasswordVerified ? "content-save" : "lock"}
+        {/* Security Section */}
+        <Surface style={[styles.section, { backgroundColor: theme.colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>Security</Text>
+          
+          <Button
+            mode="outlined"
+            onPress={() => setShowChangePasswordDialog(true)}
+            style={styles.button}
+            icon="lock"
+          >
+            Change Password
+          </Button>
+        </Surface>
+
+        {/* Password Change Dialog */}
+        <Portal>
+          <Dialog visible={showChangePasswordDialog} onDismiss={() => setShowChangePasswordDialog(false)}>
+            <Dialog.Title>Change Password</Dialog.Title>
+            <Dialog.Content>
+              <TextInput
+                label="Current Password"
+                value={oldPassword}
+                onChangeText={setOldPassword}
+                secureTextEntry
+                style={styles.input}
+              />
+              <TextInput
+                label="New Password"
+                value={newPassword}
+                onChangeText={setNewPassword}
+                secureTextEntry
+                style={styles.input}
+              />
+              <TextInput
+                label="Confirm New Password"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+                style={styles.input}
+              />
+              {changePasswordError ? (
+                <Text style={styles.errorText}>{changePasswordError}</Text>
+              ) : null}
+            </Dialog.Content>
+            <Dialog.Actions>
+              <Button onPress={() => setShowChangePasswordDialog(false)}>Cancel</Button>
+              <Button onPress={handlePasswordChange}>Change Password</Button>
+            </Dialog.Actions>
+          </Dialog>
+        </Portal>
+
+        {/* Password Verification Dialog */}
+        <Portal>
+          <Dialog visible={showPasswordDialog} onDismiss={() => setShowPasswordDialog(false)}>
+            <Dialog.Title>Verify Password</Dialog.Title>
+            <Dialog.Content>
+              <TextInput
+                label="Enter Password"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                style={styles.input}
+              />
+              {passwordError ? (
+                <Text style={styles.errorText}>{passwordError}</Text>
+              ) : null}
+            </Dialog.Content>
+            <Dialog.Actions>
+              <Button onPress={() => setShowPasswordDialog(false)}>Cancel</Button>
+              <Button onPress={handlePasswordVerification}>Verify</Button>
+            </Dialog.Actions>
+          </Dialog>
+        </Portal>
+
+        {/* Snackbar for notifications */}
+        <Snackbar
+          visible={snackbarVisible}
+          onDismiss={() => setSnackbarVisible(false)}
+          duration={3000}
         >
-          {isPasswordVerified ? 'Save Payment Settings' : 'Unlock to Edit'}
-        </Button>
-      </Surface>
-
-      {/* Security Section */}
-      <Surface style={[styles.section, { backgroundColor: theme.colors.surface }]}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>Security</Text>
-        
-        <Button
-          mode="outlined"
-          onPress={() => setShowChangePasswordDialog(true)}
-          style={styles.button}
-          icon="lock"
-        >
-          Change Password
-        </Button>
-      </Surface>
-
-      {/* Theme Section */}
-      <Surface style={[styles.section, { backgroundColor: theme.colors.surface }]}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>Appearance</Text>
-        
-        <List.Item
-          title="Dark Mode"
-          left={props => <List.Icon {...props} icon={isDarkMode ? 'weather-night' : 'white-balance-sunny'} />}
-          right={() => (
-            <Button
-              mode="outlined"
-              onPress={toggleTheme}
-              style={styles.themeButton}
-            >
-              {isDarkMode ? 'Light Mode' : 'Dark Mode'}
-            </Button>
-          )}
-        />
-      </Surface>
-
-      {/* Password Change Dialog */}
-      <Portal>
-        <Dialog visible={showChangePasswordDialog} onDismiss={() => setShowChangePasswordDialog(false)}>
-          <Dialog.Title>Change Password</Dialog.Title>
-          <Dialog.Content>
-            <TextInput
-              label="Current Password"
-              value={oldPassword}
-              onChangeText={setOldPassword}
-              secureTextEntry
-              style={styles.input}
-            />
-            <TextInput
-              label="New Password"
-              value={newPassword}
-              onChangeText={setNewPassword}
-              secureTextEntry
-              style={styles.input}
-            />
-            <TextInput
-              label="Confirm New Password"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-              style={styles.input}
-            />
-            {changePasswordError ? (
-              <Text style={styles.errorText}>{changePasswordError}</Text>
-            ) : null}
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setShowChangePasswordDialog(false)}>Cancel</Button>
-            <Button onPress={handlePasswordChange}>Change Password</Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
-
-      {/* Password Verification Dialog */}
-      <Portal>
-        <Dialog visible={showPasswordDialog} onDismiss={() => setShowPasswordDialog(false)}>
-          <Dialog.Title>Verify Password</Dialog.Title>
-          <Dialog.Content>
-            <TextInput
-              label="Enter Password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              style={styles.input}
-            />
-            {passwordError ? (
-              <Text style={styles.errorText}>{passwordError}</Text>
-            ) : null}
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setShowPasswordDialog(false)}>Cancel</Button>
-            <Button onPress={handlePasswordVerification}>Verify</Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
-
-      {/* Snackbar for notifications */}
-      <Snackbar
-        visible={snackbarVisible}
-        onDismiss={() => setSnackbarVisible(false)}
-        duration={3000}
-      >
-        {snackbarMessage}
-      </Snackbar>
-    </ScrollView>
+          {snackbarMessage}
+        </Snackbar>
+      </ScrollView>
+    </AccessibilityWrapper>
   );
 }
 

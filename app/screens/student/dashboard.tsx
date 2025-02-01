@@ -15,7 +15,7 @@ import {
 } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import { useStudentAuth } from '@/app/context/StudentAuthContext';
-import StudentDashboardLayout from '@/app/components/layouts/StudentDashboardLayout';
+import { StudentDashboardLayout } from '@/app/components/layouts';
 import { router } from 'expo-router';
 import { Calendar } from 'react-native-calendars';
 import { LinearGradient } from 'expo-linear-gradient';

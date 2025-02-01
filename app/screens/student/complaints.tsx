@@ -3,7 +3,7 @@ import { View, ScrollView, StyleSheet, TouchableOpacity, Image } from 'react-nat
 import { Text, Button, Card, FAB, Portal, Dialog, TextInput, SegmentedButtons, Surface, IconButton, Modal, Snackbar, ActivityIndicator } from 'react-native-paper';
 import { useStudentAuth } from '@/app/context/StudentAuthContext';
 import { useTheme } from '@/app/context/ThemeContext';
-import StudentDashboardLayout from '@/app/components/layouts/StudentDashboardLayout';
+import { StudentDashboardLayout } from '@/app/components/layouts';
 import { complaintsService, type Complaint, type ComplaintCategory } from '@/app/services/complaints.service';
 import { DocumentPicker } from 'expo-document-picker';
 import { format } from 'date-fns';

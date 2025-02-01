@@ -1,1 +1,1 @@
-export { default as StudentDashboardLayout } from './StudentDashboardLayout'; 
+export { StudentDashboardLayout } from './StudentDashboardLayout'; 

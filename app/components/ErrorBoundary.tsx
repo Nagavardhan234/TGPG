@@ -1,12 +1,12 @@
 import React from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
-import { Text, Button, useTheme } from 'react-native-paper';
-import LottieView from 'lottie-react-native';
-
-const { width } = Dimensions.get('window');
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useTheme } from '@/app/context/ThemeContext';
+import { MaterialIcons } from '@expo/vector-icons';
 
 interface Props {
   children: React.ReactNode;
+  fallback?: React.ReactNode;
+  onError?: (error: Error, errorInfo: React.ErrorInfo) => void;
 }
 
 interface State {
@@ -14,36 +14,31 @@ interface State {
   error: Error | null;
 }
 
-export class ErrorBoundary extends React.Component<Props, State> {
+class ErrorBoundaryClass extends React.Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = {
-      hasError: false,
-      error: null,
-    };
+    this.state = { hasError: false, error: null };
   }
 
   static getDerivedStateFromError(error: Error): State {
-    return {
-      hasError: true,
-      error,
-    };
+    return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('Error caught by boundary:', error, errorInfo);
+    this.props.onError?.(error, errorInfo);
   }
 
-  handleRetry = () => {
-    this.setState({
-      hasError: false,
-      error: null,
-    });
+  resetError = () => {
+    this.setState({ hasError: false, error: null });
   };
 
   render() {
     if (this.state.hasError) {
-      return <ErrorFallback error={this.state.error} onRetry={this.handleRetry} />;
+      if (this.props.fallback) {
+        return this.props.fallback;
+      }
+
+      return <ErrorFallback error={this.state.error} onReset={this.resetError} />;
     }
 
     return this.props.children;
@@ -52,33 +47,57 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
 interface ErrorFallbackProps {
   error: Error | null;
-  onRetry: () => void;
+  onReset: () => void;
 }
 
-const ErrorFallback: React.FC<ErrorFallbackProps> = ({ error, onRetry }) => {
-  const { colors } = useTheme();
+const ErrorFallback: React.FC<ErrorFallbackProps> = ({ error, onReset }) => {
+  const { theme, isDarkMode } = useTheme();
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <LottieView
-        source={require('../../assets/Animations/networkerror.json')}
-        autoPlay
-        loop
-        style={styles.animation}
+    <View 
+      style={[
+        styles.container, 
+        { backgroundColor: theme.colors.background }
+      ]}
+      accessible={true}
+      accessibilityLabel="Error screen"
+    >
+      <MaterialIcons 
+        name="error-outline" 
+        size={48} 
+        color={theme.colors.error}
+        accessibilityLabel="Error icon"
       />
-      <Text style={[styles.title, { color: colors.error }]}>
+      <Text 
+        style={[
+          styles.title, 
+          { color: theme.colors.error }
+        ]}
+        accessibilityRole="header"
+      >
         Oops! Something went wrong
       </Text>
-      <Text style={[styles.message, { color: colors.onSurfaceVariant }]}>
+      <Text 
+        style={[
+          styles.message, 
+          { color: theme.colors.text }
+        ]}
+        accessibilityRole="text"
+      >
         {error?.message || 'An unexpected error occurred'}
       </Text>
-      <Button
-        mode="contained"
-        onPress={onRetry}
-        style={[styles.button, { backgroundColor: colors.primary }]}
+      <TouchableOpacity
+        style={[
+          styles.button,
+          { backgroundColor: theme.colors.primary }
+        ]}
+        onPress={onReset}
+        accessible={true}
+        accessibilityLabel="Try again button"
+        accessibilityRole="button"
       >
-        Try Again
-      </Button>
+        <Text style={styles.buttonText}>Try Again</Text>
+      </TouchableOpacity>
     </View>
   );
 };
@@ -90,24 +109,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
-  animation: {
-    width: width * 0.7,
-    height: width * 0.7,
-    marginBottom: 20,
-  },
   title: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 10,
+    marginTop: 16,
+    marginBottom: 8,
     textAlign: 'center',
   },
   message: {
     fontSize: 16,
     textAlign: 'center',
-    marginBottom: 30,
-    paddingHorizontal: 20,
+    marginBottom: 24,
   },
   button: {
-    paddingHorizontal: 30,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
   },
-}); 
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});
+
+export default ErrorBoundaryClass; 

@@ -11,14 +11,13 @@ import {
   Button,
   Avatar,
   Text,
-  useTheme,
   IconButton,
   Dialog,
   Chip,
   RadioButton,
   SegmentedButtons
 } from 'react-native-paper';
-import { useTheme as useCustomTheme } from '@/app/context/ThemeContext';
+import { useTheme } from '@/app/context/ThemeContext';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getStudents, addStudent, getDefaultRent, Student, StudentForm, deleteStudent, updateStudent, importStudentsFromExcel, getStudentsWithPagination, getAvailableRooms } from '@/app/services/student.service';
@@ -32,6 +31,8 @@ import XLSX from 'xlsx';
 import { ExtendedTheme } from '@/app/types/theme';
 import * as DocumentPicker from 'expo-document-picker';
 import { TokenExpiredError } from '@/app/services/student.service';
+import { SkeletonLayouts } from '@/app/components/Skeleton';
+import { ErrorBoundary } from '@/app/components/ErrorBoundary';
 
 interface FormData {
   name: string;
@@ -45,7 +46,7 @@ interface FormData {
   joinDate: string;
 }
 
-const getStatusColor = (status: string, theme: any) => {
+const getStatusColor = (status: string, theme: ExtendedTheme) => {
   switch (status) {
     case 'ACTIVE':
       return theme.colors.primaryContainer;
@@ -58,11 +59,24 @@ const getStatusColor = (status: string, theme: any) => {
   }
 };
 
-export default function StudentManagement() {
+function ErrorFallback({ error, onReset }: { error: Error | null; onReset: () => void }) {
+  const { theme } = useTheme();
+  return (
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <Text style={[styles.errorText, { color: theme.colors.error }]}>
+        Something went wrong: {error?.message}
+      </Text>
+      <Button mode="contained" onPress={onReset}>
+        Try again
+      </Button>
+    </View>
+  );
+}
+
+function StudentManagementContent() {
+  const { theme } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
-  const paperTheme = useTheme();
-  const { theme, isDarkMode } = useCustomTheme();
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -748,6 +762,22 @@ export default function StudentManagement() {
     });
   }, [students, sortField, sortDirection]);
 
+  if (!theme) {
+    return (
+      <View style={[styles.container, { backgroundColor: '#fff' }]}>
+        <ActivityIndicator size="large" color="#0000ff" />
+      </View>
+    );
+  }
+
+  if (loading) {
+    return (
+      <View style={[styles.skeletonContainer, { backgroundColor: theme.colors.surface }]}>
+        <SkeletonLayouts.ListItem />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Portal>
@@ -765,7 +795,7 @@ export default function StudentManagement() {
           contentContainerStyle={[
             styles.modalContainer,
             { 
-              backgroundColor: isDarkMode ? 'rgba(30, 30, 30, 0.95)' : theme.colors.surface 
+              backgroundColor: theme.colors.surface 
             }
           ]}
           style={styles.modalOverlay}
@@ -961,7 +991,7 @@ export default function StudentManagement() {
             placeholder="Search by name, phone or room"
             onChangeText={handleSearch}
             value={searchQuery}
-            style={styles.searchBar}
+            style={[styles.searchBar, { backgroundColor: theme.colors.surfaceVariant }]}
           />
           <SegmentedButtons
             value={filterStatus}
@@ -1046,9 +1076,9 @@ export default function StudentManagement() {
                   </View>
                 </DataTable.Cell>
                 <DataTable.Cell style={styles.roomColumn}>
-                  <View style={styles.roomBadge}>
-                    <Text style={[styles.roomText, { color: theme.colors.onSurface }]}>
-                      {student.Room_No !== null && student.Room_No !== undefined ? student.Room_No.toString() : 'N/A'}
+                  <View style={[styles.roomBadge, { backgroundColor: theme.colors.surfaceVariant }]}>
+                    <Text style={[styles.roomText, { color: theme.colors.onSurfaceVariant, fontWeight: '600', textAlign: 'center' }]}>
+                      {student.Room_No}
                     </Text>
                   </View>
                 </DataTable.Cell>
@@ -1074,7 +1104,7 @@ export default function StudentManagement() {
         icon="plus"
         style={[
           styles.fab, 
-          { backgroundColor: isDarkMode ? '#D0BCFF' : theme.colors.primary }
+          { backgroundColor: theme.colors.primary }
         ]}
         onPress={() => setModalVisible(true)}
       />
@@ -1269,6 +1299,21 @@ export default function StudentManagement() {
   );
 }
 
+export default function StudentManagement() {
+  const handleError = (error: Error, errorInfo: React.ErrorInfo) => {
+    console.error('Student Management Error:', error, errorInfo);
+  };
+
+  return (
+    <ErrorBoundary
+      fallback={<ErrorFallback error={null} onReset={() => window.location.reload()} />}
+      onError={handleError}
+    >
+      <StudentManagementContent />
+    </ErrorBoundary>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1292,7 +1337,6 @@ const styles = StyleSheet.create({
   searchBar: {
     flex: 2,
     minWidth: 200,
-    backgroundColor: '#f5f5f5',
   },
   loadingContainer: {
     flex: 1,
@@ -1429,15 +1473,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
     alignSelf: 'flex-start',
     minWidth: 50,
     alignItems: 'center',
   },
   roomText: {
     fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
   },
   viewButton: {
     margin: 0,
@@ -1531,7 +1572,6 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 100,
     maxWidth: 150,
-    backgroundColor: 'transparent',
   },
   roomSearchSmall: {
     flex: 1,
@@ -1554,4 +1594,13 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingHorizontal: 32,
   },
+  skeletonContainer: {
+    marginBottom: 8,
+    borderRadius: 8,
+  },
+  errorText: {
+    fontSize: 18,
+    marginBottom: 16,
+    textAlign: 'center',
+  }
 }); 
