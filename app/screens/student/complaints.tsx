@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, ScrollView, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, ScrollView, StyleSheet, TouchableOpacity, Image, Animated } from 'react-native';
 import { Text, Button, Card, FAB, Portal, Dialog, TextInput, SegmentedButtons, Surface, IconButton, Modal, Snackbar, ActivityIndicator } from 'react-native-paper';
 import { useStudentAuth } from '@/app/context/StudentAuthContext';
 import { useTheme } from '@/app/context/ThemeContext';
@@ -105,15 +105,16 @@ const staticStyles = StyleSheet.create({
   filterButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 24,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
     marginRight: 8,
+    borderWidth: 1,
   },
   filterButtonText: {
-    marginLeft: 8,
-    fontSize: 14,
-    fontWeight: '600',
+    marginLeft: 6,
+    fontSize: 12,
+    fontWeight: '500',
   },
   cardGlass: {
     borderRadius: 24,
@@ -146,13 +147,13 @@ const staticStyles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   timestamp: {
-    fontSize: 12,
-    opacity: 0.7,
+    fontSize: 11,
+    opacity: 0.6,
   },
   statusContainer: {
     flexDirection: 'row',
@@ -164,18 +165,20 @@ const staticStyles = StyleSheet.create({
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
   },
   badgeText: {
-    marginLeft: 6,
-    fontSize: 12,
-    fontWeight: '600',
+    marginLeft: 4,
+    fontSize: 11,
+    fontWeight: '500',
   },
   description: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
+    opacity: 0.8,
+    marginTop: 8,
   },
   fab: {
     position: 'absolute',
@@ -234,12 +237,9 @@ const staticStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   categoryIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    marginRight: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
   },
   categoryLabel: {
     fontSize: 12,
@@ -284,16 +284,17 @@ const staticStyles = StyleSheet.create({
     marginTop: 4,
   },
   submitButton: {
-    borderRadius: 12,
+    margin: 16,
     marginTop: 8,
-    marginBottom: 16,
-    paddingVertical: 8,
+    borderRadius: 8,
+    elevation: 0,
+    height: 45,
   },
   submitLabel: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     letterSpacing: 0.5,
-    paddingVertical: 4,
+    textTransform: 'none',
   },
   attachmentsSection: {
     marginBottom: 24,
@@ -373,6 +374,18 @@ const staticStyles = StyleSheet.create({
     borderRadius: 8,
     minWidth: 80,
   },
+  complaintCard: {
+    marginHorizontal: 12,
+    marginVertical: 6,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    overflow: 'hidden',
+  },
 });
 
 // Define complaint icons based on categories
@@ -410,6 +423,27 @@ export default function ComplaintsScreen() {
     title: false,
     description: false,
   });
+
+  // Fix animation setup
+  const [fadeAnim] = useState(() => new Animated.Value(0));
+  const [animations, setAnimations] = useState<Animated.Value[]>([]);
+
+  // Update animations when complaints change
+  useEffect(() => {
+    const newAnimations = complaints.map(() => new Animated.Value(0));
+    setAnimations(newAnimations);
+    
+    Animated.stagger(100, 
+      newAnimations.map(anim =>
+        Animated.spring(anim, {
+          toValue: 1,
+          useNativeDriver: true,
+          tension: 50,
+          friction: 7
+        })
+      )
+    ).start();
+  }, [complaints]);
 
   const loadComplaints = async () => {
     try {
@@ -680,81 +714,72 @@ export default function ComplaintsScreen() {
           </ScrollView>
         </View>
 
-        {loading ? (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-          </View>
-        ) : (
-          <>
-            <ScrollView>
-              {getFilteredComplaints().map((complaint) => {
-                const category = COMPLAINT_CATEGORIES.find(c => c.key === complaint.categoryId);
-                const priority = PRIORITY_CONFIG[complaint.priority as keyof typeof PRIORITY_CONFIG];
-                const isEmergency = complaint.priority === 'high' || complaint.isEmergency;
+        <ScrollView>
+          {loading ? (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <ActivityIndicator size="large" color={theme.colors.primary} />
+            </View>
+          ) : getFilteredComplaints().length === 0 ? (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+              <Text style={{ opacity: 0.7 }}>No complaints found</Text>
+            </View>
+          ) : (
+            getFilteredComplaints().map((complaint, index) => {
+              const category = COMPLAINT_CATEGORIES.find(c => c.key === complaint.categoryId);
+              const priority = PRIORITY_CONFIG[complaint.priority as keyof typeof PRIORITY_CONFIG];
+              const isEmergency = complaint.priority === 'high' || complaint.isEmergency;
 
-                return (
-                  <Surface
-                    key={`complaint-${complaint.complaintId}`}
-            style={[
-                      staticStyles.complaintCard,
-                      staticStyles.cardGlass,
-                      {
-                        borderColor: isEmergency 
-                          ? `${theme.colors.error}30`
-                          : `${theme.colors.outline}20`,
-                        backgroundColor: isEmergency
-                          ? `${theme.colors.errorContainer}20`
-                          : `${theme.colors.surface}F0`,
-                      }
-                    ]}
-                  >
+              return (
+                <Animated.View
+                  key={complaint.complaintId}
+                  style={[
+                    staticStyles.complaintCard,
+                    {
+                      opacity: animations[index] || new Animated.Value(1),
+                      transform: [{
+                        translateY: (animations[index] || new Animated.Value(1)).interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [50, 0]
+                        })
+                      }],
+                      backgroundColor: theme.colors.surface,
+                      borderColor: isEmergency ? theme.colors.error + '20' : theme.colors.outline + '10',
+                      borderWidth: 1,
+                    }
+                  ]}
+                >
+                  <Surface style={{ elevation: 0, backgroundColor: 'transparent' }}>
                     <View style={staticStyles.cardContent}>
                       <View style={staticStyles.cardHeader}>
-                        <View style={[
-                          staticStyles.iconContainer,
-                          {
-                            backgroundColor: category?.bgColor || theme.colors.surfaceVariant,
-                            borderColor: category?.color || theme.colors.outline,
-                            borderWidth: 2,
-                          }
-                        ]}>
-                      <MaterialCommunityIcons
-                            name={category?.icon || 'alert-circle'}
-                            size={32}
-                            color={category?.color || theme.colors.onSurfaceVariant}
-                      />
-                    </View>
+                        <MaterialCommunityIcons
+                          name={category?.icon || 'alert-circle'}
+                          size={24}
+                          color={category?.color || theme.colors.outline}
+                          style={staticStyles.categoryIcon}
+                        />
                         
                         <View style={staticStyles.titleContainer}>
-                          <Text style={[
-                            staticStyles.title,
-                            { color: theme.colors.onSurface }
-                          ]}>
-                        {complaint.title}
-                      </Text>
-                          <Text style={[
-                            staticStyles.timestamp,
-                            { color: theme.colors.onSurfaceVariant }
-                          ]}>
-                            {format(new Date(complaint.createdAt), 'PPp')}
-                        </Text>
+                          <Text style={[staticStyles.title, { color: theme.colors.onSurface }]}>
+                            {complaint.title}
+                          </Text>
+                          <Text style={[staticStyles.timestamp, { color: theme.colors.onSurfaceVariant }]}>
+                            {format(new Date(complaint.createdAt), 'MMM dd, yyyy • h:mm a')}
+                          </Text>
+                        </View>
                       </View>
-                    </View>
 
                       <View style={staticStyles.statusContainer}>
-                        <Surface
-                          style={[
-                            staticStyles.badge,
-                            {
-                              backgroundColor: 
-                                complaint.status === 'resolved'
-                                  ? `${theme.colors.primary}15`
-                                  : complaint.status === 'in_progress'
-                                  ? `${theme.colors.secondary}15`
-                                  : `${theme.colors.surfaceVariant}50`,
-                            }
-                          ]}
-                        >
+                        <View style={[
+                          staticStyles.badge,
+                          {
+                            backgroundColor: 'transparent',
+                            borderColor: complaint.status === 'resolved'
+                              ? theme.colors.primary + '30'
+                              : complaint.status === 'in_progress'
+                              ? theme.colors.secondary + '30'
+                              : theme.colors.outline + '30',
+                          }
+                        ]}>
                           <MaterialCommunityIcons
                             name={
                               complaint.status === 'resolved'
@@ -763,39 +788,39 @@ export default function ComplaintsScreen() {
                                 ? 'progress-clock'
                                 : 'information'
                             }
-                            size={18}
+                            size={14}
                             color={
                               complaint.status === 'resolved'
                                 ? theme.colors.primary
                                 : complaint.status === 'in_progress'
                                 ? theme.colors.secondary
-                                : theme.colors.onSurfaceVariant
+                                : theme.colors.outline
                             }
                           />
                           <Text style={[
                             staticStyles.badgeText,
                             {
-                              color: 
-                                complaint.status === 'resolved'
-                                  ? theme.colors.primary
-                                  : complaint.status === 'in_progress'
-                                  ? theme.colors.secondary
-                                  : theme.colors.onSurfaceVariant
+                              color: complaint.status === 'resolved'
+                                ? theme.colors.primary
+                                : complaint.status === 'in_progress'
+                                ? theme.colors.secondary
+                                : theme.colors.outline
                             }
                           ]}>
                             {complaint.status.replace('_', ' ').toUpperCase()}
                           </Text>
-                        </Surface>
+                        </View>
 
-                        <Surface
-                          style={[
-                            staticStyles.badge,
-                            { backgroundColor: `${priority.color}15` }
-                          ]}
-                        >
+                        <View style={[
+                          staticStyles.badge,
+                          {
+                            backgroundColor: 'transparent',
+                            borderColor: priority.color + '30',
+                          }
+                        ]}>
                           <MaterialCommunityIcons
                             name={priority.icon}
-                            size={18}
+                            size={14}
                             color={priority.color}
                           />
                           <Text style={[
@@ -804,388 +829,392 @@ export default function ComplaintsScreen() {
                           ]}>
                             {priority.label}
                           </Text>
-                        </Surface>
-                </View>
-                
+                        </View>
+                      </View>
+                      
                       <Text style={[
                         staticStyles.description,
                         { color: theme.colors.onSurfaceVariant }
                       ]}>
-                  {complaint.description}
-                </Text>
-                      </View>
-                  </Surface>
-                );
-              })}
-      </ScrollView>
-
-      <FAB
-        icon="plus"
-        label="New Complaint"
-              style={[
-                staticStyles.fab,
-                { backgroundColor: theme.colors.primary }
-              ]}
-              onPress={() => setDialogVisible(true)}
-            />
-
-      <Portal>
-        <Modal
-                visible={dialogVisible}
-                onDismiss={() => setDialogVisible(false)}
-          contentContainerStyle={[
-                  staticStyles.modalContainer,
-                  staticStyles.modalGlass,
-                ]}
-              >
-                <View style={[
-                  staticStyles.modalHeader,
-                  { borderBottomColor: `${theme.colors.outline}20` }
-                ]}>
-                  <Text style={[
-                    staticStyles.modalTitle,
-                    { color: theme.colors.onSurface }
-                  ]}>
-              New Complaint
-            </Text>
-                  <IconButton
-                    icon="close"
-                    size={24}
-                    onPress={() => setDialogVisible(false)}
-                  />
-                </View>
-
-                <ScrollView 
-                  style={staticStyles.modalContent}
-                  showsVerticalScrollIndicator={false}
-                >
-                  <Text style={[
-                    staticStyles.sectionTitle,
-                    { color: theme.colors.onSurface }
-                  ]}>
-                    Select Category
-                  </Text>
-                  <View style={staticStyles.categoryPreview}>
-                    <Surface 
-                      style={[
-                        staticStyles.selectedCategory,
-                        { backgroundColor: theme.colors.surface }
-                      ]} 
-                      elevation={1}
-                    >
-                      {categoryId ? (
-                        <>
-                          <View style={[
-                            staticStyles.categoryIcon,
-                            {
-                              backgroundColor: `${theme.colors.primary}20`,
-                              width: 64,
-                              height: 64,
-                              borderRadius: 32,
-                            }
-                          ]}>
-                            <MaterialCommunityIcons
-                              name={COMPLAINT_CATEGORIES.find(c => c.key === categoryId)?.icon || 'help-circle'}
-                              size={32}
-                              color={theme.colors.primary}
-                            />
-                          </View>
-                          <Text style={[
-                            staticStyles.categoryHint,
-                            { color: theme.colors.onSurface }
-                          ]}>
-                            {COMPLAINT_CATEGORIES.find(c => c.key === categoryId)?.label}
-                          </Text>
-                        </>
-                      ) : (
-                        <>
-                          <IconButton
-                            icon="shape-outline"
-                            size={32}
-                            iconColor={theme.colors.primary}
-                            style={{ backgroundColor: `${theme.colors.primary}20` }}
-                            onPress={() => setShowCategoryModal(true)}
-                          />
-                          <Text style={[
-                            staticStyles.categoryHint,
-                            { color: theme.colors.onSurfaceVariant }
-                          ]}>
-                            Tap to select category
-                          </Text>
-                        </>
-                      )}
-                    </Surface>
-                  </View>
-
-                  <Text style={[
-                    staticStyles.sectionTitle,
-                    { color: theme.colors.onSurface }
-                  ]}>
-                    Complaint Details
-                  </Text>
-            <TextInput
-                    label="Title"
-                    value={title}
-                    onChangeText={validateTitle}
-                    onBlur={() => setTouchedFields(prev => ({ ...prev, title: true }))}
-                    mode="outlined"
-                    style={staticStyles.input}
-                    outlineStyle={[
-                      staticStyles.inputOutline,
-                      { 
-                        borderColor: touchedFields.title && (title.length < 5 || title.length > 100)
-                          ? theme.colors.error
-                          : theme.colors.outline 
-                      }
-                    ]}
-                    placeholder="Enter complaint title"
-                  />
-                  <TextInput
-              label="Description"
-                    value={description}
-                    onChangeText={validateDescription}
-                    onBlur={() => setTouchedFields(prev => ({ ...prev, description: true }))}
-                    mode="outlined"
-              multiline
-              numberOfLines={4}
-                    style={staticStyles.input}
-                    outlineStyle={[
-                      staticStyles.inputOutline,
-                      { 
-                        borderColor: touchedFields.description && description.length < 10
-                          ? theme.colors.error
-                          : theme.colors.outline 
-                      }
-                    ]}
-                    placeholder="Describe your complaint in detail"
-                  />
-
-                  <Text style={[
-                    staticStyles.sectionTitle,
-                    { color: theme.colors.onSurface }
-                  ]}>
-                    Set Priority Level
-                  </Text>
-                  <View style={staticStyles.priorityContainer}>
-                    {Object.entries(PRIORITY_CONFIG).map(([key, config]) => {
-                      const isSelected = priority === key;
-                      return (
-                        <TouchableOpacity
-                          key={key}
-                          onPress={() => setPriority(key as 'low' | 'medium' | 'high')}
-                          style={[
-                            staticStyles.priorityButton,
-                            {
-                              backgroundColor: isSelected
-                                ? `${config.color}15`
-                                : `${theme.colors.surfaceVariant}50`,
-                              borderColor: isSelected
-                                ? config.color
-                                : 'transparent',
-                            }
-                          ]}
-                        >
-                          <View style={[
-                            staticStyles.priorityIcon,
-                            {
-                              backgroundColor: isSelected
-                                ? `${config.color}20`
-                                : `${theme.colors.surfaceVariant}80`,
-                            }
-                          ]}>
-                            <MaterialCommunityIcons
-                              name={config.icon}
-                              size={24}
-                              color={isSelected ? config.color : theme.colors.onSurfaceVariant}
-                            />
-              </View>
-                          <Text
-                    style={[
-                              staticStyles.priorityLabel,
-                              {
-                                color: isSelected ? config.color : theme.colors.onSurfaceVariant
-                              }
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {config.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-              </View>
-
-                  <Text style={[
-                    staticStyles.sectionTitle,
-                    { color: theme.colors.onSurface }
-                  ]}>
-                    Attachments (Optional)
-                  </Text>
-                  <View style={staticStyles.attachmentsSection}>
-                    <View style={staticStyles.attachmentButtons}>
-              <Button 
-                mode="outlined" 
-                        icon="file-document"
-                        onPress={pickDocument}
-                        style={[
-                          staticStyles.attachmentButton,
-                          { borderColor: theme.colors.outline }
-                        ]}
-                      >
-                        Add Document
-                      </Button>
-                      <Button
-                        mode="outlined"
-                        icon="image"
-                onPress={pickImage}
-                        style={[
-                          staticStyles.attachmentButton,
-                          { borderColor: theme.colors.outline }
-                        ]}
-              >
-                        Add Image
-              </Button>
+                        {complaint.description}
+                      </Text>
                     </View>
-                    
-                    {selectedFiles.length > 0 && (
-                      <View style={staticStyles.selectedFiles}>
-                        {selectedFiles.map((file, index) => (
-                          <View 
-                            key={`${file.name}-${index}`}
-                            style={[
-                              staticStyles.fileItem,
-                              { backgroundColor: `${theme.colors.surfaceVariant}50` }
-                            ]}
-                          >
-                            <MaterialCommunityIcons
-                              name={file.type?.includes('image') ? 'image' : 'file-document'}
-                              size={20}
-                              color={theme.colors.primary}
-                            />
-                            <Text 
-                              style={[
-                                staticStyles.fileName,
-                                { color: theme.colors.onSurface }
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {file.name}
-                            </Text>
-                            <IconButton
-                              icon="close-circle"
-                              size={20}
-                              iconColor={theme.colors.error}
-                              onPress={() => removeFile(index)}
-                              style={staticStyles.removeButton}
-                            />
-                          </View>
-                  ))}
-                </View>
-              )}
+                  </Surface>
+                </Animated.View>
+              );
+            })
+          )}
+        </ScrollView>
+
+        <FAB
+          icon="plus"
+          label="New Complaint"
+          style={[
+            staticStyles.fab,
+            { backgroundColor: theme.colors.primary }
+          ]}
+          onPress={() => setDialogVisible(true)}
+        />
+
+        <Portal>
+          <Modal
+            visible={dialogVisible}
+            onDismiss={() => setDialogVisible(false)}
+            contentContainerStyle={[
+              staticStyles.modalContainer,
+              staticStyles.modalGlass,
+            ]}
+          >
+            <View style={[
+              staticStyles.modalHeader,
+              { borderBottomColor: `${theme.colors.outline}20` }
+            ]}>
+              <Text style={[
+                staticStyles.modalTitle,
+                { color: theme.colors.onSurface }
+              ]}>
+                New Complaint
+              </Text>
+              <IconButton
+                icon="close"
+                size={24}
+                onPress={() => setDialogVisible(false)}
+              />
             </View>
 
-              <Button 
-                mode="contained" 
-                    onPress={handleSubmit}
-                    loading={submitting}
-                    style={[
-                      staticStyles.submitButton,
-                      { backgroundColor: theme.colors.primary }
-                    ]}
-                    labelStyle={staticStyles.submitLabel}
-                    disabled={!title.trim() || !description.trim() || !categoryId}
-                  >
-                    Submit Complaint
-              </Button>
-          </ScrollView>
-        </Modal>
+            <ScrollView 
+              style={staticStyles.modalContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={[
+                staticStyles.sectionTitle,
+                { color: theme.colors.onSurface }
+              ]}>
+                Select Category
+              </Text>
+              <View style={staticStyles.categoryPreview}>
+                <Surface 
+                  style={[
+                    staticStyles.selectedCategory,
+                    { backgroundColor: theme.colors.surface }
+                  ]} 
+                  elevation={1}
+                >
+                  {categoryId ? (
+                    <>
+                      <View style={[
+                        staticStyles.categoryIcon,
+                        {
+                          backgroundColor: `${theme.colors.primary}20`,
+                          width: 64,
+                          height: 64,
+                          borderRadius: 32,
+                        }
+                      ]}>
+                        <MaterialCommunityIcons
+                          name={COMPLAINT_CATEGORIES.find(c => c.key === categoryId)?.icon || 'help-circle'}
+                          size={32}
+                          color={theme.colors.primary}
+                        />
+                      </View>
+                      <Text style={[
+                        staticStyles.categoryHint,
+                        { color: theme.colors.onSurface }
+                      ]}>
+                        {COMPLAINT_CATEGORIES.find(c => c.key === categoryId)?.label}
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <IconButton
+                        icon="shape-outline"
+                        size={32}
+                        iconColor={theme.colors.primary}
+                        style={{ backgroundColor: `${theme.colors.primary}20` }}
+                        onPress={() => setShowCategoryModal(true)}
+                      />
+                      <Text style={[
+                        staticStyles.categoryHint,
+                        { color: theme.colors.onSurfaceVariant }
+                      ]}>
+                        Tap to select category
+                      </Text>
+                    </>
+                  )}
+                </Surface>
+              </View>
 
-        <Modal
-                visible={showCategoryModal}
-                onDismiss={() => setShowCategoryModal(false)}
-          contentContainerStyle={[
-                  staticStyles.modal,
-            { backgroundColor: theme.colors.surface }
-          ]}
-        >
-                <View style={staticStyles.modalHeader}>
-                  <Text style={[staticStyles.modalTitle, { color: theme.colors.onSurface }]}>
-                    Select Category
-                  </Text>
-                  <IconButton
-                    icon="close"
-                    size={24}
-                    onPress={() => setShowCategoryModal(false)}
-                  />
-                </View>
-            <ScrollView>
-                  <View style={staticStyles.categoryGrid}>
-                    {COMPLAINT_CATEGORIES.map(category => (
-                      <TouchableOpacity
-                        key={category.key}
-                  onPress={() => {
-                          setCategoryId(category.key);
-                          setShowCategoryModal(false);
-                        }}
+              <Text style={[
+                staticStyles.sectionTitle,
+                { color: theme.colors.onSurface }
+              ]}>
+                Complaint Details
+              </Text>
+              <TextInput
+                label="Title"
+                value={title}
+                onChangeText={validateTitle}
+                onBlur={() => setTouchedFields(prev => ({ ...prev, title: true }))}
+                mode="outlined"
+                style={staticStyles.input}
+                outlineStyle={[
+                  staticStyles.inputOutline,
+                  { 
+                    borderColor: touchedFields.title && (title.length < 5 || title.length > 100)
+                      ? theme.colors.error
+                      : theme.colors.outline 
+                  }
+                ]}
+                placeholder="Enter complaint title"
+              />
+              <TextInput
+                label="Description"
+                value={description}
+                onChangeText={validateDescription}
+                onBlur={() => setTouchedFields(prev => ({ ...prev, description: true }))}
+                mode="outlined"
+                multiline
+                numberOfLines={4}
+                style={staticStyles.input}
+                outlineStyle={[
+                  staticStyles.inputOutline,
+                  { 
+                    borderColor: touchedFields.description && description.length < 10
+                      ? theme.colors.error
+                      : theme.colors.outline 
+                  }
+                ]}
+                placeholder="Describe your complaint in detail"
+              />
+
+              <Text style={[
+                staticStyles.sectionTitle,
+                { color: theme.colors.onSurface }
+              ]}>
+                Set Priority Level
+              </Text>
+              <View style={staticStyles.priorityContainer}>
+                {Object.entries(PRIORITY_CONFIG).map(([key, config]) => {
+                  const isSelected = priority === key;
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      onPress={() => setPriority(key as 'low' | 'medium' | 'high')}
+                      style={[
+                        staticStyles.priorityButton,
+                        {
+                          backgroundColor: isSelected
+                            ? `${config.color}15`
+                            : `${theme.colors.surfaceVariant}50`,
+                          borderColor: isSelected
+                            ? config.color
+                            : 'transparent',
+                        }
+                      ]}
+                    >
+                      <View style={[
+                        staticStyles.priorityIcon,
+                        {
+                          backgroundColor: isSelected
+                            ? `${config.color}20`
+                            : `${theme.colors.surfaceVariant}80`,
+                        }
+                      ]}>
+                        <MaterialCommunityIcons
+                          name={config.icon}
+                          size={24}
+                          color={isSelected ? config.color : theme.colors.onSurfaceVariant}
+                        />
+                      </View>
+                      <Text
                         style={[
-                          staticStyles.categoryOption,
+                          staticStyles.priorityLabel,
                           {
-                            backgroundColor: categoryId === category.key 
-                              ? `${category.color}15`
-                              : theme.colors.surface,
-                            borderColor: categoryId === category.key ? category.color : theme.colors.outline,
-                            borderWidth: 1.5,
+                            color: isSelected ? config.color : theme.colors.onSurfaceVariant
                           }
                         ]}
+                        numberOfLines={1}
                       >
-                        <View style={[
-                          staticStyles.categoryIcon,
-                          {
-                            backgroundColor: categoryId === category.key
-                              ? `${category.color}20`
-                              : `${theme.colors.surfaceVariant}80`,
-                          }
-                        ]}>
-                          <MaterialCommunityIcons
-                            name={category.icon}
-                            size={28}
-                            color={categoryId === category.key ? category.color : theme.colors.onSurfaceVariant}
-                          />
-                        </View>
+                        {config.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={[
+                staticStyles.sectionTitle,
+                { color: theme.colors.onSurface }
+              ]}>
+                Attachments (Optional)
+              </Text>
+              <View style={staticStyles.attachmentsSection}>
+                <View style={staticStyles.attachmentButtons}>
+                  <Button 
+                    mode="outlined" 
+                    icon="file-document"
+                    onPress={pickDocument}
+                    style={[
+                      staticStyles.attachmentButton,
+                      { borderColor: theme.colors.outline }
+                    ]}
+                  >
+                    Add Document
+                  </Button>
+                  <Button
+                    mode="outlined"
+                    icon="image"
+                    onPress={pickImage}
+                    style={[
+                      staticStyles.attachmentButton,
+                      { borderColor: theme.colors.outline }
+                    ]}
+                  >
+                    Add Image
+                  </Button>
+                </View>
+                
+                {selectedFiles.length > 0 && (
+                  <View style={staticStyles.selectedFiles}>
+                    {selectedFiles.map((file, index) => (
+                      <View 
+                        key={`${file.name}-${index}`}
+                        style={[
+                          staticStyles.fileItem,
+                          { backgroundColor: `${theme.colors.surfaceVariant}50` }
+                        ]}
+                      >
+                        <MaterialCommunityIcons
+                          name={file.type?.includes('image') ? 'image' : 'file-document'}
+                          size={20}
+                          color={theme.colors.primary}
+                        />
                         <Text 
                           style={[
-                            staticStyles.categoryOptionLabel,
-                            { color: categoryId === category.key ? category.color : theme.colors.onSurfaceVariant }
+                            staticStyles.fileName,
+                            { color: theme.colors.onSurface }
                           ]}
                           numberOfLines={1}
                         >
-                          {category.label}
-            </Text>
-                      </TouchableOpacity>
+                          {file.name}
+                        </Text>
+                        <IconButton
+                          icon="close-circle"
+                          size={20}
+                          iconColor={theme.colors.error}
+                          onPress={() => removeFile(index)}
+                          style={staticStyles.removeButton}
+                        />
+                      </View>
                     ))}
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+
+            <Button 
+              mode="contained" 
+              onPress={handleSubmit}
+              loading={submitting}
+              style={[
+                staticStyles.submitButton,
+                { 
+                  backgroundColor: !title.trim() || !description.trim() || !categoryId 
+                    ? theme.colors.surfaceDisabled
+                    : theme.colors.primary
+                }
+              ]}
+              labelStyle={staticStyles.submitLabel}
+              disabled={!title.trim() || !description.trim() || !categoryId}
+            >
+              {submitting ? 'Submitting...' : 'Submit Complaint'}
+            </Button>
+          </Modal>
+
+          <Modal
+            visible={showCategoryModal}
+            onDismiss={() => setShowCategoryModal(false)}
+            contentContainerStyle={[
+              staticStyles.modal,
+              { backgroundColor: theme.colors.surface }
+            ]}
+          >
+            <View style={staticStyles.modalHeader}>
+              <Text style={[staticStyles.modalTitle, { color: theme.colors.onSurface }]}>
+                Select Category
+              </Text>
+              <IconButton
+                icon="close"
+                size={24}
+                onPress={() => setShowCategoryModal(false)}
+              />
             </View>
-                </ScrollView>
-                <View style={staticStyles.modalFooter}>
-                  <Button
-              mode="outlined"
-                    onPress={() => setShowCategoryModal(false)}
-                    style={[staticStyles.modalButton, { borderColor: theme.colors.outline }]}
+            <ScrollView>
+              <View style={staticStyles.categoryGrid}>
+                {COMPLAINT_CATEGORIES.map(category => (
+                  <TouchableOpacity
+                    key={category.key}
+                    onPress={() => {
+                      setCategoryId(category.key);
+                      setShowCategoryModal(false);
+                    }}
+                    style={[
+                      staticStyles.categoryOption,
+                      {
+                        backgroundColor: categoryId === category.key 
+                          ? `${category.color}15`
+                          : theme.colors.surface,
+                        borderColor: categoryId === category.key ? category.color : theme.colors.outline,
+                        borderWidth: 1.5,
+                      }
+                    ]}
                   >
-                    Cancel
-                  </Button>
+                    <View style={[
+                      staticStyles.categoryIcon,
+                      {
+                        backgroundColor: categoryId === category.key
+                          ? `${category.color}20`
+                          : `${theme.colors.surfaceVariant}80`,
+                      }
+                    ]}>
+                      <MaterialCommunityIcons
+                        name={category.icon}
+                        size={28}
+                        color={categoryId === category.key ? category.color : theme.colors.onSurfaceVariant}
+                      />
+                    </View>
+                    <Text 
+                      style={[
+                        staticStyles.categoryOptionLabel,
+                        { color: categoryId === category.key ? category.color : theme.colors.onSurfaceVariant }
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {category.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+            <View style={staticStyles.modalFooter}>
+              <Button
+                mode="outlined"
+                onPress={() => setShowCategoryModal(false)}
+                style={[staticStyles.modalButton, { borderColor: theme.colors.outline }]}
+              >
+                Cancel
+              </Button>
               <Button 
-                    mode="outlined"
-                    onPress={() => setShowCategoryModal(false)}
-                    style={[staticStyles.modalButton, { borderColor: theme.colors.primary }]}
-                    textColor={theme.colors.primary}
-                  >
-                    Save
+                mode="outlined"
+                onPress={() => setShowCategoryModal(false)}
+                style={[staticStyles.modalButton, { borderColor: theme.colors.primary }]}
+                textColor={theme.colors.primary}
+              >
+                Save
               </Button>
             </View>
-        </Modal>
-      </Portal>
-          </>
-        )}
+          </Modal>
+        </Portal>
 
         <Snackbar
           visible={!!error}
@@ -1204,7 +1233,7 @@ export default function ComplaintsScreen() {
         >
           Complaint submitted successfully
         </Snackbar>
-    </View>
+      </View>
     </StudentDashboardLayout>
   );
 } 
