@@ -1,163 +1,241 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import { Surface, Text, Button, Card, ProgressBar, Chip, IconButton, TextInput } from 'react-native-paper';
-import { useTheme } from '@/app/context/ThemeContext';
+import React, { useEffect, useState } from 'react';
+import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { useStudentAuth } from '@/app/context/StudentAuthContext';
+import { PaymentSummaryCard } from './payments/components/PaymentSummaryCard';
+import { PaymentHistoryList } from './payments/components/PaymentHistoryList';
+import { PaymentMethodSelector } from './payments/components/PaymentMethodSelector';
+import { Surface, Text, Button, TextInput, useTheme } from 'react-native-paper';
+import { NetworkErrorView } from '@/app/components/NetworkErrorView';
+import { PageLoader } from '@/app/components/PageLoader';
+import { PaymentService } from '@/app/services/payment.service';
+import { StudentDashboardLayout } from '@/app/components/layouts';
+import { validatePaymentInput } from '@/app/utils/validators';
+import { showMessage } from 'react-native-flash-message';
 
-// Dummy data
-const paymentHistory = [
-  { id: 1, date: '2024-03-01', amount: 3500, mode: 'UPI', status: 'success' },
-  { id: 2, date: '2024-02-01', amount: 3500, mode: 'Card', status: 'success' },
-  { id: 3, date: '2024-01-01', amount: 3500, mode: 'Cash', status: 'success' },
-];
+type PaymentMethod = 'UPI' | 'BANK_TRANSFER' | 'CASH';
 
-const splitPayments = [
-  { id: 1, name: 'John Doe', amount: 2000, status: 'paid' },
-  { id: 2, name: 'Mike Smith', amount: 2000, status: 'pending' },
-  { id: 3, name: 'You', amount: 2000, status: 'paid' },
-];
+function PaymentsContent() {
+  const { colors } = useTheme();
+  const { student } = useStudentAuth();
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [paymentSummary, setPaymentSummary] = useState<any>(null);
+  const [paymentHistory, setPaymentHistory] = useState([]);
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('UPI');
+  const [amount, setAmount] = useState('');
+  const [transactionId, setTransactionId] = useState('');
 
-export default function PaymentsScreen() {
-  const { theme } = useTheme();
-  const [emiAmount, setEmiAmount] = useState('');
-  const [showEmiPlan, setShowEmiPlan] = useState(false);
+  useEffect(() => {
+    loadPaymentData();
+  }, []);
 
-  const totalDue = 6000;
-  const totalPaid = 3500;
-  const progress = totalPaid / (totalPaid + totalDue);
+  const loadPaymentData = async (isRefresh = false) => {
+    try {
+      if (!isRefresh) setLoading(true);
+      setError(null);
 
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'success':
-      case 'paid':
-        return theme.colors.primary;
-      case 'pending':
-        return theme.colors.warning;
-      default:
-        return theme.colors.error;
+      if (!student?.TenantID) {
+        throw new Error('Student information not found');
+      }
+
+      const [summary, history] = await Promise.all([
+        PaymentService.getPaymentSummary(student.TenantID.toString()),
+        PaymentService.getPaymentHistory(student.TenantID.toString())
+      ]);
+
+      setPaymentSummary(summary);
+      setPaymentHistory(history);
+    } catch (error: any) {
+      console.error('Error loading payment data:', error);
+      setError(error.message || 'Failed to load payment data');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
   };
 
+  const handlePayment = async () => {
+    try {
+      if (!student?.TenantID) {
+        showMessage({
+          message: 'Error',
+          description: 'Student information not found',
+          type: 'danger',
+          duration: 4000,
+          floating: true,
+          icon: 'danger'
+        });
+        return;
+      }
+
+      if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+        showMessage({
+          message: 'Invalid Amount',
+          description: 'Please enter a valid amount',
+          type: 'warning',
+          duration: 4000,
+          floating: true,
+          icon: 'warning'
+        });
+        return;
+      }
+
+      if ((selectedMethod === 'UPI' || selectedMethod === 'BANK_TRANSFER') && !transactionId.trim()) {
+        showMessage({
+          message: 'Transaction ID Required',
+          description: `Please enter a valid ${selectedMethod} transaction ID`,
+          type: 'warning',
+          duration: 4000,
+          floating: true,
+          icon: 'warning'
+        });
+        return;
+      }
+
+      // Validate payment input
+      const validation = validatePaymentInput(selectedMethod, amount, transactionId);
+      if (!validation.isValid) {
+        showMessage({
+          message: 'Invalid Input',
+          description: validation.error || 'Please check your payment details',
+          type: 'warning',
+          duration: 4000,
+          floating: true,
+          icon: 'warning'
+        });
+        return;
+      }
+
+      setLoading(true);
+
+      const response = await PaymentService.submitPayment(student.TenantID.toString(), {
+        amount: parseFloat(amount),
+        paymentMethod: selectedMethod,
+        transactionId: transactionId.trim()
+      });
+
+      // Show success message
+      showMessage({
+        message: 'Success',
+        description: 'Payment submitted successfully',
+        type: 'success',
+        duration: 4000,
+        floating: true,
+        icon: 'success'
+      });
+
+      // Reset form and reload data only after successful submission
+      setAmount('');
+      setTransactionId('');
+      await loadPaymentData();
+
+    } catch (error: any) {
+      console.error('Error processing payment:', error);
+      showMessage({
+        message: 'Payment Failed',
+        description: error.message || 'Failed to process payment',
+        type: 'danger',
+        duration: 4000,
+        floating: true,
+        icon: 'danger'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading && !paymentSummary) {
+    return <PageLoader message="Loading payment details..." />;
+  }
+
+  if (error && !paymentSummary) {
+    return (
+      <NetworkErrorView
+        message={error}
+        onRetry={() => loadPaymentData()}
+      />
+    );
+  }
+
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      {/* Payment Summary */}
-      <Surface style={[styles.section, { backgroundColor: theme.colors.surface }]}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>Payment Summary</Text>
-        <View style={styles.summaryContainer}>
-          <ProgressBar 
-            progress={progress}
-            color={theme.colors.primary}
-            style={styles.progressBar}
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={() => loadPaymentData(true)} />
+      }
+    >
+      {paymentSummary && (
+        <PaymentSummaryCard
+          totalPaid={Number(paymentSummary.AmountPaid) || 0}
+          totalDue={Number(paymentSummary.TotalRent - paymentSummary.AmountPaid) || 0}
+          dueDate={paymentSummary.DueDate || new Date().toISOString()}
+          monthlyRent={Number(paymentSummary.TotalRent) || 0}
+          status={paymentSummary.Status || 'PENDING'}
+        />
+      )}
+
+      <Surface style={[styles.paymentForm, { backgroundColor: colors.surface }]}>
+        <Text style={[styles.sectionTitle, { color: colors.primary }]}>
+          Make Payment
+        </Text>
+
+        <PaymentMethodSelector
+          selectedMethod={selectedMethod}
+          onSelectMethod={setSelectedMethod}
+        />
+
+        <View style={styles.inputContainer}>
+          <TextInput
+            label="Amount"
+            value={amount}
+            onChangeText={setAmount}
+            keyboardType="numeric"
+            mode="outlined"
+            style={styles.input}
+            disabled={loading}
           />
-          <View style={styles.amountDetails}>
-            <View>
-              <Text style={{ color: theme.colors.text }}>Total Paid</Text>
-              <Text style={[styles.amount, { color: theme.colors.primary }]}>₹{totalPaid}</Text>
-            </View>
-            <View>
-              <Text style={{ color: theme.colors.text }}>Due Amount</Text>
-              <Text style={[styles.amount, { color: theme.colors.error }]}>₹{totalDue}</Text>
-            </View>
-          </View>
         </View>
 
-        {/* Early Payment Incentive */}
-        <Card style={styles.incentiveCard}>
-          <Card.Content>
-            <View style={styles.incentiveContent}>
-              <IconButton icon="gift" size={24} color={theme.colors.primary} />
-              <Text style={{ color: theme.colors.text }}>
-                Pay before 10th to get ₹200 cashback!
-              </Text>
-            </View>
-          </Card.Content>
-        </Card>
-      </Surface>
-
-      {/* Payment Options */}
-      <Surface style={[styles.section, { backgroundColor: theme.colors.surface }]}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>Payment Options</Text>
-        <Button 
-          mode="contained"
-          style={styles.payButton}
-          onPress={() => {}}
-        >
-          Pay Full Amount (₹{totalDue})
-        </Button>
-
-        <Button 
-          mode="outlined"
-          style={styles.emiButton}
-          onPress={() => setShowEmiPlan(!showEmiPlan)}
-        >
-          Setup EMI Plan
-        </Button>
-
-        {showEmiPlan && (
-          <View style={styles.emiContainer}>
+        {(selectedMethod === 'UPI' || selectedMethod === 'BANK_TRANSFER') && (
+          <View style={styles.inputContainer}>
             <TextInput
-              label="Monthly EMI Amount (min ₹500)"
-              value={emiAmount}
-              onChangeText={setEmiAmount}
-              keyboardType="numeric"
+              label={`${selectedMethod} Transaction ID`}
+              value={transactionId}
+              onChangeText={setTransactionId}
               mode="outlined"
-              style={styles.emiInput}
+              style={styles.input}
+              disabled={loading}
             />
-            <Button 
-              mode="contained"
-              disabled={!emiAmount || Number(emiAmount) < 500}
-              onPress={() => {}}
-            >
-              Setup EMI
-            </Button>
           </View>
         )}
+
+        <Button
+          mode="contained"
+          onPress={handlePayment}
+          loading={loading}
+          disabled={loading || !amount || ((selectedMethod === 'UPI' || selectedMethod === 'BANK_TRANSFER') && !transactionId.trim())}
+          style={styles.submitButton}
+        >
+          Submit Payment
+        </Button>
       </Surface>
 
-      {/* Payment History */}
-      <Surface style={[styles.section, { backgroundColor: theme.colors.surface }]}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>Payment History</Text>
-        {paymentHistory.map(payment => (
-          <Card key={payment.id} style={styles.historyCard}>
-            <Card.Content style={styles.historyContent}>
-              <View>
-                <Text style={{ color: theme.colors.text }}>₹{payment.amount}</Text>
-                <Text style={{ color: theme.colors.secondary }}>{payment.date}</Text>
-              </View>
-              <View style={styles.historyRight}>
-                <Text style={{ color: theme.colors.secondary }}>{payment.mode}</Text>
-                <Chip 
-                  textStyle={{ color: theme.colors.surface }}
-                  style={{ backgroundColor: getStatusColor(payment.status) }}
-                >
-                  {payment.status}
-                </Chip>
-              </View>
-            </Card.Content>
-          </Card>
-        ))}
-      </Surface>
-
-      {/* Split Payments */}
-      <Surface style={[styles.section, { backgroundColor: theme.colors.surface }]}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>Split Payments</Text>
-        {splitPayments.map(split => (
-          <Card key={split.id} style={styles.splitCard}>
-            <Card.Content style={styles.splitContent}>
-              <Text style={{ color: theme.colors.text }}>{split.name}</Text>
-              <View style={styles.splitRight}>
-                <Text style={{ color: theme.colors.text }}>₹{split.amount}</Text>
-                <Chip 
-                  textStyle={{ color: theme.colors.surface }}
-                  style={{ backgroundColor: getStatusColor(split.status) }}
-                >
-                  {split.status}
-                </Chip>
-              </View>
-            </Card.Content>
-          </Card>
-        ))}
-      </Surface>
+      <View style={styles.historySection}>
+        <Text style={[styles.sectionTitle, { color: colors.primary }]}>
+          Payment History
+        </Text>
+        <PaymentHistoryList payments={paymentHistory} />
+      </View>
     </ScrollView>
+  );
+}
+
+export default function PaymentsScreen() {
+  return (
+    <StudentDashboardLayout title="Payments">
+      <PaymentsContent />
+    </StudentDashboardLayout>
   );
 }
 
@@ -165,75 +243,32 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  section: {
+  error: {
+    margin: 16,
+    textAlign: 'center',
+  },
+  paymentForm: {
     margin: 16,
     padding: 16,
     borderRadius: 12,
     elevation: 2,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 16,
   },
-  summaryContainer: {
+  inputContainer: {
     marginBottom: 16,
   },
-  progressBar: {
-    height: 8,
-    borderRadius: 4,
-    marginBottom: 12,
+  input: {
+    backgroundColor: 'transparent',
   },
-  amountDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  submitButton: {
+    marginTop: 8,
   },
-  amount: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  incentiveCard: {
+  historySection: {
     marginTop: 16,
-  },
-  incentiveContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  payButton: {
-    marginBottom: 12,
-  },
-  emiButton: {
-    marginBottom: 12,
-  },
-  emiContainer: {
-    gap: 12,
-  },
-  emiInput: {
-    marginBottom: 8,
-  },
-  historyCard: {
-    marginBottom: 8,
-  },
-  historyContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  historyRight: {
-    alignItems: 'flex-end',
-    gap: 4,
-  },
-  splitCard: {
-    marginBottom: 8,
-  },
-  splitContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  splitRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    paddingHorizontal: 16,
   },
 }); 

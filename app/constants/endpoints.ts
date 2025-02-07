@@ -119,7 +119,26 @@ export const ENDPOINTS = {
   
   AUTH: {
     VERIFY_PASSWORD: '/api/managers/verify-password'
-  }
+  },
+
+  // Student Payment Endpoints
+  STUDENT_PAYMENT: {
+    SUMMARY: (tenantId: string) => `/api/students/payments/summary/${tenantId}`,
+    HISTORY: (tenantId: string) => `/api/students/payments/history/${tenantId}`,
+    SUBMIT: (tenantId: string) => `/api/students/payments/submit/${tenantId}`,
+    PROGRESS: (tenantId: string) => `/api/students/payments/progress/${tenantId}`,
+    RECEIPT: (tenantId: string, receiptNumber: string) => `/api/students/payments/receipt/${tenantId}/${receiptNumber}`,
+  },
+
+  // PG Payment Endpoints
+  PG_PAYMENT: {
+    STATS: (pgId: string) => `/api/pg/payment/stats/${pgId}`,
+  },
+
+  // Manager Payment Endpoints
+  MANAGER_PAYMENT: {
+    UPDATE_SETTINGS: '/api/managers/settings/payment',
+  },
 };
 
 // Get the development server IP address

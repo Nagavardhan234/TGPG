@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions } from 'react-native';
 import { 
   Surface, 
@@ -11,7 +11,8 @@ import {
   Divider,
   Chip,
   Badge,
-  useTheme as usePaperTheme
+  useTheme as usePaperTheme,
+  ActivityIndicator
 } from 'react-native-paper';
 import { useTheme } from '@/app/context/ThemeContext';
 import { useStudentAuth } from '@/app/context/StudentAuthContext';
@@ -20,6 +21,9 @@ import { router } from 'expo-router';
 import { Calendar } from 'react-native-calendars';
 import { LinearGradient } from 'expo-linear-gradient';
 import LottieView from 'lottie-react-native';
+import api from '@/app/services/api';
+import { PaymentService } from '@/app/services/payment.service';
+import type { PaymentHistory } from '@/app/services/payment.types';
 
 // Menu items for student features
 const menuItems = [
@@ -89,40 +93,6 @@ const menuItems = [
   }
 ];
 
-// Add this interface
-interface PaymentHistory {
-  id: number;
-  amount: number;
-  date: string;
-  type: 'rent' | 'deposit' | 'maintenance';
-  status: 'success' | 'pending' | 'failed';
-}
-
-// Add dummy payment history data
-const paymentHistory: PaymentHistory[] = [
-  {
-    id: 1,
-    amount: 6000,
-    date: '2024-03-01',
-    type: 'rent',
-    status: 'success'
-  },
-  {
-    id: 2,
-    amount: 500,
-    date: '2024-02-15',
-    type: 'maintenance',
-    status: 'success'
-  },
-  {
-    id: 3,
-    amount: 6000,
-    date: '2024-02-01',
-    type: 'rent',
-    status: 'success'
-  }
-];
-
 // Update the color helper function to properly handle rgba colors
 const withOpacity = (color: string | undefined, opacity: number) => {
   if (!color) return `rgba(0, 0, 0, ${opacity})`;
@@ -152,10 +122,248 @@ const withOpacity = (color: string | undefined, opacity: number) => {
   }
 };
 
+const PaymentCard = () => {
+  const { theme } = useTheme();
+  const { student } = useStudentAuth();
+  const paperTheme = usePaperTheme();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [rentData, setRentData] = useState<any>(null);
+
+  // Add card dynamic styles
+  const cardDynamicStyles = {
+    card: {
+      backgroundColor: paperTheme.dark 
+        ? withOpacity(theme.colors.surface, 0.9)
+        : withOpacity(theme.colors.surface, 0.95),
+      borderColor: paperTheme.dark 
+        ? withOpacity(theme.colors.primary, 0.1)
+        : withOpacity(theme.colors.outline, 0.1),
+      borderWidth: 1,
+      elevation: 4,
+      margin: 16,
+      borderRadius: 24,
+      padding: 20,
+    },
+    progressBackground: {
+      backgroundColor: paperTheme.dark
+        ? withOpacity(theme.colors.primary, 0.15)
+        : withOpacity(theme.colors.primary, 0.1),
+      borderRadius: 12,
+      height: 12,
+    },
+    progressFill: {
+      backgroundColor: theme.colors.primary,
+      borderRadius: 12,
+      height: '100%',
+    }
+  };
+
+  useEffect(() => {
+    if (!student?.TenantID) {
+      setError('Student ID not found');
+      setLoading(false);
+      return;
+    }
+    loadRentData();
+  }, [student?.TenantID]);
+
+  const loadRentData = async () => {
+    try {
+      if (!student?.TenantID) {
+        throw new Error('Student ID not found');
+      }
+
+      setLoading(true);
+      setError(null);
+
+      console.log('Loading rent data for tenant:', student.TenantID);
+      const data = await PaymentService.getPaymentSummary(student.TenantID.toString());
+      console.log('Received payment data:', data);
+      
+      if (!data) {
+        throw new Error('No payment data received');
+      }
+
+      setRentData({
+        totalAmount: data.TotalRent || 0,
+        totalPaid: data.AmountPaid || 0,
+        dueAmount: (data.TotalRent || 0) - (data.AmountPaid || 0),
+        daysUntilDue: data.DaysUntilDue || 0,
+        status: data.Status || 'PENDING'
+      });
+    } catch (err: any) {
+      console.error('Error loading rent data:', err);
+      const errorMessage = err.message === 'Network error. Please check your connection.'
+        ? 'Please check your internet connection'
+        : err.response?.data?.message || err.message || 'Failed to load payment data';
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePaymentNavigation = () => {
+    console.log('[Dashboard:PaymentCard] Navigating to payments screen');
+    router.push('/screens/student/payments');
+  };
+
+  if (loading) {
+    return (
+      <Surface style={[styles.paymentCard, cardDynamicStyles.card]}>
+        <View style={[styles.paymentSection, { alignItems: 'center', justifyContent: 'center', padding: 20 }]}>
+          <LottieView
+            source={require('../../../assets/Animations/Loading.json')}
+            autoPlay
+            loop
+            style={{ width: 100, height: 100 }}
+          />
+          <Text style={[styles.loadingText, { color: theme.colors.onSurfaceVariant }]}>
+            Loading payment details...
+          </Text>
+        </View>
+      </Surface>
+    );
+  }
+
+  if (error || !rentData) {
+    return (
+      <Surface style={[styles.paymentCard, cardDynamicStyles.card]}>
+        <View style={[styles.paymentSection, { alignItems: 'center', padding: 20 }]}>
+          <LottieView
+            source={require('../../../assets/Animations/networkerror.json')}
+            autoPlay
+            loop
+            style={{ width: 100, height: 100 }}
+          />
+          <Text style={[styles.errorText, { color: theme.colors.error, marginVertical: 12 }]}>
+            {error || 'No payment data available'}
+          </Text>
+          <Button 
+            mode="contained"
+            onPress={() => loadRentData()}
+            disabled={loading}
+            style={styles.retryButton}
+          >
+            Retry Loading
+          </Button>
+        </View>
+      </Surface>
+    );
+  }
+
+  const progress = ((rentData.totalPaid || 0) / (rentData.totalAmount || 1)) * 100;
+  const statusColor = rentData.status === 'PAID' 
+    ? theme.colors.primary 
+    : rentData.status === 'OVERDUE' 
+      ? theme.colors.error 
+      : theme.colors.warning || '#FFA000';
+
+  return (
+    <Surface style={[styles.paymentCard, cardDynamicStyles.card]}>
+      {/* Status Badge */}
+      <View style={[styles.statusBadge, { backgroundColor: withOpacity(statusColor, 0.1) }]}>
+        <IconButton 
+          icon={rentData.status === 'PAID' ? 'check-circle' : rentData.status === 'OVERDUE' ? 'alert-circle' : 'clock-outline'}
+          size={18}
+          iconColor={statusColor}
+          style={styles.statusIcon}
+        />
+        <Text style={[styles.statusText, { color: statusColor }]}>
+          {rentData.status}
+        </Text>
+      </View>
+
+      {/* Due Date Section */}
+      <View style={styles.dueDateRow}>
+        <IconButton 
+          icon="calendar-clock"
+          size={20}
+          iconColor={theme.colors.onSurfaceVariant}
+          style={styles.clockIcon}
+        />
+        <Text style={[styles.dueText, { color: theme.colors.onSurfaceVariant }]}>
+          Due in {rentData.daysUntilDue || 0} days
+        </Text>
+      </View>
+
+      {/* Amount Section */}
+      <View style={styles.amountSection}>
+        <View style={styles.amountRow}>
+          <View>
+            <Text style={[styles.amountLabel, { color: theme.colors.onSurfaceVariant }]}>Due Amount</Text>
+            <Text style={[styles.amount, { color: theme.colors.onSurface }]}>
+              ₹{(rentData.dueAmount || 0).toLocaleString()}
+            </Text>
+          </View>
+          <View style={styles.amountDivider} />
+          <View>
+            <Text style={[styles.amountLabel, { color: theme.colors.onSurfaceVariant }]}>Total Rent</Text>
+            <Text style={[styles.totalAmount, { color: theme.colors.onSurface }]}>
+              ₹{(rentData.totalAmount || 0).toLocaleString()}
+            </Text>
+          </View>
+        </View>
+
+        {/* Progress Bar */}
+        <View style={styles.progressContainer}>
+          <View style={[styles.progressTrack, cardDynamicStyles.progressBackground]}>
+            <View 
+              style={[
+                styles.progressFill,
+                cardDynamicStyles.progressFill,
+                { width: `${progress}%` }
+              ]} 
+            />
+          </View>
+          <Text style={[styles.progressText, { color: theme.colors.onSurfaceVariant }]}>
+            {Math.round(progress)}% Paid
+          </Text>
+        </View>
+      </View>
+
+      {/* Action Button */}
+      <Button
+        mode="contained"
+        onPress={handlePaymentNavigation}
+        style={styles.payButton}
+        contentStyle={styles.payButtonContent}
+      >
+        Make Payment
+      </Button>
+    </Surface>
+  );
+};
+
 export default function StudentDashboard() {
   const { theme } = useTheme();
   const { student } = useStudentAuth();
   const paperTheme = usePaperTheme();
+  const [recentPayments, setRecentPayments] = useState<PaymentHistory[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (student?.TenantID) {
+      loadRecentPayments();
+    }
+  }, [student?.TenantID]);
+
+  const loadRecentPayments = async () => {
+    try {
+      setLoadingPayments(true);
+      setPaymentError(null);
+      
+      const history = await PaymentService.getPaymentHistory(student!.TenantID.toString());
+      // Take only the 3 most recent payments
+      setRecentPayments(history.slice(0, 3));
+    } catch (error: any) {
+      console.error('Error loading recent payments:', error);
+      setPaymentError(error.message || 'Failed to load recent payments');
+    } finally {
+      setLoadingPayments(false);
+    }
+  };
 
   const totalAmount = 6000;
   const paidAmount = 4000;
@@ -320,105 +528,12 @@ export default function StudentDashboard() {
         </Surface>
 
         {/* Payment Progress Tracker */}
-        <Surface 
-          style={[
-            styles.paymentCard, 
-            dynamicStyles.card,
-            styles.glassEffect
-          ]}
-        >
-          {/* Add gradient background */}
-          <LinearGradient
-            colors={[
-              'rgba(255, 255, 255, 0.1)',
-              'rgba(255, 255, 255, 0.05)',
-            ]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.glassGradient}
-          />
-          
-          {/* Update floating shapes to use dynamic styles */}
-          <View style={dynamicStyles.floatingShapes.shape1} />
-          <View style={dynamicStyles.floatingShapes.shape2} />
-          <View style={dynamicStyles.floatingShapes.shape3} />
-
-          <View style={styles.paymentHeader}>
-            <View>
-              <Text style={[styles.sectionTitle, { color: theme?.colors?.primary }]}>
-                Payment Progress
-              </Text>
-              <View style={styles.dueDateContainer}>
-                <IconButton 
-                  icon="clock-alert-outline"
-                  size={18}
-                  iconColor={theme?.colors?.error}
-                  style={styles.clockIcon}
-                />
-                <Text style={[styles.dueText, { color: theme?.colors?.error }]}>
-                  Due in 5 days
-                </Text>
-              </View>
-            </View>
-            <LinearGradient
-              colors={[theme?.colors?.primary || '#6200ee', `${theme?.colors?.primary}80` || '#8F6BF2']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.paymentBadge}
-            >
-              <Text style={styles.paymentBadgeText}>Monthly Rent</Text>
-            </LinearGradient>
-          </View>
-
-          <View style={styles.amountContainer}>
-            <View style={styles.amountWrapper}>
-              <Text style={[styles.currencySymbol, { color: theme?.colors?.onSurfaceVariant }]}>₹</Text>
-              <Text style={[styles.amount, { color: theme?.colors?.onSurface }]}>
-                4,000
-              </Text>
-            </View>
-            <Text style={[styles.amountSeparator, { color: theme?.colors?.onSurfaceVariant }]}> of </Text>
-            <Text style={[styles.totalAmount, { color: theme?.colors?.onSurface }]}>
-              ₹6,000
-            </Text>
-          </View>
-
-          <View style={styles.progressContainer}>
-            <View style={[styles.progressBackground, dynamicStyles.surfaceVariant]}>
-              <LinearGradient
-                colors={[theme?.colors?.primary || '#6200ee', `${theme?.colors?.primary}80` || '#8F6BF2']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[styles.progressBar, { width: '67%' }]}
-              />
-            </View>
-            <Text style={[styles.progressText, { color: theme?.colors?.onSurfaceVariant }]}>
-              67% Complete
-            </Text>
-          </View>
-
-          <Button
-            mode="contained"
-            onPress={() => router.push('/screens/student/payments')}
-            style={[styles.payButton, { backgroundColor: theme?.colors?.primary }]}
-            contentStyle={styles.payButtonContent}
-            labelStyle={styles.payButtonLabel}
-            icon={({ size, color }) => (
-              <IconButton
-                icon="wallet"
-                size={20}
-                iconColor={color}
-                style={{ margin: 0, padding: 0 }}
-              />
-            )}
-          >
-            Pay Now
-          </Button>
-        </Surface>
+        <PaymentCard />
 
         {/* Menu Sections */}
         {menuItems.map(renderMenuSection)}
 
+        {/* Recent Payments Section */}
         <Surface style={[styles.recentPayments, { backgroundColor: theme?.colors?.surface }]}>
           <View style={styles.recentHeader}>
             <Text style={[styles.sectionTitle, { color: theme?.colors?.primary }]}>
@@ -427,95 +542,67 @@ export default function StudentDashboard() {
             <Button 
               mode="text" 
               compact
-              onPress={() => router.push('/screens/student/payments/history')}
-              labelStyle={{ color: theme?.colors?.primary }}
+              onPress={() => router.push('/screens/student/payments')}
             >
               View All
             </Button>
           </View>
-          
-          {paymentHistory.map((payment) => (
-            <Surface 
-              key={payment.id}
-              style={[
-                styles.paymentItem, 
-                { 
-                  backgroundColor: theme?.colors?.surfaceVariant + '10',
-                  borderColor: theme?.colors?.surfaceVariant + '20',
-                  borderWidth: 1,
-                }
-              ]}
-            >
-              <View style={styles.paymentItemLeft}>
-                <Surface 
-                  style={[
-                    styles.paymentIconContainer, 
-                    { 
-                      backgroundColor: theme?.colors?.primary + '15',
-                      borderRadius: 12 
-                    }
-                  ]}
-                >
-                  <IconButton
-                    icon={
-                      payment.type === 'rent' ? 'home' :
-                      payment.type === 'deposit' ? 'bank' : 'tools'
-                    }
-                    iconColor={theme?.colors?.primary}
-                    size={20}
-                  />
-                </Surface>
+
+          {loadingPayments ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={theme?.colors?.primary} />
+              <Text style={{ color: theme?.colors?.onSurfaceVariant, marginTop: 8 }}>
+                Loading payments...
+              </Text>
+            </View>
+          ) : paymentError ? (
+            <View style={styles.errorContainer}>
+              <Text style={{ color: theme?.colors?.error, textAlign: 'center' }}>
+                {paymentError}
+              </Text>
+              <Button 
+                mode="contained" 
+                onPress={loadRecentPayments}
+                style={{ marginTop: 8 }}
+              >
+                Retry
+              </Button>
+            </View>
+          ) : recentPayments.length === 0 ? (
+            <Text style={[styles.emptyText, { color: theme?.colors?.onSurfaceVariant }]}>
+              No recent payments found
+            </Text>
+          ) : (
+            recentPayments.map(payment => (
+              <View key={payment.id} style={styles.paymentItem}>
                 <View style={styles.paymentInfo}>
-                  <Text 
-                    style={[
-                      styles.paymentType, 
-                      { color: theme?.colors?.onSurface }
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {payment.type.charAt(0).toUpperCase() + payment.type.slice(1)} Payment
+                  <Text style={[styles.paymentAmount, { color: theme?.colors?.onSurface }]}>
+                    ₹{payment.amount.toLocaleString()}
                   </Text>
-                  <Text 
-                    style={[
-                      styles.paymentDate, 
-                      { color: theme?.colors?.onSurfaceVariant }
-                    ]}
-                  >
-                    {new Date(payment.date).toLocaleDateString('en-US', { 
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric'
-                    })}
+                  <Text style={[styles.paymentDate, { color: theme?.colors?.onSurfaceVariant }]}>
+                    {new Date(payment.date).toLocaleDateString()}
                   </Text>
                 </View>
-              </View>
-              <View style={styles.paymentItemRight}>
-                <Text 
-                  style={[
-                    styles.paymentAmount, 
-                    { color: theme?.colors?.onSurface }
-                  ]}
+                <Chip
+                  style={{ 
+                    backgroundColor: withOpacity(
+                      payment.status === 'SUCCESS' ? theme?.colors?.primary :
+                      payment.status === 'PENDING' ? theme?.colors?.warning || '#FFA000' :
+                      theme?.colors?.error,
+                      0.1
+                    )
+                  }}
+                  textStyle={{ 
+                    color: payment.status === 'SUCCESS' ? theme?.colors?.primary :
+                           payment.status === 'PENDING' ? theme?.colors?.warning || '#FFA000' :
+                           theme?.colors?.error
+                  }}
                 >
-                  ₹{payment.amount.toLocaleString()}
-                </Text>
-                <Chip 
-                  compact
-                  icon={payment.status === 'success' ? 'check-circle' : 'clock'}
-                  style={[
-                    styles.statusChip,
-                    { 
-                      backgroundColor: payment.status === 'success' ? 
-                        theme?.colors?.primary + '15' : 
-                        theme?.colors?.surfaceVariant + '30'
-                    }
-                  ]}
-                  textStyle={{ fontSize: 12 }}
-                >
-                  {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
+                  {payment.status}
                 </Chip>
               </View>
-            </Surface>
-          ))}
+            ))
+          )}
         </Surface>
       </ScrollView>
     </StudentDashboardLayout>
@@ -707,201 +794,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 16,
-    marginBottom: 12,
-  },
-  paymentIconContainer: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
   },
   paymentInfo: {
     flex: 1,
-    marginRight: 8,
   },
-  paymentItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  paymentItemRight: {
-    alignItems: 'flex-end',
-  },
-  paymentType: {
-    fontSize: 14,
+  paymentAmount: {
+    fontSize: 16,
     fontWeight: '600',
   },
   paymentDate: {
     fontSize: 12,
+    marginTop: 2,
   },
-  paymentAmount: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  statusChip: {
-    height: 22,
-    borderRadius: 11,
-  },
-  paymentSection: {
-    padding: 16,
-  },
-  dueDateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  clockIcon: {
-    margin: 0,
-    padding: 0,
-  },
-  dueText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  amountRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  amount: {
-    fontSize: 28,
-    fontWeight: 'bold',
-  },
-  amountLabel: {
-    fontSize: 16,
-    marginHorizontal: 4,
-  },
-  totalAmount: {
-    fontSize: 20,
-    fontWeight: '500',
-  },
-  progressBackground: {
-    height: 8,
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  progressText: {
-    fontSize: 12,
-    textAlign: 'right',
-  },
-  payButton: {
-    marginTop: 16,
-    borderRadius: 12,
-    elevation: 2,
-  },
-  payButtonContent: {
-    height: 48,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  payButtonLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  paymentCard: {
-    margin: 16,
+  loadingContainer: {
     padding: 20,
-    borderRadius: 24,
-    elevation: 4,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    borderWidth: 1,
-  },
-  paymentHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 20,
-  },
-  paymentBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  paymentBadgeText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  dueDateContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  clockIcon: {
-    margin: 0,
-    padding: 0,
-  },
-  dueText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  amountContainer: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginBottom: 24,
-  },
-  amountWrapper: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  currencySymbol: {
-    fontSize: 24,
-    marginRight: 2,
-  },
-  amount: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    lineHeight: 44,
-  },
-  amountSeparator: {
-    fontSize: 16,
-    marginHorizontal: 8,
-  },
-  totalAmount: {
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  progressBackground: {
-    height: 8,
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-  progressBar: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  progressText: {
-    fontSize: 12,
-    textAlign: 'right',
-  },
-  payButton: {
-    marginTop: 16,
-    borderRadius: 12,
-    elevation: 2,
-  },
-  payButtonContent: {
-    height: 48,
-    flexDirection: 'row',
     alignItems: 'center',
   },
-  payButtonLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
+  errorContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  emptyText: {
+    textAlign: 'center',
+    padding: 20,
   },
   glassEffect: {
     backdropFilter: 'blur(10px)',
@@ -920,5 +839,64 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     opacity: 0.5,
+  },
+  paymentCard: {
+    overflow: 'hidden',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderRadius: 20,
+    paddingRight: 12,
+    marginBottom: 16,
+  },
+  statusIcon: {
+    margin: 0,
+  },
+  statusText: {
+    fontSize: 14,
+    fontWeight: '600',
+    textTransform: 'capitalize',
+  },
+  dueDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  clockIcon: {
+    margin: 0,
+    marginRight: 4,
+  },
+  dueText: {
+    fontSize: 14,
+  },
+  amountSection: {
+    gap: 20,
+  },
+  amountRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  amountDivider: {
+    width: 1,
+    height: '100%',
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  amountLabel: {
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+  },
+  errorText: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  retryButton: {
+    borderRadius: 12,
   },
 }); 

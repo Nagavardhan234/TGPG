@@ -66,7 +66,7 @@ const PaymentContent = () => {
         throw new Error('PG information not found');
       }
 
-      const response = await api.get(`/api/payments/pg/${pg.PGID}/stats`);
+      const response = await api.get(`/api/pg/payment/stats/${pg.PGID}`);
       
       if (response.data.success) {
         setStats(response.data.data);
