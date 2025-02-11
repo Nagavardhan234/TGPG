@@ -121,19 +121,3 @@ class CacheManager {
 
 export const cacheManager = CacheManager.getInstance();
 
-// Cache keys
-export const CACHE_KEYS = {
-  STUDENT_PROFILE: 'cache_student_profile',
-  PAYMENT_HISTORY: 'cache_payment_history',
-  COMPLAINTS: 'cache_complaints',
-  NOTIFICATIONS: 'cache_notifications',
-  MESSAGES: 'cache_messages',
-  ROOM_INFO: 'cache_room_info',
-} as const;
-
-// Cache durations
-export const CACHE_DURATION = {
-  SHORT: 5 * 60 * 1000, // 5 minutes
-  MEDIUM: 30 * 60 * 1000, // 30 minutes
-  LONG: 24 * 60 * 60 * 1000, // 24 hours
-} as const; 

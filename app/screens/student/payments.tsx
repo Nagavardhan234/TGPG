@@ -7,7 +7,7 @@ import { PaymentMethodSelector } from './payments/components/PaymentMethodSelect
 import { Surface, Text, Button, TextInput, useTheme } from 'react-native-paper';
 import { NetworkErrorView } from '@/app/components/NetworkErrorView';
 import { PageLoader } from '@/app/components/PageLoader';
-import { PaymentService } from '@/app/services/payment.service';
+import { paymentService } from '@/app/services/payment.service';
 import { StudentDashboardLayout } from '@/app/components/layouts';
 import { validatePaymentInput } from '@/app/utils/validators';
 import { showMessage } from 'react-native-flash-message';
@@ -40,8 +40,8 @@ function PaymentsContent() {
       }
 
       const [summary, history] = await Promise.all([
-        PaymentService.getPaymentSummary(student.TenantID.toString()),
-        PaymentService.getPaymentHistory(student.TenantID.toString())
+        paymentService.getPaymentSummary(student.TenantID.toString()),
+        paymentService.getPaymentHistory(student.TenantID.toString())
       ]);
 
       setPaymentSummary(summary);
@@ -109,7 +109,7 @@ function PaymentsContent() {
 
       setLoading(true);
 
-      const response = await PaymentService.submitPayment(student.TenantID.toString(), {
+      const response = await paymentService.submitPayment(student.TenantID.toString(), {
         amount: parseFloat(amount),
         paymentMethod: selectedMethod,
         transactionId: transactionId.trim()
@@ -226,7 +226,7 @@ function PaymentsContent() {
           Payment History
         </Text>
         <PaymentHistoryList payments={paymentHistory} />
-      </View>
+              </View>
     </ScrollView>
   );
 }

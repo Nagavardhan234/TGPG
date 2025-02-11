@@ -22,7 +22,8 @@ export const ENDPOINTS = {
     DECLINE_REGISTRATION: '/api/students/registration/decline/',
     // OTP endpoints
     OTP_SEND: '/api/students/registration/otp/send',
-    OTP_VERIFY: '/api/students/registration/otp/verify'
+    OTP_VERIFY: '/api/students/registration/otp/verify',
+    COMPLAINTS: '/student/complaints',
   },
 
   // Complaints endpoints with clear role separation
@@ -128,31 +129,39 @@ export const ENDPOINTS = {
     SUBMIT: (tenantId: string) => `/api/students/payments/submit/${tenantId}`,
     PROGRESS: (tenantId: string) => `/api/students/payments/progress/${tenantId}`,
     RECEIPT: (tenantId: string, receiptNumber: string) => `/api/students/payments/receipt/${tenantId}/${receiptNumber}`,
+    VERIFY: (paymentId: string) => `/api/students/payments/verify/${paymentId}`,
   },
 
   // PG Payment Endpoints
   PG_PAYMENT: {
-    STATS: (pgId: string) => `/api/pg/payment/stats/${pgId}`,
+    STATS: (pgId: string | number) => `/api/pg/${pgId}/payments/stats`,
+    ANALYTICS: (pgId: string | number) => `/api/pg/${pgId}/payments/analytics`,
+    HISTORY: (pgId: string | number) => `/api/pg/${pgId}/payments/history`,
+    TENANT_PAYMENTS: (pgId: number | string) => `/api/pg/${pgId}/tenants/payments`,
+    SEND_REMINDER: '/api/payments/reminder',
   },
 
   // Manager Payment Endpoints
   MANAGER_PAYMENT: {
     UPDATE_SETTINGS: '/api/managers/settings/payment',
   },
+
+  // Manager endpoints
+  MANAGER: {
+    PROFILE: '/manager/profile',
+    PG: '/manager/pg',
+  },
+
+  // Common endpoints
+  NOTIFICATIONS: '/notifications',
+  MESSAGES: '/messages',
 };
 
 // Get the development server IP address
 const DEV_SERVER_IP = '192.168.0.5'; // Your computer's IP address
 
 // Configure BASE_URL based on platform and environment
-export const BASE_URL = Platform.select({
-  // For Android, use 10.0.2.2 for emulator or actual IP for physical device
-  android: __DEV__ ? `http://${DEV_SERVER_IP}:3000` : 'http://10.0.2.2:3000',
-  // For iOS, use localhost for simulator or actual IP for physical device
-  ios: __DEV__ ? `http://${DEV_SERVER_IP}:3000` : 'http://localhost:3000',
-  // Default to localhost for web
-  default: 'http://localhost:3000'
-});
+export const BASE_URL = __DEV__ ? 'http://localhost:3000' : 'https://your-production-api.com';
 
 export const API_TIMEOUT = 10000; // 10 seconds
  

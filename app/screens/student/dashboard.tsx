@@ -22,7 +22,7 @@ import { Calendar } from 'react-native-calendars';
 import { LinearGradient } from 'expo-linear-gradient';
 import LottieView from 'lottie-react-native';
 import api from '@/app/services/api';
-import { PaymentService } from '@/app/services/payment.service';
+import { paymentService } from '@/app/services/payment.service';
 import type { PaymentHistory } from '@/app/services/payment.types';
 
 // Menu items for student features
@@ -178,7 +178,7 @@ const PaymentCard = () => {
       setError(null);
 
       console.log('Loading rent data for tenant:', student.TenantID);
-      const data = await PaymentService.getPaymentSummary(student.TenantID.toString());
+      const data = await paymentService.getPaymentSummary(student.TenantID.toString());
       console.log('Received payment data:', data);
       
       if (!data) {
@@ -354,7 +354,7 @@ export default function StudentDashboard() {
       setLoadingPayments(true);
       setPaymentError(null);
       
-      const history = await PaymentService.getPaymentHistory(student!.TenantID.toString());
+      const history = await paymentService.getPaymentHistory(student!.TenantID.toString());
       // Take only the 3 most recent payments
       setRecentPayments(history.slice(0, 3));
     } catch (error: any) {

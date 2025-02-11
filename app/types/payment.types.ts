@@ -32,4 +32,62 @@ export interface PaymentResponse {
     date: string;
     status: string;
   };
+}
+
+export interface PaymentChartData {
+  label: string;
+  value: number;
+  count: number;
+  total: number;
+  color: string;
+  glowColor: string;
+}
+
+export interface PaymentDistribution {
+  paid: number;
+  unpaid: number;
+  partiallyPaid: number;
+  overdue: number;
+}
+
+export interface PaymentAnalytics {
+  paymentDistribution: PaymentDistribution;
+  totalRevenue: number;
+  monthlyRevenue: number;
+  pendingPayments: number;
+  paidCount: number;
+  unpaidCount: number;
+  overdueCount: number;
+  partiallyPaidCount: number;
+  collectionEfficiency: number;
+  earlyPaymentCount: number;
+  paymentMethods: Array<{
+    method: string;
+    count: number;
+    amount: number;
+  }>;
+}
+
+export interface PaymentAnalyticsResponse {
+  success: boolean;
+  data?: PaymentAnalytics;
+  message?: string;
+}
+
+export interface PaymentStats {
+  totalRevenue: number;
+  pendingPayments: number;
+  monthlyRevenue: number;
+  paymentDistribution: {
+    paid: number;
+    unpaid: number;
+    overdue: number;
+  };
+  recentTransactions: Array<{
+    id: number;
+    studentName: string;
+    amount: number;
+    status: 'SUCCESS' | 'PENDING' | 'FAILED';
+    date: string;
+  }>;
 } 

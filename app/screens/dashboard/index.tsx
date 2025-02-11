@@ -10,6 +10,9 @@ import { getDashboardStats, DashboardStats } from '@/app/services/dashboard.serv
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '@/app/services/api';
 import { studentRegistrationService } from '@/app/services/student.registration.service';
+import { PaymentAnalyticsChart } from '@/app/components/charts/PaymentAnalyticsChart';
+import { paymentAnalyticsService } from '@/app/services/payment.analytics.service';
+import { PaymentChartData } from '@/app/types/payment.types';
 
 export default function DashboardHome() {
   const { theme, isDarkMode } = useTheme();
@@ -33,6 +36,9 @@ export default function DashboardHome() {
   const [manager, setManager] = useState(null);
   const [actionLoading, setActionLoading] = useState<{[key: number]: boolean}>({});
   const [actionError, setActionError] = useState<{[key: number]: string}>({});
+  const [paymentChartData, setPaymentChartData] = useState<PaymentChartData[]>([]);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   // Refs should also be at the top
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -91,6 +97,12 @@ export default function DashboardHome() {
     };
     fetchPendingRegistrations();
   }, []);
+
+  useEffect(() => {
+    if (manager?.pgId) {
+      loadPaymentAnalytics(manager.pgId);
+    }
+  }, [manager?.pgId]);
 
   // Move all the helper functions after hooks
   const loadManagerData = async () => {
@@ -188,6 +200,22 @@ export default function DashboardHome() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadPaymentAnalytics = async (pgId: string | number) => {
+    try {
+      setPaymentLoading(true);
+      setPaymentError(null);
+      
+      const analytics = await paymentAnalyticsService.getAnalytics(pgId);
+      const chartData = paymentAnalyticsService.transformToChartData(analytics);
+      setPaymentChartData(chartData);
+    } catch (error) {
+      console.error('Error loading payment analytics:', error);
+      setPaymentError('Failed to load payment analytics');
+    } finally {
+      setPaymentLoading(false);
     }
   };
 
@@ -833,52 +861,71 @@ export default function DashboardHome() {
         </LinearGradient>
       </View>
 
-      <View style={[styles.chartsContainer, { padding: 12 }]}>
-        <LinearGradient
-          colors={isDarkMode 
-            ? ['#2D2D2D', '#383838'] as const
-            : ['#FFFFFF', '#F8F8F8'] as const}
-          style={[styles.chartCard, styles.fullWidth, {
-            borderColor: isDarkMode 
-              ? 'rgba(255, 255, 255, 0.1)' 
-              : 'rgba(0, 0, 0, 0.05)',
-          }]}
-        >
-          <Text style={[styles.chartTitle, { color: theme.colors.text }]}>
-            Monthly Payment Collection
-          </Text>
-          <LineChart
-            data={{
-              labels: stats?.monthlyPayments?.map(p => p.month) || [],
-              datasets: [{
-                data: stats?.monthlyPayments?.map(p => p.amount) || [0]
-              }]
-            }}
-            width={screenWidth - 64}
-            height={220}
-            chartConfig={chartConfig}
-            bezier
-            style={styles.lineChart}
-          />
-          <View style={[styles.paymentSummary, {
-            borderTopColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#e0e0e0'
-          }]}>
-            <Text style={{ color: theme.colors.text }}>
-              Total Collected: ₹{(stats?.revenue?.total || 0).toLocaleString()}
-            </Text>
-            <Text style={{ color: theme.colors.text }}>
-              Pending: ₹{(stats?.revenue?.pending || 0).toLocaleString()}
-            </Text>
-            <Button 
-              mode="text" 
+      {/* Payment Analytics Section */}
+      <Surface style={[styles.section, { 
+        margin: 12,
+        borderRadius: 20,
+        elevation: isDarkMode ? 4 : 2,
+      }]}>
+        <View style={{ padding: 16 }}>
+          <View style={{ 
+            flexDirection: 'row', 
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 16 
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <IconButton 
+                icon="chart-bar" 
+                size={24} 
+                iconColor={theme.colors.primary} 
+                style={{ margin: 0 }} 
+              />
+              <Text style={[styles.sectionTitle, { 
+                marginLeft: 8,
+                color: theme.colors.onSurface,
+                fontSize: 16,
+                fontWeight: 'bold'
+              }]}>
+                Payment Analytics
+              </Text>
+            </View>
+            
+            <Button
+              mode="text"
               onPress={() => router.push('/screens/dashboard/payments')}
-              textColor={theme.colors.primary}
+              contentStyle={{ flexDirection: 'row-reverse' }}
+              icon="chevron-right"
             >
-              View Payment Details →
+              Details
             </Button>
           </View>
-        </LinearGradient>
-      </View>
+
+          {paymentLoading ? (
+            <View style={{ padding: 20, alignItems: 'center' }}>
+              <ActivityIndicator size="large" color={theme.colors.primary} />
+            </View>
+          ) : paymentError ? (
+            <View style={styles.errorContainer}>
+              <Text style={{ color: theme.colors.error }}>{paymentError}</Text>
+              <Button onPress={() => loadPaymentAnalytics(manager?.pgId)}>
+                Retry
+              </Button>
+            </View>
+          ) : (
+            <PaymentAnalyticsChart 
+              data={paymentChartData}
+              isDarkMode={isDarkMode}
+              onBarPress={(label) => {
+                router.push({
+                  pathname: '/screens/dashboard/payments',
+                  params: { filter: label.toLowerCase() }
+                });
+              }}
+            />
+          )}
+        </View>
+      </Surface>
     </ScrollView>
   );
 }
@@ -1081,9 +1128,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
+    flex: 1,
   },
   pendingCards: {
     flexDirection: 'row',
@@ -1107,5 +1152,13 @@ const styles = StyleSheet.create({
   noDataText: {
     textAlign: 'center',
     opacity: 0.7,
+  },
+  section: {
+    overflow: 'hidden',
+  },
+  errorContainer: {
+    padding: 20,
+    alignItems: 'center',
+    gap: 12,
   },
 }); 

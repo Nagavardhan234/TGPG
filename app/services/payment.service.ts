@@ -5,6 +5,36 @@ import type {
   PaymentRequest, 
   PaymentResponse 
 } from './payment.types';
+import { ENDPOINTS } from '../constants/endpoints';
+
+export interface PaymentStats {
+  totalRevenue: number;
+  pendingPayments: number;
+  monthlyRevenue: number;
+  paymentDistribution: {
+    paid: number;
+    unpaid: number;
+    overdue: number;
+  };
+  recentTransactions: Array<{
+    id: number;
+    studentName: string;
+    amount: number;
+    status: 'PAID' | 'PENDING' | 'FAILED';
+    date: string;
+  }>;
+}
+
+export interface TenantPayment {
+  id: number;
+  name: string;
+  roomNumber: string;
+  phoneNumber: string;
+  totalRent: number;
+  paidAmount: number;
+  dueDate: string;
+  status: 'PAID' | 'UNPAID' | 'PARTIALLY_PAID' | 'OVERDUE';
+}
 
 class PaymentServiceClass {
   private validatePaymentSummary(data: any): data is PaymentSummary {
@@ -43,7 +73,7 @@ class PaymentServiceClass {
 
     try {
       console.log('Fetching payment summary for tenant:', tenantId);
-      const response = await api.get(`/api/students/payments/summary/${tenantId}`);
+      const response = await api.get(ENDPOINTS.STUDENT_PAYMENT.SUMMARY(tenantId));
       
       if (!this.validatePaymentSummary(response.data)) {
         console.error('Invalid data structure:', response.data);
@@ -59,7 +89,7 @@ class PaymentServiceClass {
 
   async getPaymentHistory(tenantId: string): Promise<PaymentHistory[]> {
     try {
-      const response = await api.get(`/api/students/payments/history/${tenantId}`);
+      const response = await api.get(ENDPOINTS.STUDENT_PAYMENT.HISTORY(tenantId));
       return response.data;
     } catch (error) {
       console.error('Error fetching payment history:', error);
@@ -69,7 +99,7 @@ class PaymentServiceClass {
 
   async submitPayment(tenantId: string, payment: PaymentRequest): Promise<PaymentResponse> {
     try {
-      const response = await api.post(`/api/students/payments/submit/${tenantId}`, payment);
+      const response = await api.post(ENDPOINTS.STUDENT_PAYMENT.SUBMIT(tenantId), payment);
       
       if (!response.data.success) {
         throw new Error(response.data.error || 'Payment failed');
@@ -116,6 +146,91 @@ class PaymentServiceClass {
         return false;
     }
   }
+
+  async getPaymentStats(pgId: number | string): Promise<PaymentStats> {
+    try {
+      console.log('Fetching payment stats for PG:', pgId);
+      const response = await api.get(ENDPOINTS.PG_PAYMENT.STATS(pgId));
+      
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || 'Failed to fetch payment statistics');
+      }
+
+      return this.transformPaymentStats(response.data.data);
+    } catch (error) {
+      console.error('Error fetching payment stats:', error);
+      throw error;
+    }
+  }
+
+  private transformPaymentStats(data: any): PaymentStats {
+    return {
+      totalRevenue: data.totalRevenue || 0,
+      pendingPayments: data.pendingPayments || 0,
+      monthlyRevenue: data.monthlyRevenue || 0,
+      paymentDistribution: {
+        paid: data.paymentDistribution?.paid || 0,
+        unpaid: data.paymentDistribution?.unpaid || 0,
+        overdue: data.paymentDistribution?.overdue || 0
+      },
+      recentTransactions: (data.recentTransactions || []).map((transaction: any) => ({
+        id: transaction.id,
+        studentName: transaction.studentName,
+        amount: transaction.amount,
+        status: transaction.status,
+        date: transaction.date
+      }))
+    };
+  }
+
+  async getTenantPayments(pgId: number | string): Promise<TenantPayment[]> {
+    try {
+      console.log('Fetching tenant payments for PG:', pgId);
+      const response = await api.get(`${ENDPOINTS.PG_PAYMENT.TENANT_PAYMENTS(pgId)}`);
+      
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || 'Failed to fetch tenant payments');
+      }
+
+      return this.transformTenantPayments(response.data.data);
+    } catch (error) {
+      console.error('Error fetching tenant payments:', error);
+      throw error;
+    }
+  }
+
+  private transformTenantPayments(data: any[]): TenantPayment[] {
+    return data.map(tenant => ({
+      id: tenant.id,
+      name: tenant.name,
+      roomNumber: tenant.roomNumber,
+      phoneNumber: tenant.phoneNumber,
+      totalRent: tenant.totalRent,
+      paidAmount: tenant.paidAmount,
+      dueDate: tenant.dueDate,
+      status: this.calculatePaymentStatus(tenant.paidAmount, tenant.totalRent, tenant.dueDate)
+    }));
+  }
+
+  private calculatePaymentStatus(paid: number, total: number, dueDate: string): TenantPayment['status'] {
+    const isDueExpired = new Date(dueDate) < new Date();
+    
+    if (paid >= total) return 'PAID';
+    if (paid === 0 && isDueExpired) return 'OVERDUE';
+    if (paid === 0) return 'UNPAID';
+    if (paid < total) return isDueExpired ? 'OVERDUE' : 'PARTIALLY_PAID';
+    
+    return 'UNPAID';
+  }
+
+  async sendPaymentReminder(tenantId: number): Promise<void> {
+    try {
+      await api.post(`${ENDPOINTS.PG_PAYMENT.SEND_REMINDER}/${tenantId}`);
+    } catch (error) {
+      console.error('Error sending payment reminder:', error);
+      throw error;
+    }
+  }
 }
 
-export const PaymentService = new PaymentServiceClass();
+export const paymentService = new PaymentServiceClass();
