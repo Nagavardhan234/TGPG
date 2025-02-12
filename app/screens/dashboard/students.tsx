@@ -32,7 +32,8 @@ import { ExtendedTheme } from '@/app/types/theme';
 import * as DocumentPicker from 'expo-document-picker';
 import { TokenExpiredError } from '@/app/services/student.service';
 import { SkeletonLayouts } from '@/app/components/Skeleton';
-import { ErrorBoundary } from '@/app/components/ErrorBoundary';
+import ErrorBoundaryClass from '@/app/components/ErrorBoundary';
+import DashboardLayout from '@/app/components/layouts/DashboardLayout';
 
 interface FormData {
   name: string;
@@ -1305,12 +1306,12 @@ export default function StudentManagement() {
   };
 
   return (
-    <ErrorBoundary
+    <ErrorBoundaryClass
       fallback={<ErrorFallback error={null} onReset={() => window.location.reload()} />}
       onError={handleError}
     >
       <StudentManagementContent />
-    </ErrorBoundary>
+    </ErrorBoundaryClass>
   );
 }
 
