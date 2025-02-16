@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import { Redirect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './context/AuthContext';
+import { useStudentAuth } from './context/StudentAuthContext';
 import { ActivityIndicator, View } from 'react-native';
 
 export default function Index() {
-  const { isAuthenticated } = useAuth();
-  const [isLoading, setIsLoading] = useState(true);
-  const [shouldRedirectToLogin, setShouldRedirectToLogin] = useState(false);
+  const { isAuthenticated: isManagerAuthenticated } = useAuth();
+  const { isAuthenticated: isStudentAuthenticated } = useStudentAuth();
+  const [isLoading, setIsLoading] = useState(false);
+  const [userType, setUserType] = useState<'manager' | 'student' | null>(null);
 
   useEffect(() => {
     checkAuth();
@@ -15,13 +17,19 @@ export default function Index() {
 
   const checkAuth = async () => {
     try {
-      const token = await AsyncStorage.getItem('token');
-      setShouldRedirectToLogin(!token);
+      const [managerToken, studentToken] = await Promise.all([
+        AsyncStorage.getItem('token'),
+        AsyncStorage.getItem('student_token')
+      ]);
+
+      if (managerToken) {
+        setUserType('manager');
+      } else if (studentToken) {
+        setUserType('student');
+      }
     } catch (error) {
       console.error('Auth check error:', error);
-      setShouldRedirectToLogin(true);
-    } finally {
-      setIsLoading(false);
+      setUserType(null);
     }
   };
 
@@ -33,13 +41,24 @@ export default function Index() {
     );
   }
 
-  if (isAuthenticated) {
+  // Handle authenticated states
+  if (isManagerAuthenticated) {
     return <Redirect href="/screens/dashboard" />;
   }
-
-  if (shouldRedirectToLogin) {
-    return <Redirect href="/screens/LoginScreen" />;
+  
+  if (isStudentAuthenticated) {
+    return <Redirect href="/screens/student/dashboard" />;
   }
 
-  return null;
+  // Handle loading states based on stored tokens
+  if (userType === 'manager') {
+    return <Redirect href="/screens/dashboard" />;
+  }
+  
+  if (userType === 'student') {
+    return <Redirect href="/screens/student/dashboard" />;
+  }
+
+  // Default to login screen
+  return <Redirect href="/screens/LoginScreen" />;
 } 

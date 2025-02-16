@@ -18,25 +18,25 @@ const menuItems = [
     key: 'students',
     title: 'Student Management',
     icon: 'account-group-outline',
-    route: '/screens/dashboard/students'
+    route: 'students'
   },
   {
     key: 'rooms',
     title: 'Room Management',
     icon: 'home-outline',
-    route: '/screens/dashboard/rooms'
+    route: 'rooms'
   },
   {
     key: 'complaints',
     title: 'Complaints',
     icon: 'alert-circle-outline',
-    route: '/screens/dashboard/complaints'
+    route: 'complaints'
   },
   {
     key: 'payments',
     title: 'Payments Overview',
     icon: 'credit-card-outline',
-    route: '/screens/dashboard/payments'
+    route: 'payments'
   }
 ];
 
@@ -50,6 +50,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const pathname = usePathname();
+  
+  console.log('Current pathname:', pathname); // Debug log
 
   const handleLogout = async () => {
     try {
@@ -61,13 +63,36 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   };
 
   const getCurrentRouteKey = (path: string) => {
-    const parts = path.split('/');
-    const lastPart = parts[parts.length - 1];
-    return lastPart || 'index';
+    // Remove trailing slash if exists
+    const cleanPath = path.endsWith('/') ? path.slice(0, -1) : path;
+    
+    // Special case for dashboard index
+    if (cleanPath === '/screens/dashboard') {
+      return 'index';
+    }
+    
+    // Extract the relevant part of the path
+    const match = cleanPath.match(/\/screens\/dashboard\/([^\/]+)/);
+    return match ? match[1] : 'index';
   };
 
   const currentRouteKey = getCurrentRouteKey(pathname);
+  console.log('Current route key:', currentRouteKey); // Debug log
+
+  const isRouteActive = (itemKey: string) => {
+    // Special case for dashboard index
+    if (itemKey === 'index') {
+      return pathname === '/screens/dashboard';
+    }
+    
+    // For other routes, check if the current path starts with the route
+    return pathname.startsWith(`/screens/dashboard/${itemKey}`);
+  };
+
   const currentRoute = menuItems.find(item => item.key === currentRouteKey) || menuItems[0];
+
+  // Log the current route object
+  console.log('Current route object:', currentRoute);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -212,26 +237,32 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 </LinearGradient>
               </View>
               <Drawer.Section>
-                {menuItems.map((item) => (
-                  <Drawer.Item
-                    key={item.key}
-                    icon={item.icon}
-                    label={item.title}
-                    active={currentRouteKey === item.key}
-                    onPress={() => {
-                      router.push(item.route);
-                      setIsDrawerVisible(false);
-                    }}
-                    theme={{
-                      colors: {
-                        onSurfaceVariant: isDarkMode ? '#fff' : '#000',
-                        onSecondaryContainer: theme.colors.primary,
-                        secondaryContainer: isDarkMode ? 'rgba(208, 188, 255, 0.1)' : theme.colors.primaryContainer,
-                      }
-                    }}
-                    style={styles.drawerItem}
-                  />
-                ))}
+                {menuItems.map((item) => {
+                  const active = isRouteActive(item.key);
+                  return (
+                    <Drawer.Item
+                      key={item.key}
+                      icon={item.icon}
+                      label={item.title}
+                      active={active}
+                      onPress={() => {
+                        const fullRoute = item.key === 'index' 
+                          ? item.route 
+                          : `/screens/dashboard/${item.route}`;
+                        router.push(fullRoute);
+                        setIsDrawerVisible(false);
+                      }}
+                      theme={{
+                        colors: {
+                          onSurfaceVariant: isDarkMode ? '#fff' : '#000',
+                          onSecondaryContainer: theme.colors.primary,
+                          secondaryContainer: isDarkMode ? 'rgba(208, 188, 255, 0.1)' : theme.colors.primaryContainer,
+                        }
+                      }}
+                      style={styles.drawerItem}
+                    />
+                  );
+                })}
               </Drawer.Section>
             </View>
           </>

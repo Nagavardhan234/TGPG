@@ -85,67 +85,58 @@ export const StudentDashboardLayout: React.FC<Props> = ({
   const { student, isAuthenticated, logout } = useStudentAuth();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [isMounted, setIsMounted] = useState(true);
-  const pathname = usePathname();
   const isConnected = useNetworkStore((state) => state.isConnected);
 
   useEffect(() => {
-    setIsMounted(true);
-    const timer = setTimeout(() => {
-      if (isMounted) {
-        setIsInitialized(true);
-      }
-    }, 0);
-    return () => {
-      setIsMounted(false);
-      clearTimeout(timer);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (isInitialized && (!isAuthenticated || !student) && isMounted) {
-      router.replace('/screens/student/login');
+    if (!isAuthenticated || !student) {
+      router.replace('/screens/LoginScreen');
     }
-  }, [isInitialized, isAuthenticated, student, isMounted]);
+  }, [isAuthenticated, student]);
+
+  if (!isAuthenticated || !student) {
+    return <LoadingOverlay />;
+  }
 
   const handleLogout = async () => {
     try {
       await logout();
-      router.replace('/screens/student/login');
+      router.replace('/screens/LoginScreen');
     } catch (error) {
       console.error('Logout error:', error);
     }
   };
 
-  const renderMenuItem = (item: typeof studentMenuItems[number]) => (
-    <List.Item
-      key={item.route}
-      title={item.label}
-      left={props => <List.Icon {...props} icon={item.icon} />}
-      onPress={() => {
-        router.push(item.route as any);
-        setIsDrawerOpen(false);
-      }}
-      style={[
-        styles.menuItem,
-        item.route === '/screens/student/dashboard' && { 
-          backgroundColor: theme.colors.primary + '20'
-        }
-      ]}
-      titleStyle={[
-        { color: theme.colors.text },
-        item.route === '/screens/student/dashboard' && { 
-          color: theme.colors.primary,
-          fontWeight: '600'
-        }
-      ]}
-    />
-  );
+  const isRouteActive = (route: string) => {
+    return pathname === route;
+  };
 
-  if (!isInitialized) {
-    return <LoadingOverlay />;
-  }
+  const renderMenuItem = (item: typeof studentMenuItems[number]) => {
+    const active = isRouteActive(item.route);
+    return (
+      <List.Item
+        key={item.route}
+        title={item.label}
+        left={props => <List.Icon {...props} icon={item.icon} />}
+        onPress={() => {
+          router.push(item.route as any);
+          setIsDrawerOpen(false);
+        }}
+        style={[
+          styles.menuItem,
+          active && { 
+            backgroundColor: theme.colors.primary + '20'
+          }
+        ]}
+        titleStyle={[
+          { color: theme.colors.text },
+          active && { 
+            color: theme.colors.primary,
+            fontWeight: '600'
+          }
+        ]}
+      />
+    );
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import api from '../services/api';
 
 export interface Manager {
   id: number;
@@ -47,49 +48,73 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ]);
 
       if (token && managerData) {
+        const manager = JSON.parse(managerData);
+        const pg = pgData ? JSON.parse(pgData) : null;
+        
+        // Set token in headers
+        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        
+        // Set the state
         setIsAuthenticated(true);
-        setManager(JSON.parse(managerData));
-        if (pgData) {
-          setPG(JSON.parse(pgData));
-        }
+        setManager(manager);
+        setToken(token);
+        setPG(pg);
       } else {
         setIsAuthenticated(false);
         setManager(null);
         setPG(null);
+        setToken(null);
       }
     } catch (error) {
       console.error('Auth check error:', error);
       setIsAuthenticated(false);
+      setManager(null);
+      setPG(null);
+      setToken(null);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      // Clear state
+      setIsAuthenticated(false);
+      setManager(null);
+      setPG(null);
+      setToken(null);
+      delete api.defaults.headers.common['Authorization'];
+      
+      // Clear storage
+      await AsyncStorage.multiRemove(['token', 'manager', 'pg']);
+      
+      // Redirect
+      router.replace('/screens/LoginScreen');
+    } catch (error) {
+      console.error('Logout error:', error);
     }
   };
 
   const login = async (token: string, managerData: Manager, pgData: PG | null) => {
     try {
-      console.log('Storing token:', token);
-      await AsyncStorage.setItem('token', token);
-      await AsyncStorage.setItem('manager', JSON.stringify(managerData));
-      if (pgData) {
-        await AsyncStorage.setItem('pg', JSON.stringify(pgData));
-      }
+      // Set token in headers
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      
+      // Set state
       setIsAuthenticated(true);
       setManager(managerData);
       setPG(pgData);
       setToken(token);
+
+      // Update storage
+      const storagePromises = [
+        AsyncStorage.setItem('token', token),
+        AsyncStorage.setItem('manager', JSON.stringify(managerData))
+      ];
+      if (pgData) {
+        storagePromises.push(AsyncStorage.setItem('pg', JSON.stringify(pgData)));
+      }
+      await Promise.all(storagePromises);
     } catch (error) {
       console.error('Login error:', error);
-      throw error;
-    }
-  };
-
-  const logout = async () => {
-    try {
-      await AsyncStorage.multiRemove(['token', 'manager', 'pg']);
-      setIsAuthenticated(false);
-      setManager(null);
-      setPG(null);
-      router.replace('/');
-    } catch (error) {
-      console.error('Logout error:', error);
       throw error;
     }
   };
@@ -101,7 +126,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       pg, 
       token,
       login, 
-      logout 
+      logout: handleLogout 
     }}>
       {children}
     </AuthContext.Provider>

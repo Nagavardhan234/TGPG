@@ -38,51 +38,69 @@ export const StudentAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
       if (token && studentData) {
         const student = JSON.parse(studentData);
+        
+        // Set token in headers
+        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        
+        // Set the state
         setIsAuthenticated(true);
         setStudent(student);
-        // Set token in axios headers
-        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       } else {
         setIsAuthenticated(false);
         setStudent(null);
-        delete api.defaults.headers.common['Authorization'];
       }
     } catch (error) {
       console.error('Student auth check error:', error);
       setIsAuthenticated(false);
       setStudent(null);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      // Clear state
+      setIsAuthenticated(false);
+      setStudent(null);
       delete api.defaults.headers.common['Authorization'];
+      
+      // Clear storage
+      await AsyncStorage.multiRemove(['student_token', 'student']);
+      
+      // Redirect
+      router.replace('/screens/LoginScreen');
+    } catch (error) {
+      console.error('Student logout error:', error);
     }
   };
 
   const login = async (token: string, studentData: Student) => {
     try {
-      await AsyncStorage.setItem('student_token', token);
-      await AsyncStorage.setItem('student', JSON.stringify(studentData));
-      // Set token in axios headers
+      // Set token in headers
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      
+      // Set state
       setIsAuthenticated(true);
       setStudent(studentData);
+
+      // Update storage
+      const storagePromises = [
+        AsyncStorage.setItem('student_token', token),
+        AsyncStorage.setItem('student', JSON.stringify(studentData))
+      ];
+      await Promise.all(storagePromises);
     } catch (error) {
       console.error('Student login error:', error);
       throw error;
     }
   };
 
-  const logout = async () => {
-    try {
-      await AsyncStorage.multiRemove(['student_token', 'student']);
-      setIsAuthenticated(false);
-      setStudent(null);
-      router.replace('/screens/student/login');
-    } catch (error) {
-      console.error('Student logout error:', error);
-      throw error;
-    }
-  };
-
   return (
-    <StudentAuthContext.Provider value={{ isAuthenticated, student, login, logout }}>
+    <StudentAuthContext.Provider value={{ 
+      isAuthenticated, 
+      student, 
+      login, 
+      logout: handleLogout 
+    }}>
       {children}
     </StudentAuthContext.Provider>
   );
