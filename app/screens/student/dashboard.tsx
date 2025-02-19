@@ -337,11 +337,21 @@ const PaymentCard = () => {
 
 export default function StudentDashboard() {
   const { theme } = useTheme();
-  const { student } = useStudentAuth();
+  const { student, isAuthenticated } = useStudentAuth();
   const paperTheme = usePaperTheme();
   const [recentPayments, setRecentPayments] = useState<PaymentHistory[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      if (!isAuthenticated || !student) {
+        await new Promise(resolve => setTimeout(resolve, 0)); // Ensure layout is mounted
+        router.replace('/screens/LoginScreen');
+      }
+    };
+    checkAuth();
+  }, [isAuthenticated, student]);
 
   useEffect(() => {
     if (student?.TenantID) {
@@ -499,9 +509,6 @@ export default function StudentDashboard() {
                 <Text style={[styles.profileName, { color: theme?.colors?.onSurface }]}>
                   {student?.FullName}
                 </Text>
-                <Text style={{ color: theme?.colors?.onSurfaceVariant }}>
-                  Room {student?.Room_No}
-                </Text>
               </View>
             </View>
             <IconButton 
@@ -513,16 +520,97 @@ export default function StudentDashboard() {
           <Divider style={styles.divider} />
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: theme?.colors?.primary }]}>120</Text>
-              <Text style={styles.statLabel}>Days</Text>
+              <View style={styles.statIconContainer}>
+                <IconButton
+                  icon={(() => {
+                    if (!student?.MoveInDate) return 'calendar-clock';
+                    const moveInDate = new Date(student.MoveInDate);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    return moveInDate.getTime() < today.getTime() ? 'calendar-clock' : 'calendar-arrow-right';
+                  })()}
+                  size={24}
+                  iconColor={theme?.colors?.primary}
+                  style={styles.statIcon}
+                />
+                <Text style={[styles.statValue, { color: theme?.colors?.primary }]}>
+                  {(() => {
+                    if (!student?.MoveInDate) {
+                      console.log('No MoveInDate available');
+                      return 0;
+                    }
+                    
+                    try {
+                      console.log('========= Date Calculation Debug =========');
+                      console.log('1. Original MoveInDate from student:', student.MoveInDate);
+                      
+                      // Parse the stored ISO string
+                      const moveInDate = new Date(student.MoveInDate);
+                      const today = new Date();
+                      
+                      // Reset hours for both dates
+                      moveInDate.setHours(0, 0, 0, 0);
+                      today.setHours(0, 0, 0, 0);
+                      
+                      console.log('2. Parsed moveInDate:', moveInDate.toISOString());
+                      console.log('3. Today:', today.toISOString());
+                      
+                      // Calculate the difference
+                      const diffTime = today.getTime() - moveInDate.getTime();
+                      const daysDiff = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                      
+                      console.log('4. Time difference (ms):', diffTime);
+                      console.log('5. Days difference:', daysDiff);
+                      console.log('======================================');
+                      
+                      return Math.abs(daysDiff);
+                    } catch (error) {
+                      console.error('Error in date calculation:', error);
+                      console.error('Student data:', student);
+                      return 0;
+                    }
+                  })()}
+                </Text>
+              </View>
+              <Text style={[styles.statLabel, { color: theme?.colors?.onSurfaceVariant }]}>
+                {(() => {
+                  if (!student?.MoveInDate) return 'Days Spent';
+                  
+                  const moveInDate = new Date(student.MoveInDate);
+                  const today = new Date();
+                  
+                  // Reset hours for clean comparison
+                  moveInDate.setHours(0, 0, 0, 0);
+                  today.setHours(0, 0, 0, 0);
+                  
+                  return moveInDate.getTime() < today.getTime() ? 'Days Spent' : 'Days Until Move In';
+                })()}
+              </Text>
             </View>
             <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: theme?.colors?.primary }]}>4.8</Text>
-              <Text style={styles.statLabel}>Rating</Text>
+              <View style={styles.statIconContainer}>
+                <IconButton
+                  icon="door"
+                  size={24}
+                  iconColor={theme?.colors?.primary}
+                  style={styles.statIcon}
+                />
+                <Text style={[styles.statValue, { color: theme?.colors?.primary }]}>
+                  {student?.Room_No || '-'}
+                </Text>
+              </View>
+              <Text style={[styles.statLabel, { color: theme?.colors?.onSurfaceVariant }]}>Room</Text>
             </View>
             <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: theme?.colors?.primary }]}>15</Text>
-              <Text style={styles.statLabel}>Events</Text>
+              <View style={[styles.statusContainer, styles.statIconContainer]}>
+                <IconButton
+                  icon={student?.Status === 'ACTIVE' ? 'check-circle' : 'alert-circle'}
+                  size={24}
+                  iconColor={student?.Status === 'ACTIVE' ? theme?.colors?.success || '#4CAF50' : theme?.colors?.error}
+                  style={styles.statusIcon}
+                />
+              </View>
+              <Text style={[styles.statLabel, { color: theme?.colors?.onSurfaceVariant }]}>Status</Text>
             </View>
           </View>
         </Surface>
@@ -646,13 +734,40 @@ const styles = StyleSheet.create({
   statItem: {
     alignItems: 'center',
   },
+  statIconContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme => theme?.colors?.surfaceVariant || '#F5F5F5',
+    borderRadius: 16,
+    padding: 4,
+    marginBottom: 8,
+  },
+  statIcon: {
+    margin: 0,
+    padding: 0,
+  },
   statValue: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
+    marginLeft: 4,
   },
   statLabel: {
     fontSize: 12,
-    opacity: 0.7,
+    fontWeight: '500',
+  },
+  statusContainer: {
+    backgroundColor: 'transparent',
+    padding: 0,
+  },
+  statusIcon: {
+    margin: 0,
+    padding: 0,
+  },
+  statusText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: -8,
   },
   menuSection: {
     marginHorizontal: 16,
@@ -850,19 +965,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingRight: 12,
     marginBottom: 16,
-  },
-  statusIcon: {
-    margin: 0,
-  },
-  statusText: {
-    fontSize: 14,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  dueDateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
   },
   clockIcon: {
     margin: 0,

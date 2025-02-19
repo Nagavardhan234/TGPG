@@ -86,16 +86,7 @@ export const StudentDashboardLayout: React.FC<Props> = ({
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   const isConnected = useNetworkStore((state) => state.isConnected);
-
-  useEffect(() => {
-    if (!isAuthenticated || !student) {
-      router.replace('/screens/LoginScreen');
-    }
-  }, [isAuthenticated, student]);
-
-  if (!isAuthenticated || !student) {
-    return <LoadingOverlay />;
-  }
+  const pathname = usePathname();
 
   const handleLogout = async () => {
     try {
@@ -105,6 +96,19 @@ export const StudentDashboardLayout: React.FC<Props> = ({
       console.error('Logout error:', error);
     }
   };
+
+  if (!isAuthenticated || !student) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <Surface style={[styles.authCheckContainer, { backgroundColor: theme.colors.surface }]}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={[styles.authCheckText, { color: theme.colors.onSurface }]}>
+            Checking authentication...
+          </Text>
+        </Surface>
+      </View>
+    );
+  }
 
   const isRouteActive = (route: string) => {
     return pathname === route;
@@ -285,5 +289,15 @@ const styles = StyleSheet.create({
   },
   menuItem: {
     padding: 12,
+  },
+  authCheckContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  authCheckText: {
+    marginTop: 16,
+    fontSize: 16,
   },
 }); 

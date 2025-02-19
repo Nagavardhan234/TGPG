@@ -11,6 +11,7 @@ interface StudentResponse {
   roomNo: number;
   pgId: number;
   status: string;
+  moveInDate: string;
 }
 
 interface LoginResponse {
@@ -71,7 +72,8 @@ export const loginStudent = async (credentials: { phone: string; password: strin
       Phone: response.data.user.phone,
       Room_No: response.data.user.roomNo,
       pgId: response.data.user.pgId,
-      Status: response.data.user.status || 'ACTIVE'
+      Status: response.data.user.status || 'ACTIVE',
+      MoveInDate: response.data.user.moveInDate || new Date().toISOString()
     };
     await AsyncStorage.setItem('student', JSON.stringify(userData));
     console.log('[Student Auth] User data stored:', userData);

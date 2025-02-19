@@ -10,6 +10,8 @@ interface Student {
   Phone: string;
   Room_No: number;
   pgId: number;
+  MoveInDate: string;
+  Status: string;
 }
 
 interface StudentAuthContextType {
@@ -38,6 +40,23 @@ export const StudentAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
       if (token && studentData) {
         const student = JSON.parse(studentData);
+        
+        // Ensure MoveInDate is properly parsed and stored as ISO string
+        if (student.MoveInDate) {
+          // Parse the date parts explicitly
+          const [datePart] = student.MoveInDate.split('T');
+          const [year, month, day] = datePart.split('-').map(Number);
+          // Create date object (month - 1 because JS months are 0-based)
+          const moveInDate = new Date(year, month - 1, day);
+          moveInDate.setHours(0, 0, 0, 0);
+          student.MoveInDate = moveInDate.toISOString();
+          
+          console.log('Auth Context - Parsed MoveInDate:', {
+            original: student.MoveInDate,
+            parsed: moveInDate.toISOString(),
+            components: { year, month, day }
+          });
+        }
         
         // Set token in headers
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -75,6 +94,15 @@ export const StudentAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const login = async (token: string, studentData: Student) => {
     try {
+      // Ensure MoveInDate is properly formatted before storing
+      if (studentData.MoveInDate) {
+        const [datePart] = studentData.MoveInDate.split('T');
+        const [year, month, day] = datePart.split('-').map(Number);
+        const moveInDate = new Date(year, month - 1, day);
+        moveInDate.setHours(0, 0, 0, 0);
+        studentData.MoveInDate = moveInDate.toISOString();
+      }
+
       // Set token in headers
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       
