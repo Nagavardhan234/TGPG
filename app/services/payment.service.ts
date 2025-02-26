@@ -3,27 +3,10 @@ import type {
   PaymentSummary, 
   PaymentHistory, 
   PaymentRequest, 
-  PaymentResponse 
+  PaymentResponse,
+  PaymentStats
 } from './payment.types';
 import { ENDPOINTS } from '../constants/endpoints';
-
-export interface PaymentStats {
-  totalRevenue: number;
-  pendingPayments: number;
-  monthlyRevenue: number;
-  paymentDistribution: {
-    paid: number;
-    unpaid: number;
-    overdue: number;
-  };
-  recentTransactions: Array<{
-    id: number;
-    studentName: string;
-    amount: number;
-    status: 'PAID' | 'PENDING' | 'FAILED';
-    date: string;
-  }>;
-}
 
 export interface TenantPayment {
   id: number;
@@ -73,7 +56,8 @@ class PaymentServiceClass {
 
     try {
       console.log('Fetching payment summary for tenant:', tenantId);
-      const response = await api.get(ENDPOINTS.STUDENT_PAYMENT.SUMMARY(tenantId));
+      const endpoint = ENDPOINTS.STUDENT_PAYMENT.SUMMARY(tenantId);
+      const response = await api.get(endpoint);
       
       if (!this.validatePaymentSummary(response.data)) {
         console.error('Invalid data structure:', response.data);
@@ -89,7 +73,8 @@ class PaymentServiceClass {
 
   async getPaymentHistory(tenantId: string): Promise<PaymentHistory[]> {
     try {
-      const response = await api.get(ENDPOINTS.STUDENT_PAYMENT.HISTORY(tenantId));
+      const endpoint = ENDPOINTS.STUDENT_PAYMENT.HISTORY(tenantId);
+      const response = await api.get(endpoint);
       return response.data;
     } catch (error) {
       console.error('Error fetching payment history:', error);
@@ -99,7 +84,8 @@ class PaymentServiceClass {
 
   async submitPayment(tenantId: string, payment: PaymentRequest): Promise<PaymentResponse> {
     try {
-      const response = await api.post(ENDPOINTS.STUDENT_PAYMENT.SUBMIT(tenantId), payment);
+      const endpoint = ENDPOINTS.STUDENT_PAYMENT.SUBMIT(tenantId);
+      const response = await api.post(endpoint, payment);
       
       if (!response.data.success) {
         throw new Error(response.data.error || 'Payment failed');
@@ -114,7 +100,8 @@ class PaymentServiceClass {
 
   async getPaymentProgress(tenantId: string): Promise<any> {
     try {
-      const response = await api.get(`/api/students/payments/progress/${tenantId}`);
+      const endpoint = ENDPOINTS.STUDENT_PAYMENT.PROGRESS(tenantId);
+      const response = await api.get(endpoint);
       return response.data;
     } catch (error) {
       console.error('Error fetching payment progress:', error);
@@ -124,9 +111,8 @@ class PaymentServiceClass {
 
   async getPaymentReceipt(tenantId: string, receiptNumber: string): Promise<any> {
     try {
-      const response = await api.get(
-        `/api/students/payments/receipt/${tenantId}/${receiptNumber}`
-      );
+      const endpoint = ENDPOINTS.STUDENT_PAYMENT.RECEIPT(tenantId, receiptNumber);
+      const response = await api.get(endpoint);
       return response.data;
     } catch (error) {
       console.error('Error fetching payment receipt:', error);
@@ -150,7 +136,8 @@ class PaymentServiceClass {
   async getPaymentStats(pgId: number | string): Promise<PaymentStats> {
     try {
       console.log('Fetching payment stats for PG:', pgId);
-      const response = await api.get(ENDPOINTS.PG_PAYMENT.STATS(pgId));
+      const endpoint = ENDPOINTS.PG_PAYMENT.STATS(pgId);
+      const response = await api.get(endpoint);
       
       if (!response.data?.success) {
         throw new Error(response.data?.message || 'Failed to fetch payment statistics');

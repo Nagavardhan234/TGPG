@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { API_CONFIG } from '../config/api.config';
 
 export const ENDPOINTS = {
   // Auth endpoints
@@ -157,11 +158,9 @@ export const ENDPOINTS = {
   MESSAGES: '/messages',
 };
 
-// Get the development server IP address
-const DEV_SERVER_IP = '192.168.0.5'; // Your computer's IP address
-
 // Configure BASE_URL based on platform and environment
-export const BASE_URL = __DEV__ ? 'http://localhost:3000' : 'https://your-production-api.com';
+export const BASE_URL = API_CONFIG.FORCE_PROD_API ? API_CONFIG.PROD_API_URL : 
+                       (__DEV__ ? 'http://localhost:3000' : 'https://3f67-49-206-44-60.ngrok-free.app');
 
 export const API_TIMEOUT = 10000; // 10 seconds
  

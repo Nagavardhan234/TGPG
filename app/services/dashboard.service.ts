@@ -47,7 +47,7 @@ export const getDashboardStats = async (managerId: number): Promise<DashboardSta
 
     // Now fetch dashboard stats with manager ID
     const response = await api.get<ApiResponse<DashboardStats>>(`${ENDPOINTS.DASHBOARD_STATS}/${manager.id}`);
-    console.log('Dashboard Stats:', response.data.data);
+    console.log('Dashboard Stats:', response.data);
     
     if (!response.data.success) {
       throw new Error(response.data.message || 'Failed to fetch dashboard stats');
@@ -81,12 +81,8 @@ export interface RoomStatsResponse {
 
 export const getRoomStats = async (pgId: number): Promise<RoomStatsResponse> => {
   try {
-    const token = await AsyncStorage.getItem('token');
-    const response = await api.get(`${API_URL}/api/dashboard/rooms/${pgId}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
+    const endpoint = ENDPOINTS.DASHBOARD_ROOM_STATS.replace(':pgId', pgId.toString());
+    const response = await api.get(endpoint);
     console.log('Room stats response:', response.data);
     return response.data;
   } catch (error) {
@@ -134,21 +130,13 @@ export const updateRoomNumber = async (
   newRoomNumber: string
 ): Promise<void> => {
   try {
-    const token = await AsyncStorage.getItem('token');
-    if (!token) {
-      throw new Error('Authentication token not found');
-    }
+    const endpoint = ENDPOINTS.ROOM_UPDATE_NUMBER
+      .replace(':pgId', pgId.toString())
+      .replace(':roomNumber', currentRoomNumber);
 
     const response = await api.put(
-      `${API_URL}/api/dashboard/rooms/${pgId}/${currentRoomNumber}`,
-      {
-        room_number: newRoomNumber
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      }
+      endpoint,
+      { room_number: newRoomNumber }
     );
 
     if (!response.data.success) {
@@ -177,8 +165,12 @@ export const updateRoomDetails = async (
   details: RoomDetails
 ): Promise<void> => {
   try {
+    const endpoint = ENDPOINTS.ROOM_UPDATE
+      .replace(':pgId', pgId.toString())
+      .replace(':roomNumber', roomNumber);
+
     const response = await api.put(
-      `${API_URL}/api/dashboard/room/${pgId}/${roomNumber}`,
+      endpoint,
       {
         room_number: details.room_number,
         capacity: details.capacity
@@ -204,10 +196,11 @@ export const updateOccupantRoom = async (
   updateData: RoomUpdateRequest
 ): Promise<void> => {
   try {
-    const response = await api.put(
-      `${API_URL}/api/dashboard/rooms/${pgId}/${currentRoom}/occupant`,
-      updateData
-    );
+    const endpoint = ENDPOINTS.ROOM_UPDATE_OCCUPANT
+      .replace(':pgId', pgId.toString())
+      .replace(':roomNumber', currentRoom);
+
+    const response = await api.put(endpoint, updateData);
 
     if (!response.data.success) {
       throw new Error(response.data.message);
@@ -224,10 +217,11 @@ export const updateOccupantRoom = async (
 
 export const deleteRoom = async (pgId: number, roomNumber: string): Promise<{ success: boolean; message: string }> => {
   try {
-    const response = await api.delete(
-      `${API_URL}/api/dashboard/room/${pgId}/${roomNumber}`
-    );
+    const endpoint = ENDPOINTS.ROOM_DELETE
+      .replace(':pgId', pgId.toString())
+      .replace(':roomNumber', roomNumber);
 
+    const response = await api.delete(endpoint);
     return response.data;
   } catch (error) {
     if (error.response?.data?.message) {
@@ -244,11 +238,8 @@ export interface AddRoomRequest {
 
 export const addRoom = async (pgId: number, data: AddRoomRequest): Promise<{ success: boolean; message: string }> => {
   try {
-    const response = await api.post(
-      `${API_URL}/api/dashboard/room/${pgId}`,
-      data
-    );
-
+    const endpoint = ENDPOINTS.ROOM_ADD.replace(':pgId', pgId.toString());
+    const response = await api.post(endpoint, data);
     return response.data;
   } catch (error) {
     if (error.response?.data?.message) {

@@ -346,7 +346,7 @@ export default function StudentDashboard() {
   useEffect(() => {
     const checkAuth = async () => {
       if (!isAuthenticated || !student) {
-        await new Promise(resolve => setTimeout(resolve, 0)); // Ensure layout is mounted
+        await new Promise(resolve => setTimeout(resolve, 0));
         router.replace('/screens/LoginScreen');
       }
     };
@@ -365,11 +365,17 @@ export default function StudentDashboard() {
       setPaymentError(null);
       
       const history = await paymentService.getPaymentHistory(student!.TenantID.toString());
-      // Take only the 3 most recent payments
-      setRecentPayments(history.slice(0, 3));
+      // Ensure history is an array and take only the 3 most recent payments
+      const payments = Array.isArray(history) ? history.slice(0, 3) : [];
+      setRecentPayments(payments);
+      
+      if (!Array.isArray(history)) {
+        console.warn('Payment history is not an array:', history);
+      }
     } catch (error: any) {
       console.error('Error loading recent payments:', error);
       setPaymentError(error.message || 'Failed to load recent payments');
+      setRecentPayments([]); // Ensure recentPayments is an empty array on error
     } finally {
       setLoadingPayments(false);
     }
@@ -661,8 +667,8 @@ export default function StudentDashboard() {
               No recent payments found
             </Text>
           ) : (
-            recentPayments.map(payment => (
-              <View key={payment.id} style={styles.paymentItem}>
+            recentPayments.map((payment, index) => (
+              <View key={payment.id || index} style={styles.paymentItem}>
                 <View style={styles.paymentInfo}>
                   <Text style={[styles.paymentAmount, { color: theme?.colors?.onSurface }]}>
                     ₹{payment.amount.toLocaleString()}

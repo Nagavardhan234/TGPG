@@ -136,27 +136,40 @@ class ComplaintsService {
         throw new ApiError(response.data.message || 'Failed to fetch complaints');
       }
 
+      // Helper function to safely parse and round numbers
+      const safeNumber = (value: any, decimals = 0): number => {
+        if (value === null || value === undefined) return 0;
+        const num = parseFloat(value);
+        return isNaN(num) ? 0 : Number(num.toFixed(decimals));
+      };
+
       // Transform the response data to match the frontend model
       const complaints = response.data.data.map(complaint => ({
         ...complaint,
-        complaintId: complaint.ComplaintID || complaint.complaintId,
-        pgId: complaint.PGID || complaint.pgId,
-        tenantId: complaint.TenantID || complaint.tenantId,
-        categoryId: complaint.CategoryID || complaint.categoryId,
-        title: complaint.Title || complaint.title,
-        description: complaint.Description || complaint.description,
-        priority: complaint.Priority || complaint.priority,
-        status: complaint.Status || complaint.status,
-        isEmergency: complaint.IsEmergency || complaint.isEmergency,
-        isEscalated: complaint.IsEscalated || complaint.isEscalated,
-        createdAt: complaint.CreatedAt || complaint.createdAt,
+        complaintId: safeNumber(complaint.ComplaintID || complaint.complaintId),
+        pgId: safeNumber(complaint.PGID || complaint.pgId),
+        tenantId: safeNumber(complaint.TenantID || complaint.tenantId),
+        categoryId: safeNumber(complaint.CategoryID || complaint.categoryId),
+        title: complaint.Title || complaint.title || '',
+        description: complaint.Description || complaint.description || '',
+        priority: (complaint.Priority || complaint.priority || 'low').toLowerCase(),
+        status: (complaint.Status || complaint.status || 'submitted').toLowerCase(),
+        isEmergency: Boolean(complaint.IsEmergency || complaint.isEmergency),
+        isEscalated: Boolean(complaint.IsEscalated || complaint.isEscalated),
+        createdAt: complaint.CreatedAt || complaint.createdAt || new Date().toISOString(),
         updatedAt: complaint.UpdatedAt || complaint.updatedAt,
         resolvedAt: complaint.ResolvedAt || complaint.resolvedAt,
-        lastActivityAt: complaint.LastActivityAt || complaint.lastActivityAt,
-        category: complaint.category || {
+        lastActivityAt: complaint.LastActivityAt || complaint.lastActivityAt || new Date().toISOString(),
+        category: complaint.category || (complaint.CategoryName ? {
+          categoryId: safeNumber(complaint.CategoryID),
           name: complaint.CategoryName,
-          icon: complaint.CategoryIcon
-        }
+          icon: complaint.CategoryIcon || 'alert-circle'
+        } : undefined),
+        feedback: complaint.feedback ? {
+          ...complaint.feedback,
+          feedbackId: safeNumber(complaint.feedback.feedbackId),
+          rating: safeNumber(complaint.feedback.rating, 1)
+        } : undefined
       }));
 
       console.log('Transformed complaints:', complaints);

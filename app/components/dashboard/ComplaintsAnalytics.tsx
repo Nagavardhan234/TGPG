@@ -8,15 +8,42 @@ interface Props {
   stats: ComplaintStats;
 }
 
+// Helper function to safely parse numbers
+const safeNumber = (value: any): number => {
+  if (value === null || value === undefined) return 0;
+  const num = Number(value);
+  return isNaN(num) ? 0 : num;
+};
+
+// Calculate percentage safely
+const calculatePercentage = (count: number, total: number): number => {
+  if (!total || total <= 0) return 0;
+  return Math.round((count / total) * 100);
+};
+
 export default function ComplaintsAnalytics({ stats }: Props) {
   const { colors } = useTheme();
   const screenWidth = Dimensions.get('window').width;
+
+  // Safely parse all stats values
+  const safeStats = {
+    total: safeNumber(stats.total),
+    pending: safeNumber(stats.pending),
+    inProgress: safeNumber(stats.inProgress),
+    resolved: safeNumber(stats.resolved),
+    cancelled: safeNumber(stats.cancelled),
+    avgResolutionTime: safeNumber(stats.avgResolutionTime),
+  };
+
+  // Log the stats for debugging
+  console.log('Stats received:', stats);
+  console.log('Safe stats:', safeStats);
 
   const statusData = {
     labels: ['Pending', 'In Progress', 'Resolved'],
     datasets: [
       {
-        data: [stats.pending || 0, stats.inProgress || 0, stats.resolved || 0],
+        data: [safeStats.pending, safeStats.inProgress, safeStats.resolved],
       },
     ],
   };
@@ -26,15 +53,7 @@ export default function ComplaintsAnalytics({ stats }: Props) {
     backgroundGradientFrom: colors.background,
     backgroundGradientTo: colors.background,
     decimalPlaces: 0,
-    color: (opacity = 1) => {
-      const index = Math.floor(Math.random() * 3);
-      const barColors = [
-        `rgba(255, 171, 64, ${opacity})`, // warning/orange for pending
-        `rgba(98, 0, 238, ${opacity})`,   // primary/purple for in progress
-        `rgba(76, 175, 80, ${opacity})`,  // success/green for resolved
-      ];
-      return barColors[index];
-    },
+    color: (opacity = 1) => `rgba(98, 0, 238, ${opacity})`,
     labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
     barPercentage: 0.8,
     style: {
@@ -47,12 +66,25 @@ export default function ComplaintsAnalytics({ stats }: Props) {
     },
   };
 
-  // Calculate percentages for each category
-  const totalComplaints = stats.total || 1; // Prevent division by zero
-  const categoryStats = stats.categories?.map(cat => ({
-    ...cat,
-    percentage: (cat.count / totalComplaints) * 100
-  })) || [];
+  // Process categories with safe number handling
+  const categoryStats = (stats.categories || []).map(cat => {
+    const count = safeNumber(cat.count);
+    const percentage = calculatePercentage(count, safeStats.total);
+    
+    // Debug log
+    console.log(`Category ${cat.name}:`, {
+      count,
+      total: safeStats.total,
+      percentage
+    });
+
+    return {
+      ...cat,
+      count,
+      progress: percentage / 100,
+      percentage
+    };
+  });
 
   return (
     <ScrollView style={styles.container}>
@@ -60,19 +92,25 @@ export default function ComplaintsAnalytics({ stats }: Props) {
       <View style={styles.cardRow}>
         <Card style={[styles.smallCard, { backgroundColor: '#FFAB40' }]}>
           <Card.Content>
-            <Text variant="titleLarge" style={styles.lightText}>{stats.pending}</Text>
+            <Text variant="titleLarge" style={styles.lightText}>
+              {safeStats.pending}
+            </Text>
             <Text variant="bodyMedium" style={styles.lightText}>Pending</Text>
           </Card.Content>
         </Card>
         <Card style={[styles.smallCard, { backgroundColor: '#6200EE' }]}>
           <Card.Content>
-            <Text variant="titleLarge" style={styles.lightText}>{stats.inProgress}</Text>
+            <Text variant="titleLarge" style={styles.lightText}>
+              {safeStats.inProgress}
+            </Text>
             <Text variant="bodyMedium" style={styles.lightText}>In Progress</Text>
           </Card.Content>
         </Card>
         <Card style={[styles.smallCard, { backgroundColor: '#4CAF50' }]}>
           <Card.Content>
-            <Text variant="titleLarge" style={styles.lightText}>{stats.resolved}</Text>
+            <Text variant="titleLarge" style={styles.lightText}>
+              {safeStats.resolved}
+            </Text>
             <Text variant="bodyMedium" style={styles.lightText}>Resolved</Text>
           </Card.Content>
         </Card>
@@ -105,10 +143,12 @@ export default function ComplaintsAnalytics({ stats }: Props) {
             <View key={index} style={styles.categoryItem}>
               <View style={styles.categoryHeader}>
                 <Text variant="bodyLarge">{category.name}</Text>
-                <Text variant="bodyMedium">{category.count} ({category.percentage.toFixed(1)}%)</Text>
+                <Text variant="bodyMedium">
+                  {category.count} ({category.percentage}%)
+                </Text>
               </View>
               <ProgressBar
-                progress={category.percentage / 100}
+                progress={category.progress}
                 color="#6200EE"
                 style={styles.progressBar}
               />
@@ -124,13 +164,13 @@ export default function ComplaintsAnalytics({ stats }: Props) {
           <View style={styles.metricsContainer}>
             <View style={styles.metricItem}>
               <Text variant="headlineMedium" style={{ color: '#6200EE' }}>
-                {stats.avgResolutionTime ? stats.avgResolutionTime.toFixed(1) : '0.0'}h
+                {safeStats.avgResolutionTime.toFixed(1)}h
               </Text>
               <Text variant="bodyMedium">Avg. Resolution Time</Text>
             </View>
             <View style={styles.metricItem}>
               <Text variant="headlineMedium" style={{ color: '#6200EE' }}>
-                {((stats.resolved / stats.total) * 100).toFixed(1)}%
+                {calculatePercentage(safeStats.resolved, safeStats.total)}%
               </Text>
               <Text variant="bodyMedium">Resolution Rate</Text>
             </View>
