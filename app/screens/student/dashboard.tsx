@@ -188,7 +188,7 @@ const PaymentCard = () => {
       setRentData({
         totalAmount: data.TotalRent || 0,
         totalPaid: data.AmountPaid || 0,
-        dueAmount: (data.TotalRent || 0) - (data.AmountPaid || 0),
+        dueAmount: data.TotalRent - data.AmountPaid,
         daysUntilDue: data.DaysUntilDue || 0,
         status: data.Status || 'PENDING'
       });
@@ -252,7 +252,10 @@ const PaymentCard = () => {
     );
   }
 
-  const progress = ((rentData.totalPaid || 0) / (rentData.totalAmount || 1)) * 100;
+  const totalAmount = rentData?.totalAmount || 0;
+  const paidAmount = rentData?.totalPaid || 0;
+  const progress = totalAmount > 0 ? paidAmount / totalAmount : 0;
+  const isOverdue = rentData?.daysUntilDue < 0;
   const statusColor = rentData.status === 'PAID' 
     ? theme.colors.primary 
     : rentData.status === 'OVERDUE' 
@@ -317,7 +320,7 @@ const PaymentCard = () => {
             />
           </View>
           <Text style={[styles.progressText, { color: theme.colors.onSurfaceVariant }]}>
-            {Math.round(progress)}% Paid
+            {Math.round(progress * 100)}% Paid
           </Text>
         </View>
       </View>

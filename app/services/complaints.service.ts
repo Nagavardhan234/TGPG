@@ -57,7 +57,7 @@ export interface Complaint {
   title: string;
   description: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
-  status: 'submitted' | 'in_progress' | 'resolved' | 'cancelled';
+  status: 'SUBMITTED' | 'IN_PROGRESS' | 'RESOLVED' | 'CANCELLED';
   isEmergency: boolean;
   isEscalated: boolean;
   createdAt: string;
@@ -85,32 +85,53 @@ class ComplaintsService {
   // Submit a new complaint
   async submitComplaint(data: ComplaintSubmission): Promise<{ complaintId: number }> {
     try {
+      console.log('Submitting complaint with data:', data);
       const formData = new FormData();
+      
+      // Validate required fields
+      if (!data.tenantId || !data.pgId || !data.categoryId) {
+        throw new Error('Missing required fields: tenantId, pgId, or categoryId');
+      }
+
       formData.append('tenantId', data.tenantId.toString());
       formData.append('pgId', data.pgId.toString());
       formData.append('categoryId', data.categoryId.toString());
-      formData.append('title', data.title);
-      formData.append('description', data.description);
+      formData.append('title', data.title.trim());
+      formData.append('description', data.description.trim());
       formData.append('priority', data.priority);
       formData.append('isEmergency', String(data.isEmergency));
+      formData.append('status', 'SUBMITTED');
 
       if (data.attachments?.length) {
+        // Validate file size and type
+        const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+        const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+        
         data.attachments.forEach((file, index) => {
+          if (file.size > MAX_FILE_SIZE) {
+            throw new Error(`File ${file.name} exceeds maximum size of 5MB`);
+          }
+          if (!ALLOWED_TYPES.includes(file.type)) {
+            throw new Error(`File ${file.name} has unsupported type. Allowed types: JPG, PNG, PDF`);
+          }
           formData.append(`attachments[${index}]`, file);
         });
       }
 
+      console.log('Sending complaint to endpoint:', ENDPOINTS.COMPLAINTS.STUDENT.SUBMIT);
       const response = await api.post<ApiResponse<{ complaintId: number }>>(
-        ENDPOINTS.COMPLAINTS.SUBMIT_COMPLAINT,
+        ENDPOINTS.COMPLAINTS.STUDENT.SUBMIT,
         formData,
         {
           headers: {
             'Content-Type': 'multipart/form-data',
             'Accept': 'application/json'
-          }
+          },
+          timeout: 30000 // 30 seconds for file uploads
         }
       );
 
+      console.log('Complaint submission response:', response.data);
       if (!response.data.success) {
         throw new ApiError(response.data.message || 'Failed to submit complaint');
       }
@@ -118,6 +139,15 @@ class ComplaintsService {
       return response.data.data;
     } catch (error: any) {
       console.error('Error submitting complaint:', error);
+      if (error.response?.status === 413) {
+        throw new ApiError('Files are too large. Maximum total size is 10MB');
+      } else if (error.response?.status === 415) {
+        throw new ApiError('Unsupported file type. Please use JPG, PNG, or PDF files only');
+      } else if (error.response?.status === 401) {
+        throw new ApiError('Please log in again to submit your complaint');
+      } else if (error.code === 'ECONNABORTED') {
+        throw new ApiError('Request timed out. Please check your internet connection and try again');
+      }
       throw new ApiError(error.message || 'Failed to submit complaint', error.response?.status);
     }
   }
@@ -153,7 +183,7 @@ class ComplaintsService {
         title: complaint.Title || complaint.title || '',
         description: complaint.Description || complaint.description || '',
         priority: (complaint.Priority || complaint.priority || 'low').toLowerCase(),
-        status: (complaint.Status || complaint.status || 'submitted').toLowerCase(),
+        status: (complaint.Status || complaint.status || 'SUBMITTED').toUpperCase(),
         isEmergency: Boolean(complaint.IsEmergency || complaint.isEmergency),
         isEscalated: Boolean(complaint.IsEscalated || complaint.isEscalated),
         createdAt: complaint.CreatedAt || complaint.createdAt || new Date().toISOString(),
@@ -232,7 +262,7 @@ class ComplaintsService {
 
   // Update complaint status
   async updateStatus(complaintId: number, data: {
-    status: 'submitted' | 'in_progress' | 'resolved' | 'cancelled';
+    status: 'SUBMITTED' | 'IN_PROGRESS' | 'RESOLVED' | 'CANCELLED';
     comment: string;
     changedBy: number;
     changedByType: 'tenant' | 'manager';

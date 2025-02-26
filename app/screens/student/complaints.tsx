@@ -491,15 +491,28 @@ export default function ComplaintsScreen() {
   );
 
   const handleSubmit = async () => {
-    if (!student) return;
+    if (!student) {
+      setError('Please log in to submit a complaint');
+      return;
+    }
 
     // Frontend validation
-    if (title.length < 5 || title.length > 100) {
+    if (!title.trim()) {
+      setError('Title is required');
+      return;
+    }
+
+    if (title.trim().length < 5 || title.trim().length > 100) {
       setError('Title must be between 5 and 100 characters');
       return;
     }
 
-    if (description.length < 10) {
+    if (!description.trim()) {
+      setError('Description is required');
+      return;
+    }
+
+    if (description.trim().length < 10) {
       setError('Description must be at least 10 characters long');
       return;
     }
@@ -513,24 +526,44 @@ export default function ComplaintsScreen() {
       setSubmitting(true);
       setError(null);
 
+      // Validate file sizes before submission
+      const totalSize = selectedFiles.reduce((sum, file) => sum + (file.size || 0), 0);
+      if (totalSize > 10 * 1024 * 1024) { // 10MB total limit
+        setError('Total file size exceeds 10MB limit');
+        return;
+      }
+
+      console.log('Submitting complaint with student:', student);
       const result = await complaintsService.submitComplaint({
         pgId: student.pgId,
-        tenantId: student.TenantID,
+        tenantId: student.tenantId || student.TenantID, // Handle both field names
         categoryId,
-        title,
-        description,
+        title: title.trim(),
+        description: description.trim(),
         priority,
         isEmergency: priority === 'high',
         attachments: selectedFiles
       });
 
+      console.log('Complaint submitted successfully:', result);
       setShowSuccess(true);
       setDialogVisible(false);
       resetForm();
       await loadComplaints();
     } catch (err: any) {
       console.error('Error submitting complaint:', err);
-      setError(err.message || 'Failed to submit complaint');
+      // Show specific error message based on the error type
+      if (err.message.includes('file size')) {
+        setError('One or more files are too large. Maximum size per file is 5MB');
+      } else if (err.message.includes('file type')) {
+        setError('Invalid file type. Please use JPG, PNG, or PDF files only');
+      } else if (err.response?.status === 401) {
+        setError('Your session has expired. Please log in again');
+      } else if (err.code === 'ECONNABORTED') {
+        setError('Connection timed out. Please check your internet and try again');
+      } else {
+        setError(err.message || 'Failed to submit complaint. Please try again');
+      }
     } finally {
       setSubmitting(false);
     }
