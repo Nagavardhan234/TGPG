@@ -34,7 +34,7 @@ class PaymentServiceClass {
       AmountPaid: typeof data.AmountPaid === 'string' ? parseFloat(data.AmountPaid) : data.AmountPaid,
       DaysUntilDue: typeof data.DaysUntilDue === 'string' ? parseInt(data.DaysUntilDue) : data.DaysUntilDue,
       LastPaymentDate: data.LastPaymentDate,
-      Status: data.Status
+      Status: data.Status || 'PENDING'
     };
     
     // Validate the converted values

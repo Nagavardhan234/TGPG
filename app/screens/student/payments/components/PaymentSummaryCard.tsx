@@ -11,7 +11,8 @@ interface PaymentSummaryCardProps {
   totalDue: number;
   dueDate: string;
   monthlyRent: number;
-  status: string;
+  unpaidMonths: number;
+  status: 'PAID' | 'PENDING' | 'OVERDUE';
 }
 
 export const PaymentSummaryCard = ({
@@ -19,11 +20,13 @@ export const PaymentSummaryCard = ({
   totalDue = 0,
   dueDate = new Date().toISOString(),
   monthlyRent = 0,
+  unpaidMonths = 0,
   status = 'PENDING'
 }: PaymentSummaryCardProps) => {
   const { colors } = useTheme();
-  const total = totalPaid + totalDue;
-  const progress = total > 0 ? (totalPaid / total) * 100 : 0;
+  
+  // Calculate progress based on totalDue
+  const progress = totalDue > 0 ? (totalPaid / totalDue) * 100 : 100;
 
   const getStatusColor = () => {
     switch (status) {
@@ -33,6 +36,17 @@ export const PaymentSummaryCard = ({
         return colors.error;
       default:
         return colors.warning || '#FFA000';
+    }
+  };
+
+  const getStatusMessage = () => {
+    switch (status) {
+      case 'PAID':
+        return 'All dues cleared';
+      case 'OVERDUE':
+        return `Payment overdue${unpaidMonths > 1 ? ` (${unpaidMonths} months)` : ''}`;
+      default:
+        return 'Payment pending';
     }
   };
 
@@ -65,7 +79,7 @@ export const PaymentSummaryCard = ({
           color={statusColor}
         />
         <Text style={[styles.statusText, { color: statusColor }]}>
-          {status}
+          {getStatusMessage()}
         </Text>
       </View>
 

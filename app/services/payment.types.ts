@@ -2,9 +2,11 @@ export type PaymentMethod = 'UPI' | 'BANK_TRANSFER' | 'CASH';
 
 export interface PaymentSummary {
   TotalRent: number;
+  TotalDue: number;
   AmountPaid: number;
   DaysUntilDue: number;
   LastPaymentDate?: string;
+  UnpaidMonths: number;
   Status: 'PAID' | 'PENDING' | 'OVERDUE';
 }
 

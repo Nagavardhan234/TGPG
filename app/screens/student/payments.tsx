@@ -168,7 +168,7 @@ function PaymentsContent() {
       {paymentSummary && (
         <PaymentSummaryCard
           totalPaid={Number(paymentSummary.AmountPaid) || 0}
-          totalDue={Number(paymentSummary.TotalRent - paymentSummary.AmountPaid) || 0}
+          totalDue={Number(paymentSummary.TotalDue) || 0}
           dueDate={paymentSummary.DueDate || new Date().toISOString()}
           monthlyRent={Number(paymentSummary.TotalRent) || 0}
           status={paymentSummary.Status || 'PENDING'}

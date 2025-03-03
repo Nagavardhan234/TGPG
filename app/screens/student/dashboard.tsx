@@ -188,9 +188,10 @@ const PaymentCard = () => {
       setRentData({
         totalAmount: data.TotalRent || 0,
         totalPaid: data.AmountPaid || 0,
-        dueAmount: data.TotalRent - data.AmountPaid,
+        dueAmount: data.TotalDue || 0,
         daysUntilDue: data.DaysUntilDue || 0,
-        status: data.Status || 'PENDING'
+        status: data.Status || 'PENDING',
+        unpaidMonths: data.UnpaidMonths || 0
       });
     } catch (err: any) {
       console.error('Error loading rent data:', err);
@@ -254,7 +255,8 @@ const PaymentCard = () => {
 
   const totalAmount = rentData?.totalAmount || 0;
   const paidAmount = rentData?.totalPaid || 0;
-  const progress = totalAmount > 0 ? paidAmount / totalAmount : 0;
+  const dueAmount = rentData?.dueAmount || 0;
+  const progress = dueAmount > 0 ? (paidAmount / dueAmount) * 100 : 100;
   const isOverdue = rentData?.daysUntilDue < 0;
   const statusColor = rentData.status === 'PAID' 
     ? theme.colors.primary 
@@ -320,7 +322,7 @@ const PaymentCard = () => {
             />
           </View>
           <Text style={[styles.progressText, { color: theme.colors.onSurfaceVariant }]}>
-            {Math.round(progress * 100)}% Paid
+            {Math.round(progress)}% Paid
           </Text>
         </View>
       </View>
@@ -383,11 +385,6 @@ export default function StudentDashboard() {
       setLoadingPayments(false);
     }
   };
-
-  const totalAmount = 6000;
-  const paidAmount = 4000;
-  const progress = paidAmount / totalAmount;
-  const isOverdue = false;
 
   const dynamicStyles = {
     container: {
