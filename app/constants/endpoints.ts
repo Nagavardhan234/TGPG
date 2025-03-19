@@ -139,6 +139,7 @@ export const ENDPOINTS = {
     ANALYTICS: (pgId: string | number) => `/api/pg/${pgId}/payments/analytics`,
     HISTORY: (pgId: string | number) => `/api/pg/${pgId}/payments/history`,
     TENANT_PAYMENTS: (pgId: number | string) => `/api/pg/${pgId}/tenants/payments`,
+    TENANT_HISTORY: (tenantId: string) => `/api/tenants/${tenantId}/payments/history`,
     SEND_REMINDER: '/api/payments/reminder',
   },
 

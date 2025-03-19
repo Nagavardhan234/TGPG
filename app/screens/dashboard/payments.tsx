@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions, Animated, Pressable, Easing, Alert, Linking } from 'react-native';
-import { Surface, Text, useTheme, IconButton, Button, Searchbar } from 'react-native-paper';
+import { Surface, Text, useTheme, IconButton, Button, Searchbar, Chip, TouchableRipple } from 'react-native-paper';
 import { useAuth } from '@/app/context/AuthContext';
 import { NetworkErrorView } from '@/app/components/NetworkErrorView';
 import { PageLoader } from '@/app/components/PageLoader';
@@ -39,6 +39,76 @@ interface PaymentStats {
     phoneNumber: string;
   }>;
 }
+
+interface TenantPayment {
+  id: number;
+  name: string;
+  roomNumber: string;
+  phoneNumber: string;
+  totalDue: number;
+  totalPaid: number;
+  currentMonthPaid: number;
+  monthlyRent: number;
+  monthsElapsed: number;
+  status: 'PAID' | 'UNPAID' | 'PARTIALLY_PAID' | 'OVERDUE';
+  dueDate: string;
+  overdueMonths?: number;
+  joinedDate?: string;
+}
+
+interface PaymentStatusBadgeProps {
+  status: TenantPayment['status'];
+  overdueMonths?: number;
+}
+
+const PaymentStatusBadge = ({ status, overdueMonths }: PaymentStatusBadgeProps) => {
+  const theme = useTheme();
+
+  const getStatusColor = () => {
+    switch (status) {
+      case 'PAID':
+        return theme.colors.success || '#4CAF50';
+      case 'PARTIALLY_PAID':
+        return theme.colors.warning || '#FFA000';
+      case 'OVERDUE':
+        return theme.colors.error || '#F44336';
+      case 'UNPAID':
+        return theme.colors.info || '#2196F3';
+      default:
+        return theme.colors.info || '#2196F3';
+    }
+  };
+
+  const getStatusText = () => {
+    switch (status) {
+      case 'PAID':
+        return 'Paid';
+      case 'PARTIALLY_PAID':
+        return 'Partial';
+      case 'OVERDUE':
+        return `${overdueMonths} Month${overdueMonths !== 1 ? 's' : ''} Overdue`;
+      case 'UNPAID':
+        return 'Unpaid';
+      default:
+        return status;
+    }
+  };
+
+  const color = getStatusColor();
+  const backgroundColor = Color(color).alpha(0.1).rgb().string();
+
+  return (
+    <Chip
+      style={[
+        styles.statusChip,
+        { backgroundColor }
+      ]}
+      textStyle={{ color }}
+    >
+      {getStatusText()}
+    </Chip>
+  );
+};
 
 const StatusCard = ({ title, amount, icon, color, style }: any) => {
   const theme = useTheme();
@@ -135,16 +205,7 @@ const PaymentScreen = () => {
   });
 
   // Separate state for tenants list
-  const [tenants, setTenants] = useState<Array<{
-    id: number;
-    name: string;
-    roomNumber: string;
-    phoneNumber: string;
-    totalRent: number;
-    paidAmount: number;
-    dueDate: string;
-    status: 'PAID' | 'UNPAID' | 'PARTIALLY_PAID' | 'OVERDUE';
-  }>>([]);
+  const [tenants, setTenants] = useState<Array<TenantPayment>>([]);
 
   const router = useRouter();
   const [page, setPage] = useState(1);
@@ -187,19 +248,33 @@ const PaymentScreen = () => {
     setLoading(true);
     setError(null);
     try {
-      const [paymentStats, tenantPayments] = await Promise.all([
-        paymentService.getPaymentStats(pg.PGID, {
-          page,
-          limit: 10,
-          search: searchText
-        }),
-        paymentService.getTenantPayments(pg.PGID)
-      ]);
+      const paymentStats = await paymentService.getPaymentStats(pg.PGID);
 
-      setStats(paymentStats);
-      setTenants(tenantPayments);
-      setTotalPages(paymentStats.pagination?.totalPages || 1);
+      // Ensure we have valid data before setting state
+      if (paymentStats && typeof paymentStats === 'object') {
+        setStats({
+          totalRevenue: paymentStats.totalRevenue || 0,
+          pendingPayments: paymentStats.pendingPayments || 0,
+          monthlyRevenue: paymentStats.monthlyRevenue || 0,
+          paymentDistribution: {
+            paid: paymentStats.paymentDistribution?.paid || 0,
+            unpaid: paymentStats.paymentDistribution?.unpaid || 0,
+            partiallyPaid: paymentStats.paymentDistribution?.partiallyPaid || 0,
+            overdue: paymentStats.paymentDistribution?.overdue || 0,
+            total: paymentStats.paymentDistribution?.total || 0,
+          },
+          recentTransactions: Array.isArray(paymentStats.recentTransactions) ? paymentStats.recentTransactions : []
+        });
+
+        // Set tenant payments directly from the stats
+        if (Array.isArray(paymentStats.tenantPayments)) {
+          setTenants(paymentStats.tenantPayments);
+        }
+      }
+
+      setTotalPages(paymentStats?.pagination?.totalPages || 1);
     } catch (err: any) {
+      console.error('Error loading payment data:', err);
       setError(err.message || 'Failed to load payment data');
     } finally {
       setLoading(false);
@@ -262,6 +337,144 @@ const PaymentScreen = () => {
            (distribution.overdue || 0);
   }, [stats.paymentDistribution]);
 
+  const calculateProgress = (totalPaid: number, totalDue: number) => {
+    if (totalDue === 0) return 100;
+    return Math.min(100, (totalPaid / totalDue) * 100);
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'PAID':
+        return theme.colors.success || '#4CAF50';
+      case 'PARTIALLY_PAID':
+        return theme.colors.warning || '#FFA000';
+      case 'OVERDUE':
+        return theme.colors.error || '#F44336';
+      default:
+        return theme.colors.info || '#2196F3';
+    }
+  };
+
+  const handleTenantPress = (tenantId: number, name: string) => {
+    router.push({
+      pathname: '/screens/dashboard/tenant-payments',
+      params: { tenantId: tenantId.toString(), name }
+    });
+  };
+
+  const renderTenantPayment = (tenant: TenantPayment) => {
+    if (!tenant) return null;
+
+    console.log('Rendering tenant payment:', tenant);
+
+    // Ensure all numeric values are properly parsed
+    const totalDue = parseFloat(tenant.totalDue?.toString() || '0');
+    const totalPaid = parseFloat(tenant.totalPaid?.toString() || '0');
+    const monthlyRent = parseFloat(tenant.monthlyRent?.toString() || '0');
+    const monthsElapsed = Math.max(0, parseInt(tenant.monthsElapsed?.toString() || '0'));
+    const overdueMonths = parseInt(tenant.overdueMonths?.toString() || '0');
+    
+    console.log('Parsed values:', { totalDue, totalPaid, monthlyRent, monthsElapsed, overdueMonths });
+    
+    // Calculate progress based on total due amount from backend
+    const progress = totalDue > 0 ? Math.min(100, (totalPaid / totalDue) * 100) : 100;
+
+    // Format joined date
+    const joinedDate = tenant.joinedDate ? new Date(tenant.joinedDate).toLocaleDateString() : 'N/A';
+
+    console.log('Calculated values:', { totalDue, progress, overdueMonths });
+
+    return (
+      <Surface 
+        style={[styles.card, { backgroundColor: theme.colors.surface }]} 
+        elevation={1}
+      >
+        <TouchableRipple
+          onPress={() => handleTenantPress(tenant.id, tenant.name)}
+          style={styles.cardContent}
+        >
+          <View>
+            <View style={styles.header}>
+              <View style={styles.nameContainer}>
+                <Text style={[styles.name, { color: theme.colors.onSurface }]}>
+                  {tenant.name}
+                </Text>
+                <Text style={[styles.roomNumber, { color: theme.colors.onSurfaceVariant }]}>
+                  Room {tenant.roomNumber}
+                </Text>
+              </View>
+              <PaymentStatusBadge status={tenant.status} overdueMonths={overdueMonths} />
+            </View>
+
+            <View style={styles.paymentDetails}>
+              <View style={styles.amountRow}>
+                <View>
+                  <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>Total Due</Text>
+                  <Text style={[styles.amount, { color: theme.colors.error }]}>
+                    ₹{totalDue.toLocaleString()}
+                  </Text>
+                  <Text style={[styles.monthsElapsed, { color: theme.colors.onSurfaceVariant }]}>
+                    ({monthsElapsed} months)
+                  </Text>
+                </View>
+                <View style={styles.amountDivider} />
+                <View>
+                  <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>Total Paid</Text>
+                  <Text style={[styles.amount, { color: theme.colors.primary }]}>
+                    ₹{totalPaid.toLocaleString()}
+                  </Text>
+                  <Text style={[styles.dueAmount, { color: theme.colors.error }]}>
+                    Due: ₹{Math.max(0, totalDue - totalPaid).toLocaleString()}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.progressContainer}>
+                <View style={[styles.progressTrack, { backgroundColor: theme.colors.surfaceVariant }]}>
+                  <View 
+                    style={[
+                      styles.progressFill,
+                      { 
+                        backgroundColor: getStatusColor(tenant.status),
+                        width: `${progress}%`
+                      }
+                    ]}
+                  />
+                </View>
+                <Text style={[styles.progressText, { color: theme.colors.onSurfaceVariant }]}>
+                  {Math.round(progress)}% Paid
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.footer}>
+              <View style={styles.joinedDateContainer}>
+                <MaterialCommunityIcons 
+                  name="calendar" 
+                  size={16} 
+                  color={theme.colors.onSurfaceVariant} 
+                />
+                <Text style={[styles.joinedDate, { color: theme.colors.onSurfaceVariant }]}>
+                  Joined: {joinedDate}
+                </Text>
+              </View>
+              <View style={styles.monthlyRentContainer}>
+                <MaterialCommunityIcons 
+                  name="currency-inr" 
+                  size={16} 
+                  color={theme.colors.onSurfaceVariant} 
+                />
+                <Text style={[styles.monthlyRent, { color: theme.colors.onSurfaceVariant }]}>
+                  Monthly: ₹{monthlyRent.toLocaleString()}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </TouchableRipple>
+      </Surface>
+    );
+  };
+
   // Render tenant list with filters
   const TenantsList = React.memo(() => (
     <Surface style={[styles.tenantsContainer, { backgroundColor: theme.colors.surface }]}>
@@ -309,54 +522,7 @@ const PaymentScreen = () => {
       ) : (
         <>
           {filteredTenants.map((tenant) => {
-            const paidAmount = tenant?.paidAmount || 0;
-            const totalRent = tenant?.totalRent || 0;
-            const dueDate = tenant?.dueDate ? new Date(tenant.dueDate) : new Date();
-            
-            return (
-              <View key={tenant.id} style={styles.tenantRow}>
-                <View style={styles.tenantInfo}>
-                  <Text style={[styles.tenantName, { color: theme.colors.onSurface }]}>
-                    {tenant?.name || 'Unknown'} - Room {tenant?.roomNumber || 'N/A'}
-                  </Text>
-                  <Text style={[styles.paymentInfo, { color: theme.colors.onSurfaceVariant }]}>
-                    Paid: ₹{paidAmount.toLocaleString()} / ₹{totalRent.toLocaleString()}
-                  </Text>
-                  <Text style={[styles.dueDate, { 
-                    color: dueDate < new Date() ? theme.colors.error : theme.colors.onSurfaceVariant 
-                  }]}>
-                    Due: {format(dueDate, 'MMM d, yyyy')}
-                  </Text>
-                </View>
-                <View style={styles.tenantActions}>
-                  <View style={[styles.statusBadge, { 
-                    backgroundColor: 
-                      tenant?.status === 'PAID' ? chartColors.paid :
-                      tenant?.status === 'PARTIALLY_PAID' ? chartColors.partiallyPaid :
-                      tenant?.status === 'OVERDUE' ? chartColors.overdue :
-                      chartColors.unpaid
-                  }]}>
-                    <Text style={styles.statusText}>
-                      {(tenant?.status || 'UNKNOWN').replace('_', ' ')}
-                    </Text>
-                  </View>
-                  <View style={styles.actionButtons}>
-                    <IconButton
-                      icon="phone"
-                      size={20}
-                      onPress={() => handleCall(tenant?.phoneNumber || '', tenant?.name || 'Unknown', tenant?.roomNumber || 'N/A')}
-                    />
-                    {(tenant?.status === 'UNPAID' || tenant?.status === 'PARTIALLY_PAID' || tenant?.status === 'OVERDUE') && (
-                      <IconButton
-                        icon="bell-ring"
-                        size={20}
-                        onPress={() => sendReminder(tenant.id, tenant?.name || 'Unknown')}
-                      />
-                    )}
-                  </View>
-                </View>
-              </View>
-            );
+            return renderTenantPayment(tenant);
           })}
           
           {/* Pagination */}
@@ -510,8 +676,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   card: {
-    width: width < 768 ? (width - 32) / 2 : (width - 48) / 3,
-    minWidth: width < 768 ? (width - 32) / 2 : 200,
+    flex: 1,
+    minWidth: width > 768 ? 200 : (width - 48) / 2,
+    padding: 12,
+    borderRadius: 16,
+    elevation: 2,
+    overflow: 'hidden',
     marginBottom: 8,
   },
   chartContainer: {
@@ -530,7 +700,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     elevation: 2,
     marginTop: 16,
-    width: '100%',
   },
   tenantsHeader: {
     marginBottom: 12,
@@ -577,9 +746,9 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   tenantName: {
-    fontSize: 13,
-    fontWeight: '500',
-    marginBottom: 2,
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
   },
   paymentInfo: {
     fontSize: 12,
@@ -719,6 +888,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0,0,0,0.1)',
     height: 40,
     justifyContent: 'center',
+    width: '100%',
   },
   searchBarInput: {
     fontSize: 14,
@@ -736,6 +906,131 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
     gap: 16,
+  },
+  paymentCard: {
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    elevation: 2,
+    width: '100%',
+  },
+  paymentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  roomNumber: {
+    fontSize: 14,
+    opacity: 0.7,
+  },
+  paymentDetails: {
+    gap: 16,
+  },
+  amountRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  amountDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+  },
+  label: {
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  amount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  progressContainer: {
+    marginTop: 8,
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 12,
+    textAlign: 'right',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 8,
+  },
+  actionButton: {
+    flex: 1,
+  },
+  monthlyRent: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  monthsElapsed: {
+    fontSize: 12,
+    marginTop: 2,
+    opacity: 0.7,
+  },
+  dueAmount: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  joinedDate: {
+    fontSize: 12,
+    marginTop: 2,
+    opacity: 0.7,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  nameContainer: {
+    flex: 1,
+  },
+  name: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  roomNumber: {
+    fontSize: 14,
+    opacity: 0.7,
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  joinedDateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  monthlyRentContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  cardContent: {
+    padding: 12,
+  },
+  statusChip: {
+    borderRadius: 16,
+    height: 24,
+    paddingHorizontal: 8,
   },
 });
 

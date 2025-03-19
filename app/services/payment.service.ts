@@ -13,10 +13,69 @@ export interface TenantPayment {
   name: string;
   roomNumber: string;
   phoneNumber: string;
-  totalRent: number;
-  paidAmount: number;
-  dueDate: string;
+  totalDue: number;
+  totalPaid: number;
+  currentMonthPaid: number;
+  monthlyRent: number;
+  monthsElapsed: number;
   status: 'PAID' | 'UNPAID' | 'PARTIALLY_PAID' | 'OVERDUE';
+  dueDate: string;
+  overdueMonths: number;
+  joinedDate: string;
+}
+
+export interface PaymentStats {
+  totalRevenue: number;
+  pendingPayments: number;
+  monthlyRevenue: number;
+  paymentDistribution: {
+    paid: number;
+    unpaid: number;
+    partiallyPaid: number;
+    overdue: number;
+    total: number;
+  };
+  recentTransactions: Array<{
+    id: number;
+    tenantId: number;
+    tenantName: string;
+    amount: number;
+    date: string;
+    status: string;
+  }>;
+  tenantPayments: Array<{
+    id: number;
+    name: string;
+    roomNumber: string;
+    phoneNumber: string;
+    totalDue: number;
+    totalPaid: number;
+    currentMonthPaid: number;
+    monthlyRent: number;
+    monthsElapsed: number;
+    status: 'PAID' | 'UNPAID' | 'PARTIALLY_PAID' | 'OVERDUE';
+    dueDate: string;
+    overdueMonths: number;
+    joinedDate: string;
+  }>;
+  totalCount: number;
+}
+
+export interface TenantPaymentHistory {
+  totalExpected: number;
+  totalPaid: number;
+  totalDue: number;
+  monthsElapsed: number;
+  monthlyRent: number;
+  monthlyPayments: Array<{
+    month: string;
+    year: number;
+    monthlyRent: number;
+    amountPaid: number;
+    dueAmount: number;
+    status: 'PAID' | 'UNPAID' | 'PARTIALLY_PAID' | 'OVERDUE';
+    dueDate: string;
+  }>;
 }
 
 class PaymentServiceClass {
@@ -138,50 +197,51 @@ class PaymentServiceClass {
       console.log('Fetching payment stats for PG:', pgId);
       const endpoint = ENDPOINTS.PG_PAYMENT.STATS(pgId);
       const response = await api.get(endpoint);
-      
-      if (!response.data?.success) {
-        throw new Error(response.data?.message || 'Failed to fetch payment statistics');
+      const data = response.data;
+
+      if (!data || !data.success) {
+        throw new Error(data?.message || 'Failed to fetch payment stats');
       }
 
-      return this.transformPaymentStats(response.data.data);
+      const stats = data.data || {};
+      return {
+        totalRevenue: stats.totalRevenue || 0,
+        pendingPayments: stats.pendingPayments || 0,
+        monthlyRevenue: stats.monthlyRevenue || 0,
+        paymentDistribution: {
+          paid: stats.paymentDistribution?.paid || 0,
+          unpaid: stats.paymentDistribution?.unpaid || 0,
+          partiallyPaid: stats.paymentDistribution?.partiallyPaid || 0,
+          overdue: stats.paymentDistribution?.overdue || 0,
+          total: stats.paymentDistribution?.total || 0,
+        },
+        recentTransactions: stats.recentTransactions?.map((transaction: any) => ({
+          id: transaction.id,
+          tenantId: transaction.tenantId,
+          tenantName: transaction.tenantName,
+          amount: transaction.amount,
+          date: transaction.date,
+          status: transaction.status,
+        })) || [],
+        tenantPayments: stats.tenantPayments?.map((tenant: any) => ({
+          id: tenant.id,
+          name: tenant.name,
+          roomNumber: tenant.roomNumber,
+          phoneNumber: tenant.phoneNumber,
+          totalDue: tenant.totalDue,
+          totalPaid: tenant.totalPaid,
+          currentMonthPaid: tenant.currentMonthPaid,
+          monthlyRent: tenant.monthlyRent,
+          monthsElapsed: tenant.monthsElapsed,
+          status: tenant.status,
+          dueDate: tenant.dueDate,
+          overdueMonths: tenant.overdueMonths,
+          joinedDate: tenant.joinedDate,
+        })) || [],
+        totalCount: stats.totalCount || 0,
+      };
     } catch (error) {
       console.error('Error fetching payment stats:', error);
-      throw error;
-    }
-  }
-
-  private transformPaymentStats(data: any): PaymentStats {
-    return {
-      totalRevenue: data.totalRevenue || 0,
-      pendingPayments: data.pendingPayments || 0,
-      monthlyRevenue: data.monthlyRevenue || 0,
-      paymentDistribution: {
-        paid: data.paymentDistribution?.paid || 0,
-        unpaid: data.paymentDistribution?.unpaid || 0,
-        overdue: data.paymentDistribution?.overdue || 0
-      },
-      recentTransactions: (data.recentTransactions || []).map((transaction: any) => ({
-        id: transaction.id,
-        studentName: transaction.studentName,
-        amount: transaction.amount,
-        status: transaction.status,
-        date: transaction.date
-      }))
-    };
-  }
-
-  async getTenantPayments(pgId: number | string): Promise<TenantPayment[]> {
-    try {
-      console.log('Fetching tenant payments for PG:', pgId);
-      const response = await api.get(`${ENDPOINTS.PG_PAYMENT.TENANT_PAYMENTS(pgId)}`);
-      
-      if (!response.data?.success) {
-        throw new Error(response.data?.message || 'Failed to fetch tenant payments');
-      }
-
-      return this.transformTenantPayments(response.data.data);
-    } catch (error) {
-      console.error('Error fetching tenant payments:', error);
       throw error;
     }
   }
@@ -192,11 +252,32 @@ class PaymentServiceClass {
       name: tenant.name,
       roomNumber: tenant.roomNumber,
       phoneNumber: tenant.phoneNumber,
-      totalRent: tenant.totalRent,
-      paidAmount: tenant.paidAmount,
+      totalDue: tenant.totalDue || 0,
+      totalPaid: tenant.totalPaid || 0,
+      currentMonthPaid: tenant.currentMonthPaid || 0,
+      monthlyRent: tenant.monthlyRent || 0,
+      monthsElapsed: tenant.monthsElapsed || 0,
+      status: tenant.status || 'UNPAID',
       dueDate: tenant.dueDate,
-      status: this.calculatePaymentStatus(tenant.paidAmount, tenant.totalRent, tenant.dueDate)
+      overdueMonths: tenant.overdueMonths || 0,
+      joinedDate: tenant.joinedDate
     }));
+  }
+
+  async getTenantPayments(pgId: number | string): Promise<TenantPayment[]> {
+    try {
+      console.log('Fetching tenant payments for PG:', pgId);
+      const response = await api.get(`${ENDPOINTS.PG_PAYMENT.STATS(pgId)}`);
+      
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || 'Failed to fetch tenant payments');
+      }
+
+      return this.transformTenantPayments(response.data.data.tenantPayments || []);
+    } catch (error) {
+      console.error('Error fetching tenant payments:', error);
+      throw error;
+    }
   }
 
   private calculatePaymentStatus(paid: number, total: number, dueDate: string): TenantPayment['status'] {
@@ -215,6 +296,31 @@ class PaymentServiceClass {
       await api.post(`${ENDPOINTS.PG_PAYMENT.SEND_REMINDER}/${tenantId}`);
     } catch (error) {
       console.error('Error sending payment reminder:', error);
+      throw error;
+    }
+  }
+
+  async getTenantPaymentHistory(tenantId: string): Promise<TenantPaymentHistory> {
+    try {
+      console.log('Fetching tenant payment history:', tenantId);
+      const endpoint = ENDPOINTS.PG_PAYMENT.TENANT_HISTORY(tenantId);
+      const response = await api.get(endpoint);
+      
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || 'Failed to fetch tenant payment history');
+      }
+
+      const data = response.data.data;
+      return {
+        totalExpected: data.totalExpected || 0,
+        totalPaid: data.totalPaid || 0,
+        totalDue: data.totalDue || 0,
+        monthsElapsed: data.monthsElapsed || 0,
+        monthlyRent: data.monthlyRent || 0,
+        monthlyPayments: Array.isArray(data.monthlyPayments) ? data.monthlyPayments : []
+      };
+    } catch (error) {
+      console.error('Error fetching tenant payment history:', error);
       throw error;
     }
   }
